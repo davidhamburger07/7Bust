@@ -44,9 +44,53 @@ function sweep(f1, f2, startAt, dur, type = "sawtooth", gain = 0.2) {
   osc.stop(t + dur + 0.03);
 }
 
+// Filtered noise burst, used for card flips and shuffles
+let noiseBuf = null;
+function noise(startAt, dur, { type = "bandpass", freq = 2000, q = 1, gain = 0.2 } = {}) {
+  if (!ac) return;
+  if (!noiseBuf) {
+    noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.5), ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t = ac.currentTime + startAt;
+  const src = ac.createBufferSource();
+  src.buffer = noiseBuf;
+  const filt = ac.createBiquadFilter();
+  filt.type = type;
+  filt.frequency.value = freq;
+  filt.Q.value = q;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(filt).connect(g).connect(ac.destination);
+  src.start(t);
+  src.stop(t + dur + 0.03);
+}
+
 export function sfx(kind) {
   if (!ac) return;
   switch (kind) {
+    case "card": // A card flipped onto the table by any player
+      noise(0, 0.07, { type: "bandpass", freq: 2100 + Math.random() * 700, q: 0.9, gain: 0.16 });
+      tone(170, 0.02, 0.06, "sine", 0.07);
+      break;
+    case "chips": // Banking chips
+      [0, 0.05, 0.1].forEach((s, i) => {
+        tone(2500 - i * 120, s, 0.04, "square", 0.1);
+        noise(s, 0.03, { type: "highpass", freq: 4200, gain: 0.07 });
+      });
+      break;
+    case "shuffle": // Round start or reshuffle
+      for (let i = 0; i < 8; i++) noise(i * 0.03, 0.03, { type: "bandpass", freq: 1700 + Math.random() * 1300, q: 1.3, gain: 0.08 });
+      break;
+    case "sparkle": // Modifier card
+      [1200, 1600, 2000, 2500].forEach((f, i) => tone(f, i * 0.05, 0.12, "triangle", 0.09));
+      break;
+    case "click":
+      tone(880, 0, 0.03, "square", 0.08);
+      break;
     case "buzzer": // Bust
       sweep(300, 70, 0, 0.4, "sawtooth", 0.25);
       break;
@@ -80,18 +124,42 @@ export function sfx(kind) {
   }
 }
 
-export function speak(text, { rate = 1.05, pitch = 1.25 } = {}) {
+// Recorded announcer voice lines
+const VOICE_BASE = "audio/Voicelines/";
+const VOICE = {
+  bust: ["Busting/BUSTED.mp3", "Busting/DUPLICATE-DRAWN-YOU-ARE-OUT.mp3", "Busting/GREED-IS-YOUR-DOWN-FALL.mp3", "Busting/YOU-GET-A-WHOLE-BUNCH-OF-NOTHING.mp3"],
+  frozen: ["Action Cards/Freeze/YOU-HAVE-BEEN-FROZEN.mp3"],
+  flip3: ["Action Cards/Flip 3/FLIP-3.mp3", "Action Cards/Flip 3/NO-ESCAPE-DRAW-3.mp3"],
+  second: ["Action Cards/Second Chance/SECOND-CHANCE.mp3"],
+  clean7: ["Modifiers/SEVEN-WHOLE-UNIQUE-CARDS(1).mp3", "Modifiers/SEVEN-WHOLE-UNIQUE-CARDS(2).mp3"],
+  double: ["Modifiers/DOUBLE-POINTS(1).mp3", "Modifiers/DOUBLE-POINTS(2).mp3"],
+  unstoppable: ["Modifiers/UNSTOPABLE.mp3"],
+  win: ["Victory/FLAWLESS-VICTORY(1).mp3", "Victory/FLAWLESS-VICTORY(2).mp3", "Victory/WE-HAVE-A-CHAMPION(1).mp3", "Victory/WE-HAVE-A-CHAMPION(2).mp3"],
+  decision: ["Player Decisions/HIT-OR-STAY.mp3", "Player Decisions/MAKE-YOUR-MOVE.mp3", "Player Decisions/PUSH-YOUR-LUCK.mp3"],
+  coward: ["High Tension/A-COWARD-RETREATS(1).mp3", "High Tension/A-COWARD-RETREATS(2).mp3"],
+  oneAway: [
+    "High Tension/ONE-CARD-AWAY-FROM-GLORY(1).mp3",
+    "High Tension/ONE-CARD-AWAY-FROM-GLORY(2).mp3",
+    "High Tension/SIX-CARDS-DOWN-DARE-YOU-PULL-THE-SEVENTH(1).mp3",
+    "High Tension/SIX-CARDS-DOWN-DARE-YOU-PULL-THE-SEVENTH(2).mp3",
+  ],
+};
+
+let currentVoice = null;
+
+// Plays a random voice line from a category, only one at a time
+export function playVoice(category, { volume = 0.95 } = {}) {
+  const list = VOICE[category];
+  if (!list || !list.length) return;
+  const file = list[(Math.random() * list.length) | 0];
   try {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = rate;
-    u.pitch = pitch;
-    u.volume = 1;
-    synth.speak(u);
+    if (currentVoice) currentVoice.pause();
+    const a = new Audio(encodeURI(VOICE_BASE + file));
+    a.volume = volume;
+    currentVoice = a;
+    a.play().catch(() => {});
   } catch {
-    // No speech engine, the game plays without the voice
+    // No audio here, the game still plays silently
   }
 }
 
@@ -134,12 +202,12 @@ function slam(kind, title, sub) {
 }
 
 const MOMENTS = {
-  bust: { slam: "bust", title: "BUST!", sub: "you went over", say: "Bust!", sfx: "buzzer", shake: true },
-  frozen: { slam: "freeze", title: "FROZEN!", sub: "you're iced out", say: "You are frozen!", sfx: "freeze", shake: true },
-  clean7: { slam: "clean7", title: "CLEAN 7!", sub: "+15 bonus", say: "Clean seven!", sfx: "fanfare", coins: true },
-  flip3: { slam: "flip3", title: "FLIP THREE!", sub: "draw three", say: "Flip three!", sfx: "blip", shake: true },
-  win: { slam: "win", title: "YOU WIN!", sub: "you take the pot", say: "Winner, winner!", sfx: "jackpot", coins: true, shake: true },
-  lose: { slam: "lose", title: "TABLE'S CLOSED", sub: "better luck next time", say: "Better luck next time!", sfx: "sad" },
+  bust: { slam: "bust", title: "BUST!", sub: "you went over", voice: "bust", sfx: "buzzer", shake: true },
+  frozen: { slam: "freeze", title: "FROZEN!", sub: "you're iced out", voice: "frozen", sfx: "freeze", shake: true },
+  clean7: { slam: "clean7", title: "CLEAN 7!", sub: "+15 bonus", voice: "clean7", sfx: "fanfare", coins: true },
+  flip3: { slam: "flip3", title: "FLIP THREE!", sub: "draw three", voice: "flip3", sfx: "blip", shake: true },
+  win: { slam: "win", title: "YOU WIN!", sub: "you take the pot", voice: "win", sfx: "jackpot", coins: true, shake: true },
+  lose: { slam: "lose", title: "TABLE'S CLOSED", sub: "better luck next time", sfx: "sad" },
 };
 
 export function announce(kind) {
@@ -147,7 +215,7 @@ export function announce(kind) {
   if (!m) return;
   slam(m.slam, m.title, m.sub);
   sfx(m.sfx);
-  speak(m.say);
+  if (m.voice) playVoice(m.voice);
   if (m.shake) shakeStage();
   if (m.coins) rainCoins();
 }

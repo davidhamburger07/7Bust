@@ -1060,6 +1060,60 @@
   animation: pop 0.3s var(--ease-pop) both;
 }
 
+.radio {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 150;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--rail-hi), var(--rail));
+  border: 2px solid var(--gold-lo);
+  box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-family: var(--font-num);
+  font-size: 10px;
+  color: var(--gold-hi);
+}
+.radio-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe89a, #b8860b);
+  border: 2px solid #fff2c0;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: var(--shadow-card);
+}
+.radio.muted .radio-btn {
+  filter: grayscale(0.7) brightness(0.85);
+}
+.radio-vol {
+  width: 88px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+.radio-label {
+  letter-spacing: 0.1em;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .radio {
+    left: 8px;
+    bottom: 8px;
+    padding: 5px 9px 5px 6px;
+  }
+  .radio-label {
+    display: none;
+  }
+  .radio-vol {
+    width: 60px;
+  }
+}
+
 #announce {
   position: fixed;
   inset: 0;

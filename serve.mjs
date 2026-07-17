@@ -1,7 +1,9 @@
 // Small file server for testing at localhost:3000
+// Streams files and supports ranges, so the music can skip ahead without loading it all
 
 import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +24,11 @@ const MIME = {
   ".ico": "image/x-icon",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".mp4": "video/mp4",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
 };
 
 const server = http.createServer(async (req, res) => {
@@ -43,14 +50,40 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const body = await readFile(filePath);
+    const type = MIME[extname(filePath).toLowerCase()] || "application/octet-stream";
+    const total = info.size;
+    const range = req.headers.range;
+
+    if (range) {
+      // Like "bytes=1000-" or "bytes=1000-2000"
+      const m = /bytes=(\d*)-(\d*)/.exec(range);
+      let start = m && m[1] ? parseInt(m[1], 10) : 0;
+      let end = m && m[2] ? parseInt(m[2], 10) : total - 1;
+      if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= total) {
+        res.writeHead(416, { "Content-Range": `bytes */${total}` }).end();
+        return;
+      }
+      res.writeHead(206, {
+        "Content-Type": type,
+        "Content-Range": `bytes ${start}-${end}/${total}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": end - start + 1,
+        "Cache-Control": "no-store",
+      });
+      createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
+
     res.writeHead(200, {
-      "Content-Type": MIME[extname(filePath).toLowerCase()] || "application/octet-stream",
+      "Content-Type": type,
+      "Content-Length": total,
+      "Accept-Ranges": "bytes",
       "Cache-Control": "no-store",
     });
-    res.end(body);
+    createReadStream(filePath).pipe(res);
   } catch (err) {
-    res.writeHead(500, { "Content-Type": "text/plain" }).end("500 Server Error");
+    if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("500 Server Error");
     console.error(err);
   }
 });

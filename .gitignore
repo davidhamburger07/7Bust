@@ -1,6 +1,10 @@
 # dependencies
 node_modules/
 
+audio/*.mp4
+audio/*.m4a
+audio/*.wav
+
 # OS / editor
 .DS_Store
 Thumbs.db
