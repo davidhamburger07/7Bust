@@ -3,7 +3,7 @@
 
 import { buildDeck, DECK_SIZE, shuffle } from "./deck.js";
 
-export async function createShoe({ serverSeed, clientSeed }) {
+export async function createShoe({ serverSeed, clientSeed, restore = null }) {
   let nonce = 0;
   let order = [];
   let cursor = 0;
@@ -15,7 +15,14 @@ export async function createShoe({ serverSeed, clientSeed }) {
     cursor = 0;
   }
 
-  await reshuffleFrom(buildDeck());
+  if (restore) {
+    nonce = restore.nonce;
+    order = restore.order.map((c) => ({ ...c }));
+    cursor = restore.cursor;
+    discardPile = restore.discard.map((c) => ({ ...c }));
+  } else {
+    await reshuffleFrom(buildDeck());
+  }
 
   async function draw() {
     if (cursor >= order.length) {
@@ -49,5 +56,10 @@ export async function createShoe({ serverSeed, clientSeed }) {
     };
   }
 
-  return { draw, discard, remainingNumberCounts, counts, getNonce: () => nonce };
+  // Everything needed to save and resume the shoe
+  function getState() {
+    return { nonce, order, cursor, discard: discardPile };
+  }
+
+  return { draw, discard, remainingNumberCounts, counts, getState, getNonce: () => nonce };
 }

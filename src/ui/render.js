@@ -14,7 +14,7 @@ const STATUS = {
   banked: { txt: "banked", cls: "banked" },
   busted: { txt: "bust", cls: "bust" },
   frozen: { txt: "froze", cls: "froze" },
-  flip7: { txt: "flip 7", cls: "seven" },
+  clean7: { txt: "clean 7", cls: "seven" },
 };
 
 function numberCard(value, heat, { mini = false, isNew = false } = {}) {
@@ -160,6 +160,16 @@ function dock(view) {
 
 export function renderLobby(view) {
   const s = view.snapshot;
+  const cfg = s.config;
+  const fee = view.entryFee ?? cfg.defaultEntry;
+  const pot = fee * cfg.seats;
+  const rake = Math.round(pot * cfg.rakePct);
+  const prize = pot - rake;
+  const balance = s.wallet.balance;
+  const canEnter = balance >= fee;
+  const tiers = cfg.entryTiers
+    .map((t) => `<button class="tier ${t === fee ? "on" : ""}" data-action="entry" data-fee="${t}">${t}</button>`)
+    .join("");
   return `
   <div class="screen screen--lobby">
     <div class="topbar">
@@ -168,16 +178,30 @@ export function renderLobby(view) {
     </div>
     <div class="lobby">
       <div class="wordmark">7<span>BUST</span></div>
-      <p class="tagline">Nine rounds, three players, taking turns clockwise. Flip cards for points, but a repeat number busts your round.</p>
-      <ul class="rules">
-        <li><b>Hit</b> for as many cards as you dare · <b>Bank</b> to score</li>
-        <li>Bank only at a turn's <b>start</b>: after drawing, <b>Stop</b> and bank next turn</li>
-        <li>Repeat a number → <b>bust</b> · <b>Flip 7</b> ends the round, +15</li>
-        <li>One <b>94-card shoe</b>: it shrinks all match, so count cards</li>
-      </ul>
-      <button class="btn btn--play" data-action="start">Start match &nbsp;→</button>
+      <p class="tagline">A nine-round press-your-luck tournament. Bank before you bust, top score takes the pot.</p>
+
+      <div class="buyin">
+        <div class="buyin-head">
+          <span class="label">Balance</span>
+          <span class="balance num">${balance.toLocaleString()} <small>cr</small></span>
+        </div>
+        <div class="buyin-row">
+          <span class="label">Buy-in</span>
+          <div class="tiers">${tiers}</div>
+        </div>
+        <div class="prize-preview">
+          Pot <b class="num">${pot}</b> · winner takes <b class="num">${prize}</b>
+          <span class="rake">${Math.round(cfg.rakePct * 100)}% house rake</span>
+        </div>
+      </div>
+
+      <button class="btn btn--play" data-action="start" ${canEnter ? "" : "disabled"}>
+        ${canEnter ? `Enter tournament · −${fee}` : "Not enough credits"}
+      </button>
       <div class="lobby-foot">
         <a class="link" href="#" data-action="rules">How to play</a>
+        <span>·</span>
+        <a class="link" href="#" data-action="reset-balance">Reset balance</a>
         <span>·</span>
         <a class="link" href="#" data-action="limits">Limits</a>
         <span>·</span>
@@ -259,6 +283,21 @@ function scoreboard(s) {
   </div>`;
 }
 
+function cashLedger(s) {
+  const t = s.tournament;
+  if (!t) return "";
+  const won = t.youPayout > 0;
+  const netCls = t.youNet >= 0 ? "pos" : "neg";
+  return `
+  <div class="cash-ledger">
+    <div class="cl-row"><span>Buy-in</span><span class="neg">−${t.entryFee}</span></div>
+    <div class="cl-row"><span>Prize pool <small>(pot ${t.pot} − ${Math.round(t.rakePct * 100)}% rake ${t.houseRake})</small></span><span class="num">${t.prizePool}</span></div>
+    <div class="cl-row"><span>Your payout</span><span class="${won ? "pos" : ""}">${won ? "+" + t.youPayout : "-"}</span></div>
+    <div class="cl-row total"><span>Net this tournament</span><span class="${netCls}">${t.youNet >= 0 ? "+" : ""}${t.youNet}</span></div>
+    <div class="cl-row"><span>Balance</span><span class="num">${s.wallet.balance.toLocaleString()} cr</span></div>
+  </div>`;
+}
+
 export function renderOverlay(view) {
   const s = view.snapshot;
 
@@ -277,14 +316,17 @@ export function renderOverlay(view) {
   if (s.phase === "match_end") {
     const winner = s.players[s.winner];
     const youWon = s.winner === s.you;
+    const fee = view.entryFee ?? s.config.defaultEntry;
+    const canAgain = s.wallet.balance >= fee;
     return `
     <div class="overlay">
       <div class="result result--seven" style="--heat:255, 209, 92">
-        <div class="kicker">Match over, 9 rounds</div>
+        <div class="kicker">Tournament over, 9 rounds</div>
         <h2>${youWon ? "YOU WIN" : winner.name.toUpperCase() + " WINS"}</h2>
         ${scoreboard(s)}
-        <button class="btn btn--play" data-action="again">Play again</button>
-        <div><a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
+        ${cashLedger(s)}
+        <button class="btn btn--play" data-action="again" ${canAgain ? "" : "disabled"}>${canAgain ? `Play again · −${fee}` : "Not enough credits"}</button>
+        <div>${canAgain ? "" : '<a class="ghost link" href="#" data-action="reset-balance">Reset balance</a> · '}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
       </div>
     </div>`;
   }
@@ -317,8 +359,8 @@ export function renderRules() {
         <p>You bank with <b>Bank (Stay)</b>: but only as your turn's <b>first action</b>, before you draw, and never on an empty hand. So once you draw this turn you can't bank until a <b>later turn</b>: Stop now, then Bank when play comes back to you (which leaves you exposed to a Flip Three in the meantime).</p>
       </section>
       <section class="rule-card">
-        <h3>Bust &amp; Flip 7</h3>
-        <p>Flip a number you already hold and you <b>bust</b>: score 0 for the round (both copies are shown). Reach <b>7 unique numbers</b> for a <b>Flip 7</b>: the <b>whole round ends</b>: everyone still in banks their hand, and you get a <b>+15</b> bonus.</p>
+        <h3>Bust &amp; Clean 7</h3>
+        <p>Flip a number you already hold and you <b>bust</b>: score 0 for the round (both copies are shown). Reach <b>7 unique numbers</b> for a <b>Clean 7</b>: the <b>whole round ends</b>: everyone still in banks their hand, and you get a <b>+15</b> bonus.</p>
       </section>
       <section class="rule-card">
         <h3>End of a round</h3>
@@ -326,7 +368,7 @@ export function renderRules() {
       </section>
       <section class="rule-card">
         <h3>Scoring</h3>
-        <p>Add up your number cards. A <b>×2</b> card doubles that sum, <b>+N</b> cards add on top, and Flip 7 adds <b>+15</b>.</p>
+        <p>Add up your number cards. A <b>×2</b> card doubles that sum, <b>+N</b> cards add on top, and a Clean 7 adds <b>+15</b>.</p>
       </section>
       <section class="rule-card">
         <h3>Action cards</h3>

@@ -8,7 +8,7 @@ export function createPlayer({ seat, name, isAI = false, ai = null }) {
     ai,
     totalScore: 0,
     hand: newHand(), // Reset every round but kept between the player's turns in that round
-    turnState: "active", // active, banked, busted, flip7 or frozen, reset each round
+    turnState: "active", // active, banked, busted, clean7 or frozen, reset each round
     hitThisTurn: false, // Banking is only allowed as the first move of a turn
     lastGain: 0,
     roundDelta: 0,
@@ -27,6 +27,7 @@ export function createSession(overrides = {}) {
     sessionId: `s_${now}`,
     startedAt: now,
     matchesPlayed: 0,
+    balance: overrides.balance ?? 1000, // Pretend credits, there's no real wallet
     responsibleGaming: {
       sessionTimeLimitMin: overrides.sessionTimeLimitMin ?? 60,
       realityCheckIntervalMin: overrides.realityCheckIntervalMin ?? 15,

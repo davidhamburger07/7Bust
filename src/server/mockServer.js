@@ -5,9 +5,10 @@ import { buildDeck, DECK_SIZE, shuffle } from "../engine/deck.js";
 import { createShoe } from "../engine/shoe.js";
 import { sha256Hex, randomSeedHex } from "../engine/rng.js";
 import { PHASES, assertPhase } from "../engine/stateMachine.js";
-import { newHand, applyNumber, applyModifier, scoreHand, uniqueCount, bustRisk } from "../engine/round.js";
+import { newHand, applyNumber, applyModifier, scoreHand, uniqueCount, bustRisk, serializeHand, deserializeHand } from "../engine/round.js";
 import { createPlayer, createSession, sessionElapsedMs, needsRealityCheck } from "../engine/player.js";
 import { PERSONALITIES, aiBankAtStart, aiStop } from "../engine/ai.js";
+import { ENTRY_TIERS, DEFAULT_ENTRY, HOUSE_RAKE, STARTING_BALANCE, buildPot, payoutPerWinner } from "../engine/tournament.js";
 
 const HUMAN_SEAT = 0;
 const TOTAL_ROUNDS = 9;
@@ -36,6 +37,7 @@ export function createServer() {
   let clientSeed = "";
   let shoe = null;
   let lastReveal = null;
+  let tournament = null;
 
   const name = (seat) => players[seat].name;
   const poss = (seat) => (players[seat].name === "You" ? "Your" : `${players[seat].name}'s`);
@@ -86,10 +88,10 @@ export function createServer() {
         lastEvent = { seat, kind: "bust", card };
         return { bust: true };
       }
-      if (r.flip7) {
-        pushLog(`${name(seat)} hit FLIP 7! +15, round over${tag}`);
-        lastEvent = { seat, kind: "flip7", card };
-        return { flip7: true };
+      if (r.cleanSeven) {
+        pushLog(`${name(seat)} hit a CLEAN 7! +15, round over${tag}`);
+        lastEvent = { seat, kind: "clean7", card };
+        return { cleanSeven: true };
       }
       pushLog(`${name(seat)} flipped ${card.value}${tag}`);
       lastEvent = { seat, kind: "number", card };
@@ -176,7 +178,7 @@ export function createServer() {
   // Ends a seat's turn without moving on to the next player
   function resolveSeat(seat, state) {
     players[seat].turnState = state;
-    if (state === "banked" || state === "flip7" || state === "frozen") bankHand(seat);
+    if (state === "banked" || state === "clean7" || state === "frozen") bankHand(seat);
     // Busted hands keep their cards on show until the next round starts
   }
 
@@ -195,17 +197,29 @@ export function createServer() {
     }
   }
 
-  // "Flip 7" ends the round, everyone still in banks and the player who got it gets the bonus
-  function endRoundByFlip7(flipperSeat) {
+  // "Clean 7" ends the round, everyone still in banks and the player who got it gets the bonus
+  function endRoundByCleanSeven(flipperSeat) {
     for (const p of players) {
-      if (p.turnState === "active") resolveSeat(p.seat, p.seat === flipperSeat ? "flip7" : "banked");
+      if (p.turnState === "active") resolveSeat(p.seat, p.seat === flipperSeat ? "clean7" : "banked");
     }
     finishRound();
   }
 
   function finishRound() {
     if (roundNumber >= TOTAL_ROUNDS) {
-      matchWinner = [...players].sort((a, b) => b.totalScore - a.totalScore)[0].seat;
+      // Ranks the players and pays out the pot, top scorers split it and the house keeps its rake
+      // The player's wallet gets paid if they placed
+      const maxTotal = Math.max(...players.map((p) => p.totalScore));
+      const winnerSeats = players.filter((p) => p.totalScore === maxTotal).map((p) => p.seat);
+      matchWinner = winnerSeats[0];
+      const each = payoutPerWinner(tournament.prizePool, winnerSeats.length);
+      const youWon = winnerSeats.includes(HUMAN_SEAT);
+      tournament.winnerSeats = winnerSeats;
+      tournament.payout = each;
+      tournament.youPayout = youWon ? each : 0;
+      tournament.youNet = tournament.youPayout - tournament.entryFee; // Won minus the buy-in
+      tournament.settled = true;
+      if (youWon) session.balance += each;
       lastReveal = { serverSeed, clientSeed, serverSeedHash };
       phase = PHASES.MATCH_END;
     } else {
@@ -247,13 +261,27 @@ export function createServer() {
     p.hitThisTurn = true;
     const r = await drawInto(seat);
     if (r.bust) endTurn(seat, "busted");
-    else if (r.flip7) endRoundByFlip7(seat);
+    else if (r.cleanSeven) endRoundByCleanSeven(seat);
     else if (players[seat].turnState !== "active") advanceTurn(); // Like drawing "Freeze" and using it on themselves
     // Keeps the turn, the bot decides again next step
   }
 
-  async function startMatch() {
+  async function startMatch({ entryFee = DEFAULT_ENTRY } = {}) {
     assertPhase(phase, "START_MATCH");
+    const fee = ENTRY_TIERS.includes(entryFee) ? entryFee : DEFAULT_ENTRY;
+    if (session.balance < fee) {
+      return { ok: false, reason: "insufficient-balance", snapshot: snapshot() };
+    }
+    session.balance -= fee;
+    tournament = {
+      ...buildPot(fee, n),
+      settled: false,
+      payout: 0,
+      winnerSeats: [],
+      youPayout: 0,
+      youNet: -fee,
+    };
+
     serverSeed = randomSeedHex(32);
     serverSeedHash = await sha256Hex(serverSeed);
     clientSeed = randomSeedHex(8);
@@ -293,9 +321,9 @@ export function createServer() {
         if (r.bust) {
           forcedQueue = forcedQueue.filter((s) => s !== seat);
           resolveSeat(seat, "busted");
-        } else if (r.flip7) {
+        } else if (r.cleanSeven) {
           forcedQueue = [];
-          endRoundByFlip7(seat);
+          endRoundByCleanSeven(seat);
           return { ok: true, snapshot: snapshot() };
         }
       }
@@ -322,7 +350,7 @@ export function createServer() {
     const r = await drawInto(HUMAN_SEAT);
     if (r.needsChoice) return { ok: true, snapshot: snapshot() };
     if (r.bust) endTurn(HUMAN_SEAT, "busted");
-    else if (r.flip7) endRoundByFlip7(HUMAN_SEAT);
+    else if (r.cleanSeven) endRoundByCleanSeven(HUMAN_SEAT);
     else if (players[HUMAN_SEAT].turnState !== "active") advanceTurn();
     // Keeps the turn, the player can draw again or stop
     return { ok: true, snapshot: snapshot() };
@@ -369,6 +397,75 @@ export function createServer() {
 
   async function getState() {
     return snapshot();
+  }
+
+  // Saves the whole game so a player who reconnects can carry on
+  // A real game server would keep this, here it goes in the browser
+  function serialize() {
+    return {
+      v: 1,
+      phase,
+      roundNumber,
+      currentSeat,
+      dealer,
+      forcedQueue: forcedQueue.slice(),
+      pendingChoice,
+      lastEvent,
+      matchWinner,
+      log: log.slice(),
+      serverSeed,
+      serverSeedHash,
+      clientSeed,
+      shoe: shoe ? shoe.getState() : null,
+      wallet: { balance: session.balance, matchesPlayed: session.matchesPlayed },
+      tournament,
+      players: players.map((p) => ({
+        seat: p.seat,
+        totalScore: p.totalScore,
+        turnState: p.turnState,
+        hitThisTurn: p.hitThisTurn,
+        lastGain: p.lastGain,
+        roundDelta: p.roundDelta,
+        hand: serializeHand(p.hand),
+      })),
+    };
+  }
+
+  async function restore(blob) {
+    if (!blob || blob.v !== 1) return { ok: false, snapshot: snapshot() };
+    phase = blob.phase;
+    roundNumber = blob.roundNumber;
+    currentSeat = blob.currentSeat;
+    dealer = blob.dealer;
+    forcedQueue = (blob.forcedQueue || []).slice();
+    pendingChoice = blob.pendingChoice || null;
+    lastEvent = blob.lastEvent || null;
+    matchWinner = blob.matchWinner ?? null;
+    log = (blob.log || []).slice();
+    serverSeed = blob.serverSeed;
+    serverSeedHash = blob.serverSeedHash;
+    clientSeed = blob.clientSeed;
+    session.balance = blob.wallet?.balance ?? session.balance;
+    session.matchesPlayed = blob.wallet?.matchesPlayed ?? session.matchesPlayed;
+    tournament = blob.tournament || null;
+    for (const pd of blob.players || []) {
+      const p = players[pd.seat];
+      p.totalScore = pd.totalScore;
+      p.turnState = pd.turnState;
+      p.hitThisTurn = pd.hitThisTurn;
+      p.lastGain = pd.lastGain;
+      p.roundDelta = pd.roundDelta;
+      p.hand = deserializeHand(pd.hand);
+    }
+    shoe = blob.shoe ? await createShoe({ serverSeed, clientSeed, restore: blob.shoe }) : null;
+    return { ok: true, snapshot: snapshot() };
+  }
+
+  // Tops a broke wallet back up so the demo can't get stuck
+  async function resetBalance() {
+    if (phase === PHASES.ROUND) return { ok: false, snapshot: snapshot() };
+    session.balance = STARTING_BALANCE;
+    return { ok: true, snapshot: snapshot() };
   }
 
   async function verify({ serverSeed: ss, clientSeed: cs, serverSeedHash: hash }) {
@@ -433,8 +530,11 @@ export function createServer() {
       },
       fair: { serverSeedHash, clientSeed },
       reveal: lastReveal,
+      wallet: { balance: session.balance },
+      config: { entryTiers: ENTRY_TIERS, defaultEntry: DEFAULT_ENTRY, rakePct: HOUSE_RAKE, seats: n },
+      tournament,
     };
   }
 
-  return Object.freeze({ getState, startMatch, nextRound, step, hit, stay, stop, resolveChoice, verify });
+  return Object.freeze({ getState, startMatch, nextRound, step, hit, stay, stop, resolveChoice, verify, resetBalance, serialize, restore });
 }

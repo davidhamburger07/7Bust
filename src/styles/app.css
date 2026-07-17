@@ -852,6 +852,132 @@
   animation: rise 0.3s var(--ease-spring) both;
 }
 
+.buyin {
+  width: 100%;
+  border-radius: var(--radius);
+  padding: var(--s4);
+  background: linear-gradient(180deg, var(--orchid), var(--velvet));
+  border: 1px solid var(--orchid-line);
+  box-shadow: var(--shadow-elevated);
+  display: grid;
+  gap: var(--s3);
+  text-align: left;
+}
+.buyin-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.buyin-head .label,
+.buyin-row .label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.balance {
+  font-family: var(--font-num);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--bone);
+}
+.balance small {
+  font-size: 13px;
+  color: var(--muted);
+}
+.buyin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tiers {
+  display: flex;
+  gap: var(--s2);
+}
+.tier {
+  min-width: 52px;
+  padding: var(--s2) var(--s3);
+  border-radius: 12px;
+  border: 1px solid var(--orchid-line);
+  background: var(--velvet);
+  color: var(--muted);
+  font-family: var(--font-num);
+  font-size: 16px;
+  transition: transform 0.14s var(--ease-spring), border-color 0.14s, color 0.14s;
+}
+.tier:hover {
+  border-color: rgba(var(--heat), 0.7);
+  color: var(--bone);
+}
+.tier.on {
+  border-color: var(--gold);
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--cool), var(--gold));
+}
+.tier:active {
+  transform: scale(0.94);
+}
+.tier:focus-visible {
+  outline: 2px solid rgba(var(--heat), 0.9);
+  outline-offset: 2px;
+}
+.prize-preview {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.prize-preview b {
+  color: var(--gold);
+}
+.rake {
+  font-size: 10px;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-left: auto;
+}
+
+/* Money won and lost, shown on the end of match screen */
+.cash-ledger {
+  margin: var(--s4) 0;
+  display: grid;
+  gap: 6px;
+  font-family: var(--font-num);
+  text-align: left;
+}
+.cl-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  color: var(--muted);
+  font-size: 14px;
+}
+.cl-row small {
+  font-family: var(--font-body);
+  color: var(--faint);
+  font-size: 11px;
+}
+.cl-row.total {
+  color: var(--bone);
+  font-size: 16px;
+  padding-top: var(--s2);
+  margin-top: 2px;
+  border-top: 1px solid var(--orchid-line);
+}
+.cash-ledger .pos {
+  color: var(--cool);
+}
+.cash-ledger .neg {
+  color: var(--bust);
+}
+.cash-ledger .num {
+  color: var(--bone);
+}
+
 /* On phones the sidebar's feed joins the stacked layout */
 .sidebar {
   display: contents;
