@@ -122,12 +122,15 @@ async function handle(ws, msg) {
       ws.roomCode = room.code;
       ws.playerId = p.id;
       broadcastLobby(room);
-      if (room.game) send(ws, { type: "state", snapshot: room.game.getState(p.seat) });
+      if (room.game) send(ws, { type: "state", snapshot: room.game.snapshotFor(p.seat) });
       break;
     }
     case "start": {
       const room = rooms.get(ws.roomCode);
-      if (!room || ws.playerId !== room.hostId || room.status !== "lobby") return;
+      if (!room || ws.playerId !== room.hostId) return;
+      // Start from the waiting room, or deal a new match once the last one is over
+      const canStart = room.status === "lobby" || (room.game && room.game.snapshotFor(0).phase === "match_end");
+      if (!canStart) return;
       await startGame(room);
       break;
     }

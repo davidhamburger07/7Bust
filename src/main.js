@@ -4,6 +4,7 @@ import { createServer } from "./server/mockServer.js";
 import { renderApp } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice } from "./ui/announce.js";
 import { initRadio, startRadio } from "./ui/radio.js";
+import { createNet } from "./net/netClient.js";
 
 const server = createServer();
 const root = document.getElementById("app");
@@ -11,8 +12,11 @@ const bootAt = Date.now();
 
 const AI_DELAY = 850;
 const SAVE_KEY = "7bust:save:v2";
+const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
 
-const view = { snapshot: null, lastEvent: null, toast: null, entryFee: null };
+// Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
+const view = { snapshot: null, lastEvent: null, toast: null, entryFee: null, mode: "solo", online: null };
+let net = null;
 let aiTimer = null;
 let audioReady = false;
 let prevPhase = "lobby";
@@ -59,6 +63,7 @@ function toast(msg) {
 }
 
 function save() {
+  if (view.mode === "online") return; // The room server owns online state
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(server.serialize()));
   } catch {
@@ -111,7 +116,7 @@ function apply(res) {
 
 function pump() {
   const s = view.snapshot;
-  if (!s || aiTimer || !s.autoStep) return;
+  if (view.mode === "online" || !s || aiTimer || !s.autoStep) return; // The server paces bots online
   aiTimer = setTimeout(async () => {
     aiTimer = null;
     apply(await server.step());
@@ -129,21 +134,187 @@ async function start() {
   sfx("ding");
   apply(res);
 }
-const hit = async () => apply(await server.hit()); // The card sound plays off the result
+// Actions go to the local engine in solo or to the room server online
+// Sounds and announcements play off the new snapshot either way
+async function hit() {
+  if (view.mode === "online") return net.intent({ intent: "hit" });
+  apply(await server.hit());
+}
 async function stay() {
   sfx("chips");
   if (Date.now() - lastFlavorAt > 9000 && Math.random() < 0.4) {
     playVoice("coward");
     lastFlavorAt = Date.now();
   }
+  if (view.mode === "online") return net.intent({ intent: "stay" });
   apply(await server.stay());
 }
 async function stop() {
   sfx("click");
+  if (view.mode === "online") return net.intent({ intent: "stop" });
   apply(await server.stop());
 }
-const next = async () => apply(await server.nextRound());
-const target = async (seat) => apply(await server.resolveChoice({ targetSeat: seat }));
+async function next() {
+  if (view.mode === "online") return net.intent({ intent: "next" });
+  apply(await server.nextRound());
+}
+async function target(seat) {
+  if (view.mode === "online") return net.intent({ intent: "resolveChoice", targetSeat: seat });
+  apply(await server.resolveChoice({ targetSeat: seat }));
+}
+
+const loadNet = () => {
+  try {
+    return JSON.parse(localStorage.getItem(NET_KEY) || "null");
+  } catch {
+    return null;
+  }
+};
+const persistNet = (code, id, name) => {
+  try {
+    localStorage.setItem(NET_KEY, JSON.stringify({ code, id, name }));
+  } catch {
+    // Analytics failing never affects the game
+  }
+};
+const clearNet = () => {
+  try {
+    localStorage.removeItem(NET_KEY);
+  } catch {
+    // Analytics failing never affects the game
+  }
+};
+
+let reconnectTries = 0;
+function ensureNet() {
+  if (net) return;
+  net = createNet({
+    onLobby(msg) {
+      view.mode = "online";
+      view.online = view.online || { screen: "waiting", name: "", error: null, lobby: null };
+      view.online.self = msg.self;
+      view.online.error = null;
+      view.online.lobby = { code: msg.code, status: msg.status, seats: msg.seats, you: msg.you, self: msg.self, isHost: msg.isHost };
+      persistNet(msg.code, msg.self, view.online.name);
+      if (msg.status === "playing") {
+        if (view.online.screen !== "playing" && view.snapshot && view.snapshot.cashless) view.online.screen = "playing";
+        // Otherwise wait for the first state to switch us in
+      } else {
+        view.online.screen = "waiting";
+      }
+      render();
+    },
+    onState(snapshot) {
+      if (!view.online) return;
+      reconnectTries = 0;
+      view.snapshot = snapshot;
+      view.online.screen = "playing";
+      render();
+      handleAnnouncements(snapshot);
+    },
+    onError(msg) {
+      if (!view.online) return;
+      const err = msg.error || "Something went wrong.";
+      if (/not found|full|already started|seat/i.test(err)) {
+        clearNet();
+        view.online.lobby = null;
+        if (view.online.screen === "connecting" || view.online.screen === "playing") view.online.screen = view.online.hadRoom ? "menu" : "join";
+      }
+      view.online.error = err;
+      render();
+    },
+    onClose() {
+      // Lost connection mid-game, try a few times to get back into our seat
+      if (view.mode === "online" && view.online && view.online.screen === "playing" && reconnectTries < 8) {
+        const c = loadNet();
+        if (c && c.code && c.id) {
+          reconnectTries += 1;
+          toast("Reconnecting…");
+          setTimeout(() => net && net.rejoin(c.code, c.id), 1200);
+        }
+      }
+    },
+  });
+}
+
+const readName = () => {
+  const el = document.getElementById("mp-name");
+  const n = ((el ? el.value : view.online && view.online.name) || "").trim();
+  return n || "Player";
+};
+
+function openOnline() {
+  const saved = loadNet();
+  view.mode = "online";
+  view.online = { screen: "menu", name: (saved && saved.name) || "", error: null, lobby: null };
+  render();
+}
+function onlineMenu() {
+  if (!view.online) return openOnline();
+  view.online.screen = "menu";
+  view.online.error = null;
+  render();
+}
+function mpCreate() {
+  ensureNet();
+  view.online.name = readName();
+  view.online.hadRoom = true;
+  view.online.screen = "connecting";
+  view.online.error = null;
+  render();
+  net.create(view.online.name);
+}
+function joinScreen() {
+  view.online.screen = "join";
+  view.online.error = null;
+  render();
+}
+function mpJoin() {
+  const codeEl = document.getElementById("mp-code");
+  const code = ((codeEl ? codeEl.value : view.online.codeInput) || "").toUpperCase().trim();
+  if (code.length < 4) {
+    view.online.error = "Enter the 4-letter room code.";
+    render();
+    return;
+  }
+  ensureNet();
+  view.online.name = readName();
+  view.online.codeInput = code;
+  view.online.hadRoom = false;
+  view.online.screen = "connecting";
+  view.online.error = null;
+  render();
+  net.join(code, view.online.name);
+}
+function mpStart() {
+  sfx("ding");
+  net && net.start();
+}
+async function mpLeave() {
+  if (net) net.close();
+  net = null;
+  clearNet();
+  reconnectTries = 0;
+  view.mode = "solo";
+  view.online = null;
+  // Back to the solo lobby, the online snapshot isn't ours any more
+  if (!view.snapshot || view.snapshot.cashless) await refreshSolo();
+  render();
+}
+function mpCopy() {
+  const code = view.online && view.online.lobby && view.online.lobby.code;
+  if (!code) return;
+  const link = `${location.origin}${location.pathname}?room=${code}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(() => toast("Invite link copied!"), () => toast(code));
+  } else {
+    toast(`Share this code: ${code}`);
+  }
+}
+async function refreshSolo() {
+  view.snapshot = await server.getState();
+  prevPhase = view.snapshot.phase;
+}
 const resetBalance = async () => {
   apply(await server.resetBalance());
   toast("Chips reset to 1,000.");
@@ -172,7 +343,27 @@ const hideRules = () => {
   render();
 };
 
-const ACTIONS = { start, hit, stay, stop, next, again: start, verify: verifyFair, rules: showRules, "rules-back": hideRules, "reset-balance": resetBalance };
+const ACTIONS = {
+  start,
+  hit,
+  stay,
+  stop,
+  next,
+  again: start,
+  verify: verifyFair,
+  rules: showRules,
+  "rules-back": hideRules,
+  "reset-balance": resetBalance,
+  "mp-open": openOnline,
+  "mp-menu": onlineMenu,
+  "mp-create": mpCreate,
+  "mp-join-screen": joinScreen,
+  "mp-join": mpJoin,
+  "mp-start": mpStart,
+  "mp-again": mpStart,
+  "mp-leave": mpLeave,
+  "mp-copy": mpCopy,
+};
 
 root.addEventListener("click", (e) => {
   if (!audioReady) {
@@ -188,6 +379,26 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "entry") return setEntry(Number(el.dataset.fee));
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();
+});
+
+// Keep the typed room name and code in state so a redraw doesn't wipe them
+root.addEventListener("input", (e) => {
+  if (!view.online) return;
+  if (e.target.id === "mp-name") view.online.name = e.target.value;
+  if (e.target.id === "mp-code") {
+    e.target.value = e.target.value.toUpperCase();
+    view.online.codeInput = e.target.value;
+  }
+});
+root.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !view.online) return;
+  if (e.target.id === "mp-code") {
+    e.preventDefault();
+    mpJoin();
+  } else if (e.target.id === "mp-name") {
+    e.preventDefault();
+    view.online.screen === "join" ? mpJoin() : mpCreate();
+  }
 });
 
 (async function init() {
@@ -221,4 +432,20 @@ root.addEventListener("click", (e) => {
   save();
   setInterval(tickClock, 1000);
   pump();
+
+  const params = new URLSearchParams(location.search);
+  const roomParam = (params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  const saved = loadNet();
+  if (roomParam.length === 4) {
+    openOnline();
+    view.online.codeInput = roomParam;
+    view.online.screen = "join";
+    render();
+  } else if (saved && saved.code && saved.id) {
+    ensureNet();
+    view.mode = "online";
+    view.online = { screen: "connecting", name: saved.name || "", error: null, lobby: null, hadRoom: true };
+    render();
+    net.rejoin(saved.code, saved.id);
+  }
 })();

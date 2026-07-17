@@ -158,6 +158,7 @@ export function renderLobby(view) {
       </div>
 
       <button class="btn btn--play" data-action="start" ${canEnter ? "" : "disabled"}>${canEnter ? `TAKE A SEAT · −${fee}` : "NOT ENOUGH CHIPS"}</button>
+      <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">rooms with friends</span></button>
       <div class="lobby-foot">
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
         <a class="link" href="#" data-action="reset-balance">Reset chips</a><span>·</span>
@@ -169,6 +170,7 @@ export function renderLobby(view) {
 
 export function renderMatch(view) {
   const s = view.snapshot;
+  const online = view.mode === "online" && view.online && view.online.lobby ? view.online.lobby : null;
   const me = s.players[s.you];
   const newSeat = s.lastEvent ? s.lastEvent.seat : -1;
   const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat)).join("");
@@ -178,7 +180,7 @@ export function renderMatch(view) {
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
-        <span class="balance-chip">${chipStack(s.wallet.balance)}</span>
+        ${s.wallet ? `<span class="balance-chip">${chipStack(s.wallet.balance)}</span>` : online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
         <span class="clock">◔ <span class="num" data-clock>${fmtTime(s.session.elapsedMs)}</span></span>
         <button class="icon-btn" data-action="rules" aria-label="How to play">?</button>
       </span>
@@ -233,6 +235,20 @@ export function renderOverlay(view) {
   if (s.phase === "match_end") {
     const winner = s.players[s.winner];
     const youWon = s.winner === s.you;
+    if (s.cashless) {
+      const isHost = view.online && view.online.lobby && view.online.lobby.isHost;
+      const again = isHost
+        ? `<button class="btn btn--play" data-action="mp-again">PLAY AGAIN</button>`
+        : `<div class="wait-host">Waiting for the host to deal again…</div>`;
+      return `
+      <div class="overlay"><div class="result result--win">
+        <div class="kicker">Match over</div>
+        <h2 class="${youWon ? "big-win" : ""}">${youWon ? "YOU WIN!" : winner.name.toUpperCase() + " WINS"}</h2>
+        ${scoreboard(s)}
+        ${again}
+        <div><a class="ghost link" href="#" data-action="mp-leave">Leave table</a></div>
+      </div></div>`;
+    }
     const fee = view.entryFee ?? s.config.defaultEntry;
     const canAgain = s.wallet.balance >= fee;
     return `
@@ -268,8 +284,121 @@ export function renderRules() {
   </div>`;
 }
 
+function onlineError(o) {
+  return o.error ? `<div class="mp-error">${o.error}</div>` : "";
+}
+
+function renderOnlineMenu(o) {
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card">
+      <button class="icon-btn mp-close" data-action="mp-leave" aria-label="Back to solo">←</button>
+      <div class="wordmark wordmark--sm">7<span>BUST</span></div>
+      <p class="tagline">Spin up a private table and share the code. Empty seats fill with the house AI.</p>
+      <label class="mp-label" for="mp-name">Your name</label>
+      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${o.name || ""}" autocomplete="off" />
+      ${onlineError(o)}
+      <button class="btn btn--play" data-action="mp-create">CREATE A ROOM</button>
+      <button class="btn btn--online" data-action="mp-join-screen">JOIN WITH A CODE</button>
+    </div>
+  </div>`;
+}
+
+function renderOnlineJoin(o) {
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card">
+      <button class="icon-btn mp-close" data-action="mp-menu" aria-label="Back">←</button>
+      <div class="wordmark wordmark--sm">JOIN</div>
+      <p class="tagline">Enter the four-letter code your host shared with you.</p>
+      <label class="mp-label" for="mp-name">Your name</label>
+      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${o.name || ""}" autocomplete="off" />
+      <label class="mp-label" for="mp-code">Room code</label>
+      <input class="mp-input mp-input--code" id="mp-code" maxlength="4" placeholder="ABCD" value="${o.codeInput || ""}" autocomplete="off" spellcheck="false" />
+      ${onlineError(o)}
+      <button class="btn btn--play" data-action="mp-join">JOIN TABLE</button>
+    </div>
+  </div>`;
+}
+
+function renderOnlineConnecting(o) {
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card mp-card--center">
+      <span class="spinner spinner--big"></span>
+      <div class="mp-connecting">${o.error ? "" : "Connecting to the table…"}</div>
+      ${onlineError(o)}
+      ${o.error ? `<button class="btn btn--online" data-action="mp-leave">BACK</button>` : ""}
+    </div>
+  </div>`;
+}
+
+function renderOnlineWaiting(o) {
+  const L = o.lobby;
+  const seats = L.seats
+    .map(
+      (p) => `
+      <div class="mp-seat ${p.seat === L.you ? "me" : ""} ${p.connected ? "" : "gone"}">
+        <span class="mp-seat-badge num">${p.seat + 1}</span>
+        <span class="mp-seat-name">${p.name}${p.isHost ? '<span class="mp-host">HOST</span>' : ""}${p.seat === L.you ? '<span class="mp-you">YOU</span>' : ""}</span>
+        <span class="mp-seat-dot ${p.connected ? "on" : ""}"></span>
+      </div>`
+    )
+    .join("");
+  const empty = Math.max(0, 4 - L.seats.length);
+  const emptyRows = Array.from({ length: empty }, () => `<div class="mp-seat empty"><span class="mp-seat-badge num">·</span><span class="mp-seat-name">Open, house AI fills in</span></div>`).join("");
+  const startBtn = L.isHost
+    ? `<button class="btn btn--play" data-action="mp-start">START GAME</button>`
+    : `<div class="wait-host">Waiting for the host to start…</div>`;
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card">
+      <button class="icon-btn mp-close" data-action="mp-leave" aria-label="Leave room">←</button>
+      <div class="mp-codehead">
+        <span class="mp-label">Room code</span>
+        <div class="mp-code num">${L.code}</div>
+        <button class="link mp-copy" data-action="mp-copy">Copy invite link</button>
+      </div>
+      <div class="mp-seats">
+        <div class="mp-label">At the table (${L.seats.length})</div>
+        ${seats}${emptyRows}
+      </div>
+      ${onlineError(o)}
+      ${startBtn}
+    </div>
+  </div>`;
+}
+
+function renderOnlineDealing() {
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card mp-card--center">
+      <span class="spinner spinner--big"></span>
+      <div class="mp-connecting">Dealing you in…</div>
+    </div>
+  </div>`;
+}
+
+export function renderOnline(view) {
+  const o = view.online;
+  if (o.screen === "join") return renderOnlineJoin(o);
+  if (o.screen === "connecting") return renderOnlineConnecting(o);
+  if (o.screen === "waiting" && o.lobby) return renderOnlineWaiting(o);
+  return renderOnlineMenu(o);
+}
+
 export function renderApp(view) {
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
+  if (view.mode === "online" && view.online) {
+    const o = view.online;
+    // The live table only shows once a real snapshot arrives
+    const playing = o.screen === "playing" && view.snapshot && view.snapshot.cashless;
+    if (!playing) {
+      const scr = o.screen === "playing" ? renderOnlineDealing() : renderOnline(view);
+      return `<div class="stage">${scr}${renderToast(view)}</div>`;
+    }
+    return `<div class="stage">${renderMatch(view)}${renderOverlay(view)}${renderToast(view)}</div>`;
+  }
   const inMatch = view.snapshot.phase !== "lobby";
   const screen = inMatch ? renderMatch(view) : renderLobby(view);
   const overlay = inMatch ? renderOverlay(view) : "";
