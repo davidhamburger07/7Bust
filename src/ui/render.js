@@ -187,12 +187,30 @@ export function renderLobby(view) {
   </div>`;
 }
 
+// Right side on desktop with standings and the table feed
+// On phones the feed drops into the normal layout and standings hide
+function sidebar(s) {
+  const stand = [...s.standings]
+    .map(
+      (p) => `<div class="sb-live-row ${p.seat === s.you ? "you" : ""}"><span>${p.name}</span><span class="num">${p.totalScore}</span></div>`
+    )
+    .join("");
+  const logLines = s.log.map((l) => `<div class="logline">${l}</div>`).join("");
+  return `
+  <div class="sidebar">
+    <div class="sb-live">
+      <div class="sb-live-title">Standings</div>
+      ${stand}
+    </div>
+    <div class="log">${logLines}</div>
+  </div>`;
+}
+
 export function renderMatch(view) {
   const s = view.snapshot;
   const me = s.players[s.you];
   const heat = heatTriple(me.uniqueCount);
   const opps = s.players.filter((p) => p.seat !== s.you).map((p) => opponent(p, s.lastEvent ? s.lastEvent.seat : -1)).join("");
-  const logLines = s.log.map((l) => `<div class="logline">${l}</div>`).join("");
 
   return `
   <div class="screen screen--match" style="--heat:${heat}">
@@ -209,7 +227,7 @@ export function renderMatch(view) {
 
     ${tableZone(s)}
 
-    <div class="log">${logLines}</div>
+    ${sidebar(s)}
 
     ${youPanel(me, view)}
 

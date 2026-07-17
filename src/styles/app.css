@@ -852,6 +852,157 @@
   animation: rise 0.3s var(--ease-spring) both;
 }
 
+/* On phones the sidebar's feed joins the stacked layout */
+.sidebar {
+  display: contents;
+}
+.sb-live {
+  display: none;
+}
+
+/* On desktop the phone frame becomes a wide card table */
+@media (min-width: 860px) {
+  .phone {
+    max-width: 1120px;
+    height: min(760px, 94dvh);
+    max-height: 840px;
+    border-radius: 28px;
+  }
+  .screen {
+    padding: var(--s5) var(--s6);
+  }
+
+  .screen--lobby {
+    align-items: center;
+  }
+  .lobby {
+    max-width: 460px;
+  }
+  .screen--rules {
+    align-items: center;
+  }
+  .screen--rules .topbar,
+  .screen--rules .btn--play {
+    width: 100%;
+    max-width: 760px;
+  }
+  .rules-scroll {
+    width: 100%;
+    max-width: 760px;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+  }
+  .rule-card--accent {
+    grid-column: 1 / -1;
+  }
+  .result {
+    max-width: 460px;
+  }
+
+  .screen--match {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-rows: auto auto 1fr auto auto;
+    grid-template-areas:
+      "bar   bar"
+      "opps  side"
+      "table side"
+      "you   side"
+      "dock  side";
+    column-gap: var(--s6);
+    row-gap: var(--s4);
+    align-items: start;
+  }
+  .matchbar {
+    grid-area: bar;
+  }
+  .opponents {
+    grid-area: opps;
+    gap: var(--s5);
+  }
+  .table-zone {
+    grid-area: table;
+    margin: 0;
+    align-self: center;
+    gap: var(--s7);
+    position: relative;
+  }
+  .table-zone::before {
+    content: "";
+    position: absolute;
+    inset: -35% -12%;
+    z-index: -1;
+    background: radial-gradient(50% 62% at 50% 45%, rgba(var(--heat), 0.14), transparent 70%);
+    transition: background 0.4s var(--ease-out);
+  }
+  .you {
+    grid-area: you;
+  }
+  .action-area {
+    grid-area: dock;
+  }
+
+  .sidebar {
+    grid-area: side;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+    min-height: 0;
+    align-self: stretch;
+  }
+  .sb-live {
+    display: block;
+    border-radius: var(--radius-sm);
+    padding: var(--s4);
+    background: linear-gradient(180deg, var(--velvet), rgba(20, 14, 36, 0.6));
+    border: 1px solid var(--orchid-line);
+  }
+  .sb-live-title {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: var(--s3);
+  }
+  .sb-live-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 5px 0;
+    font-size: 15px;
+    color: var(--muted);
+  }
+  .sb-live-row.you {
+    color: var(--bone);
+  }
+  .sb-live-row .num {
+    color: var(--bone);
+    font-size: 16px;
+  }
+  .log {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .pile-card {
+    width: 66px;
+    height: 92px;
+  }
+  .card {
+    width: 52px;
+    height: 72px;
+  }
+  .card .face {
+    font-size: 26px;
+  }
+  .you-hand {
+    min-height: 74px;
+  }
+  .dock {
+    max-width: 560px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
