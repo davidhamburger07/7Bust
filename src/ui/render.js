@@ -1,4 +1,4 @@
-// Draws the match from snapshots, never changes the game state
+// Draws the casino table from snapshots, never changes the game state
 
 import { heatTriple } from "./heat.js";
 
@@ -10,28 +10,29 @@ function fmtTime(ms) {
 }
 
 const STATUS = {
-  active: { txt: "live", cls: "live" },
+  active: { txt: "in", cls: "live" },
   banked: { txt: "banked", cls: "banked" },
   busted: { txt: "bust", cls: "bust" },
-  frozen: { txt: "froze", cls: "froze" },
+  frozen: { txt: "frozen", cls: "froze" },
   clean7: { txt: "clean 7", cls: "seven" },
 };
 
+function badge(turnState) {
+  const s = STATUS[turnState] || STATUS.active;
+  return `<span class="badge badge--${s.cls}">${s.txt}</span>`;
+}
+
 function numberCard(value, heat, { mini = false, isNew = false } = {}) {
   const cls = `card${mini ? " card--mini" : ""}${isNew ? " card--new" : ""}`;
-  return `<div class="${cls}" style="--heat:${heat}"><span class="face">${value}</span></div>`;
+  return `<div class="${cls}" style="--glow:${heat}"><span class="corner">${value}</span><span class="face">${value}</span></div>`;
 }
-
 function modChip(card, { mini = false } = {}) {
   const txt = card.op === "mult" ? "×2" : `+${card.amount}`;
-  return `<div class="modchip${mini ? " modchip--mini" : ""}">${txt}</div>`;
+  return `<div class="modcard${mini ? " modcard--mini" : ""}">${txt}</div>`;
 }
-
 function dupCard(value, { mini = false } = {}) {
-  const cls = `card card--dup${mini ? " card--mini" : ""}`;
-  return `<div class="${cls}"><span class="face">${value}</span></div>`;
+  return `<div class="card card--dup${mini ? " card--mini" : ""}"><span class="corner">${value}</span><span class="face">${value}</span></div>`;
 }
-
 function handCards(p, { mini = false, newSeat = -1 } = {}) {
   const heat = heatTriple(p.uniqueCount);
   const last = p.numbers.length - 1;
@@ -39,123 +40,97 @@ function handCards(p, { mini = false, newSeat = -1 } = {}) {
     .map((v, i) => numberCard(v, heat, { mini, isNew: !mini && p.seat === newSeat && i === last }))
     .join("");
   const mods = p.modifiers.map((m) => modChip(m, { mini })).join("");
-  // When busted, show the repeat card next to its twin so the bust is clear
   const dup = p.turnState === "busted" && p.bustCard != null ? dupCard(p.bustCard, { mini }) : "";
-  if (!nums && !mods && !dup) return `<span class="hand-empty">, </span>`;
+  if (!nums && !mods && !dup) return `<span class="hand-empty">no cards</span>`;
   return nums + mods + dup;
 }
-
-function badge(turnState) {
-  const s = STATUS[turnState] || STATUS.active;
-  return `<span class="badge badge--${s.cls}">${s.txt}</span>`;
-}
-
-function pile(count, size, variant) {
-  const layers = Math.max(1, Math.round((count / size) * 9));
-  const dir = variant === "discard" ? -1 : 1;
-  const shadows = [];
-  for (let i = 1; i <= layers; i++) {
-    const off = (i * 1.6).toFixed(1);
-    shadows.push(`${dir * off}px ${off}px 0 -1px var(--pile-edge)`);
-  }
-  shadows.push("var(--shadow-elevated)");
-  return `<div class="pile-card pile-card--${variant}" style="box-shadow:${shadows.join(",")}">${count === 0 ? '<span class="pile-empty">empty</span>' : ""}</div>`;
-}
-
-function tableZone(s) {
-  return `
-  <div class="table-zone">
-    <div class="pile-wrap">
-      ${pile(s.shoe.remaining, s.shoe.size, "deck")}
-      <div class="pile-label">Deck <b class="num">${s.shoe.remaining}</b></div>
-    </div>
-    <div class="pile-wrap">
-      ${pile(s.shoe.discard, s.shoe.size, "discard")}
-      <div class="pile-label">Discard <b class="num">${s.shoe.discard}</b></div>
-    </div>
-  </div>`;
-}
-
-function dealerChip(p) {
-  return p.isDealer ? '<span class="dealer-chip" title="Starts this round">deals</span>' : "";
-}
-
 function handScoreText(p) {
   return p.turnState === "busted" ? "-" : p.handScore;
 }
+function dealerChip(p) {
+  return p.isDealer ? '<span class="deal-chip" title="Deals this round">D</span>' : "";
+}
 
-function opponent(p, newSeat) {
+function shoe(s) {
+  const layers = Math.max(2, Math.round((s.shoe.remaining / s.shoe.size) * 8));
+  const sh = [];
+  for (let i = 1; i <= layers; i++) sh.push(`${(i * 1.5).toFixed(1)}px ${(i * 1.5).toFixed(1)}px 0 -1px #2a1a0c`);
+  sh.push("var(--shadow-card)");
   return `
-  <div class="opp ${p.isCurrent ? "current" : ""}">
-    <div class="opp-top">
-      <span class="opp-name">${p.name}${dealerChip(p)}</span>
-      ${badge(p.turnState)}
-    </div>
-    <div class="opp-hand">${handCards(p, { mini: true, newSeat })}
-      ${p.secondChance ? '<span class="sc-dot" title="Second Chance">2nd</span>' : ""}
-    </div>
-    <div class="opp-foot">
-      <span class="opp-round num">${handScoreText(p)}</span>
-      <span class="opp-total num">total ${p.totalScore}</span>
+  <div class="shoe">
+    <div class="shoe-pile" style="box-shadow:${sh.join(",")}"></div>
+    <div class="shoe-labels">
+      <span>Shoe <b class="num">${s.shoe.remaining}</b></span>
+      <span class="muted">out <b class="num">${s.shoe.discard}</b></span>
     </div>
   </div>`;
 }
 
-function youPanel(p, view) {
-  const newSeat = view.lastEvent ? view.lastEvent.seat : -1;
-  const pips = Array.from({ length: TARGET }, (_, i) =>
-    `<span class="pip ${i < p.uniqueCount ? "on" : ""}"></span>`
-  ).join("");
+function seat(p, newSeat) {
   return `
-  <div class="you">
+  <div class="seat ${p.isCurrent ? "current" : ""} ${p.turnState}">
+    <div class="seat-top"><span class="seat-name">${p.name}${dealerChip(p)}</span>${badge(p.turnState)}</div>
+    <div class="seat-hand">${handCards(p, { mini: true, newSeat })}${p.secondChance ? '<span class="sc-dot">2nd</span>' : ""}</div>
+    <div class="seat-foot"><span class="seat-hand-score num">${handScoreText(p)}</span><span class="seat-total">total ${p.totalScore}</span></div>
+  </div>`;
+}
+
+function youSeat(p, view) {
+  const newSeat = view.lastEvent ? view.lastEvent.seat : -1;
+  const pips = Array.from({ length: TARGET }, (_, i) => `<span class="pip ${i < p.uniqueCount ? "on" : ""}"></span>`).join("");
+  return `
+  <div class="you-seat ${p.isCurrent ? "current" : ""}">
     <div class="you-top">
-      <span class="you-name">You${dealerChip(p)} ${badge(p.turnState)}</span>
+      <span class="you-name">YOU${dealerChip(p)} ${badge(p.turnState)}</span>
       <span class="you-score num">hand <b>${handScoreText(p)}</b> · total <b>${p.totalScore}</b></span>
     </div>
-    <div class="you-hand">${handCards(p, { newSeat })}
-      ${p.secondChance ? '<span class="sc-dot">2nd chance</span>' : ""}
-    </div>
-    <div class="progress">
-      <span class="label">Unique</span>
-      <span class="pips">${pips}</span>
-      <span class="count num">${p.uniqueCount}/${TARGET}</span>
-    </div>
+    <div class="you-hand">${handCards(p, { newSeat })}${p.secondChance ? '<span class="sc-dot big">2nd chance</span>' : ""}</div>
+    <div class="progress"><span class="pips">${pips}</span><span class="count num">${p.uniqueCount}/${TARGET}</span></div>
   </div>`;
 }
 
 function dock(view) {
   const s = view.snapshot;
-
   if (s.pendingChoice) {
-    const verb = s.pendingChoice.type === "freeze" ? "Freeze" : "Flip Three";
+    const verb = s.pendingChoice.type === "freeze" ? "FREEZE" : "FLIP THREE";
     const buttons = s.pendingChoice.eligible
       .map((e) => `<button class="btn btn--target" data-action="target" data-seat="${e.seat}">${e.seat === s.you ? "Yourself" : e.name}</button>`)
       .join("");
-    return `
-    <div class="prompt">You drew <b>${verb}</b>: assign it:</div>
-    <div class="targets">${buttons}</div>`;
+    return `<div class="prompt">You drew <b>${verb}</b>: hit a player:</div><div class="targets">${buttons}</div>`;
   }
-
   if (s.yourTurn) {
     const me = s.players[s.you];
     const risk = Math.round(s.yourBustRisk * 100);
-    const heat = heatTriple(me.uniqueCount);
-    const pulsing = me.uniqueCount >= 5 ? " pulsing" : "";
-    // After drawing this turn you can't bank, "Stop" ends the turn and keeps your hand
-    // At the start of a turn you can bank if you have a card
     const left = s.youHitThisTurn
-      ? `<button class="btn btn--bank" data-action="stop">Stop<span class="sub">hold ${me.handScore}</span></button>`
-      : `<button class="btn btn--bank${s.canBank ? " can-bank" : ""}" data-action="stay" ${s.canBank ? "" : "disabled"}>Bank<span class="sub">${s.canBank ? me.handScore : "draw first"}</span></button>`;
-    return `
-    <div class="dock" style="--heat:${heat}">
-      ${left}
-      <button class="btn btn--flip${pulsing}" data-action="hit">Hit →<span class="sub">bust risk ${risk}%</span></button>
-    </div>`;
+      ? `<button class="btn btn--stop" data-action="stop">STOP<span class="sub">hold ${me.handScore}</span></button>`
+      : `<button class="btn btn--bank${s.canBank ? "" : " ghosted"}" data-action="stay" ${s.canBank ? "" : "disabled"}>BANK<span class="sub">${s.canBank ? me.handScore : "draw first"}</span></button>`;
+    const pulse = me.uniqueCount >= 5 ? " pulse" : "";
+    return `<div class="dock">${left}<button class="btn btn--hit${pulse}" data-action="hit">HIT<span class="sub">risk ${risk}%</span></button></div>`;
   }
-
   const a = s.actingSeat;
-  const label = a === s.you ? "Your forced flips…" : `${s.players[a].name} is playing…`;
-  return `<div class="dock-wait"><span class="spinner"></span>${label}</div>`;
+  const who = a === s.you ? "Your forced flips" : `${s.players[a].name} is playing`;
+  return `<div class="dock-wait"><span class="spinner"></span>${who}…</div>`;
+}
+
+function logPanel(s) {
+  const lines = s.log.map((l) => `<div class="logline log-${l.type}">${l.text}</div>`).join("");
+  return `
+  <div class="logpanel">
+    <div class="logpanel-title">Table log</div>
+    <div class="log" id="log">${lines || '<div class="logline muted">Deal to begin…</div>'}</div>
+  </div>`;
+}
+
+function arc() {
+  return `
+  <svg class="arc" viewBox="0 0 820 300" preserveAspectRatio="xMidYMin meet" aria-hidden="true">
+    <defs><path id="arcp" d="M 70 250 A 340 340 0 0 1 750 250" fill="none" /></defs>
+    <text class="arc-t"><textPath href="#arcp" startOffset="50%" text-anchor="middle">★ CLEAN 7 PAYS BIG ★ BANK BEFORE YOU BUST ★</textPath></text>
+  </svg>`;
+}
+
+function chipStack(amount) {
+  return `<span class="chip-stack"><span class="chip chip--gold"></span><span class="chip chip--red"></span><span class="chip chip--blue"></span></span><span class="chip-amount num">${amount.toLocaleString()}</span>`;
 }
 
 export function renderLobby(view) {
@@ -172,88 +147,52 @@ export function renderLobby(view) {
     .join("");
   return `
   <div class="screen screen--lobby">
-    <div class="topbar">
-      <span class="chip">◐ session <span data-clock>${fmtTime(s.session.elapsedMs)}</span></span>
-      <button class="icon-btn" data-action="limits" aria-label="Responsible gaming settings">⚙</button>
-    </div>
     <div class="lobby">
       <div class="wordmark">7<span>BUST</span></div>
-      <p class="tagline">A nine-round press-your-luck tournament. Bank before you bust, top score takes the pot.</p>
+      <p class="tagline">Take a seat. Flip for the pot, bank before you bust.</p>
 
       <div class="buyin">
-        <div class="buyin-head">
-          <span class="label">Balance</span>
-          <span class="balance num">${balance.toLocaleString()} <small>cr</small></span>
-        </div>
-        <div class="buyin-row">
-          <span class="label">Buy-in</span>
-          <div class="tiers">${tiers}</div>
-        </div>
-        <div class="prize-preview">
-          Pot <b class="num">${pot}</b> · winner takes <b class="num">${prize}</b>
-          <span class="rake">${Math.round(cfg.rakePct * 100)}% house rake</span>
-        </div>
+        <div class="buyin-head"><span class="label">Your chips</span><span class="balance">${chipStack(balance)}</span></div>
+        <div class="buyin-row"><span class="label">Buy-in</span><div class="tiers">${tiers}</div></div>
+        <div class="prize-preview">Pot <b class="num">${pot}</b> · winner takes <b class="num">${prize}</b> <span class="rake">${Math.round(cfg.rakePct * 100)}% rake</span></div>
       </div>
 
-      <button class="btn btn--play" data-action="start" ${canEnter ? "" : "disabled"}>
-        ${canEnter ? `Enter tournament · −${fee}` : "Not enough credits"}
-      </button>
+      <button class="btn btn--play" data-action="start" ${canEnter ? "" : "disabled"}>${canEnter ? `TAKE A SEAT · −${fee}` : "NOT ENOUGH CHIPS"}</button>
       <div class="lobby-foot">
-        <a class="link" href="#" data-action="rules">How to play</a>
-        <span>·</span>
-        <a class="link" href="#" data-action="reset-balance">Reset balance</a>
-        <span>·</span>
-        <a class="link" href="#" data-action="limits">Limits</a>
-        <span>·</span>
+        <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
+        <a class="link" href="#" data-action="reset-balance">Reset chips</a><span>·</span>
         <a class="link" href="#" data-action="verify">Verify fair</a>
       </div>
     </div>
   </div>`;
 }
 
-// Right side on desktop with standings and the table feed
-// On phones the feed drops into the normal layout and standings hide
-function sidebar(s) {
-  const stand = [...s.standings]
-    .map(
-      (p) => `<div class="sb-live-row ${p.seat === s.you ? "you" : ""}"><span>${p.name}</span><span class="num">${p.totalScore}</span></div>`
-    )
-    .join("");
-  const logLines = s.log.map((l) => `<div class="logline">${l}</div>`).join("");
-  return `
-  <div class="sidebar">
-    <div class="sb-live">
-      <div class="sb-live-title">Standings</div>
-      ${stand}
-    </div>
-    <div class="log">${logLines}</div>
-  </div>`;
-}
-
 export function renderMatch(view) {
   const s = view.snapshot;
   const me = s.players[s.you];
-  const heat = heatTriple(me.uniqueCount);
-  const opps = s.players.filter((p) => p.seat !== s.you).map((p) => opponent(p, s.lastEvent ? s.lastEvent.seat : -1)).join("");
-
+  const newSeat = s.lastEvent ? s.lastEvent.seat : -1;
+  const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat)).join("");
   return `
-  <div class="screen screen--match" style="--heat:${heat}">
+  <div class="screen screen--match">
     <div class="matchbar">
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
-      <span class="dealer-note">${s.players[s.dealer].name} starts</span>
+      <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
-        <span class="clock">◐ <span class="num" data-clock>${fmtTime(s.session.elapsedMs)}</span></span>
-        <button class="icon-btn icon-btn--sm" data-action="rules" aria-label="How to play">?</button>
+        <span class="balance-chip">${chipStack(s.wallet.balance)}</span>
+        <span class="clock">◔ <span class="num" data-clock>${fmtTime(s.session.elapsedMs)}</span></span>
+        <button class="icon-btn" data-action="rules" aria-label="How to play">?</button>
       </span>
     </div>
 
-    <div class="opponents">${opps}</div>
+    <div class="felt">
+      <div class="felt-spot"></div>
+      ${arc()}
+      <div class="dealer-zone">${shoe(s)}</div>
+      <div class="opponents">${opps}</div>
+      ${youSeat(me, view)}
+    </div>
 
-    ${tableZone(s)}
-
-    ${sidebar(s)}
-
-    ${youPanel(me, view)}
+    ${logPanel(s)}
 
     <div class="action-area">${dock(view)}</div>
   </div>`;
@@ -264,71 +203,47 @@ function scoreboard(s) {
   const rows = [...s.players]
     .sort((a, b) => b.totalScore - a.totalScore)
     .map((p) => {
-      let did;
-      if (p.roundDelta > 0) did = `+${p.roundDelta}`;
-      else if (p.turnState === "busted") did = "bust";
-      else did = "-";
+      let did = p.roundDelta > 0 ? `+${p.roundDelta}` : p.turnState === "busted" ? "bust" : "-";
       const star = p.roundDelta > 0 && p.roundDelta === maxDelta ? " ★" : "";
-      return `
-      <div class="sb-row ${p.seat === s.you ? "you" : ""}">
-        <span class="sb-name">${p.name}${star}</span>
-        <span class="sb-round num">${did}</span>
-        <span class="sb-total num">${p.totalScore}</span>
-      </div>`;
+      return `<div class="sb-row ${p.seat === s.you ? "you" : ""}"><span class="sb-name">${p.name}${star}</span><span class="sb-round num">${did}</span><span class="sb-total num">${p.totalScore}</span></div>`;
     })
     .join("");
-  return `<div class="scoreboard">
-    <div class="sb-row sb-head"><span>Player</span><span>This round</span><span>Total</span></div>
-    ${rows}
-  </div>`;
+  return `<div class="scoreboard"><div class="sb-row sb-head"><span>Player</span><span>Round</span><span>Total</span></div>${rows}</div>`;
 }
 
 function cashLedger(s) {
   const t = s.tournament;
   if (!t) return "";
   const won = t.youPayout > 0;
-  const netCls = t.youNet >= 0 ? "pos" : "neg";
   return `
   <div class="cash-ledger">
     <div class="cl-row"><span>Buy-in</span><span class="neg">−${t.entryFee}</span></div>
-    <div class="cl-row"><span>Prize pool <small>(pot ${t.pot} − ${Math.round(t.rakePct * 100)}% rake ${t.houseRake})</small></span><span class="num">${t.prizePool}</span></div>
+    <div class="cl-row"><span>Prize pool <small>(pot ${t.pot} − ${Math.round(t.rakePct * 100)}% rake)</small></span><span class="num">${t.prizePool}</span></div>
     <div class="cl-row"><span>Your payout</span><span class="${won ? "pos" : ""}">${won ? "+" + t.youPayout : "-"}</span></div>
-    <div class="cl-row total"><span>Net this tournament</span><span class="${netCls}">${t.youNet >= 0 ? "+" : ""}${t.youNet}</span></div>
-    <div class="cl-row"><span>Balance</span><span class="num">${s.wallet.balance.toLocaleString()} cr</span></div>
+    <div class="cl-row total"><span>Net</span><span class="${t.youNet >= 0 ? "pos" : "neg"}">${t.youNet >= 0 ? "+" : ""}${t.youNet}</span></div>
+    <div class="cl-row"><span>Chips</span><span class="num">${s.wallet.balance.toLocaleString()}</span></div>
   </div>`;
 }
 
 export function renderOverlay(view) {
   const s = view.snapshot;
-
   if (s.phase === "round_end") {
-    return `
-    <div class="overlay">
-      <div class="result result--banked" style="--heat:52, 224, 196">
-        <div class="kicker">Round ${s.round.number} of ${s.round.total} done</div>
-        <h2>SCORES</h2>
-        ${scoreboard(s)}
-        <button class="btn btn--play" data-action="next">Next round &nbsp;→</button>
-      </div>
-    </div>`;
+    return `<div class="overlay"><div class="result result--round"><div class="kicker">Round ${s.round.number} of ${s.round.total}</div><h2>SCORES</h2>${scoreboard(s)}<button class="btn btn--play" data-action="next">NEXT ROUND</button></div></div>`;
   }
-
   if (s.phase === "match_end") {
     const winner = s.players[s.winner];
     const youWon = s.winner === s.you;
     const fee = view.entryFee ?? s.config.defaultEntry;
     const canAgain = s.wallet.balance >= fee;
     return `
-    <div class="overlay">
-      <div class="result result--seven" style="--heat:255, 209, 92">
-        <div class="kicker">Tournament over, 9 rounds</div>
-        <h2>${youWon ? "YOU WIN" : winner.name.toUpperCase() + " WINS"}</h2>
-        ${scoreboard(s)}
-        ${cashLedger(s)}
-        <button class="btn btn--play" data-action="again" ${canAgain ? "" : "disabled"}>${canAgain ? `Play again · −${fee}` : "Not enough credits"}</button>
-        <div>${canAgain ? "" : '<a class="ghost link" href="#" data-action="reset-balance">Reset balance</a> · '}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
-      </div>
-    </div>`;
+    <div class="overlay"><div class="result result--win">
+      <div class="kicker">Tournament over</div>
+      <h2 class="${youWon ? "big-win" : ""}">${youWon ? "YOU WIN!" : winner.name.toUpperCase() + " WINS"}</h2>
+      ${scoreboard(s)}
+      ${cashLedger(s)}
+      <button class="btn btn--play" data-action="again" ${canAgain ? "" : "disabled"}>${canAgain ? `PLAY AGAIN · −${fee}` : "OUT OF CHIPS"}</button>
+      <div>${canAgain ? "" : '<a class="ghost link" href="#" data-action="reset-balance">Reset chips</a> · '}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
+    </div></div>`;
   }
   return "";
 }
@@ -340,57 +255,23 @@ export function renderToast(view) {
 export function renderRules() {
   return `
   <div class="screen screen--rules">
-    <div class="topbar">
-      <button class="icon-btn" data-action="rules-back" aria-label="Back">←</button>
-      <span class="rules-title">How to play</span>
-      <span class="topbar-spacer"></span>
-    </div>
+    <div class="rules-top"><button class="icon-btn" data-action="rules-back" aria-label="Back">←</button><span class="rules-title">How to play</span></div>
     <div class="rules-scroll">
-      <section class="rule-card">
-        <h3>Goal</h3>
-        <p>Highest total after <b>9 rounds</b> wins. You play against Nova and Rook (AI), taking turns clockwise. The start player rotates each round.</p>
-      </section>
-      <section class="rule-card">
-        <h3>Your turn</h3>
-        <p>On your turn you can <b>Hit</b> as many times as you want, your hand builds up. When you're done drawing, <b>Stop</b> to end your turn and keep your hand for later. Play then passes clockwise.</p>
-      </section>
-      <section class="rule-card rule-card--accent">
-        <h3>How banking works</h3>
-        <p>You bank with <b>Bank (Stay)</b>: but only as your turn's <b>first action</b>, before you draw, and never on an empty hand. So once you draw this turn you can't bank until a <b>later turn</b>: Stop now, then Bank when play comes back to you (which leaves you exposed to a Flip Three in the meantime).</p>
-      </section>
-      <section class="rule-card">
-        <h3>Bust &amp; Clean 7</h3>
-        <p>Flip a number you already hold and you <b>bust</b>: score 0 for the round (both copies are shown). Reach <b>7 unique numbers</b> for a <b>Clean 7</b>: the <b>whole round ends</b>: everyone still in banks their hand, and you get a <b>+15</b> bonus.</p>
-      </section>
-      <section class="rule-card">
-        <h3>End of a round</h3>
-        <p>A round ends once <b>every player has banked or busted</b>. Hands are cleared and the next round begins, hands never carry over.</p>
-      </section>
-      <section class="rule-card">
-        <h3>Scoring</h3>
-        <p>Add up your number cards. A <b>×2</b> card doubles that sum, <b>+N</b> cards add on top, and a Clean 7 adds <b>+15</b>.</p>
-      </section>
-      <section class="rule-card">
-        <h3>Action cards</h3>
-        <ul class="rule-list">
-          <li><b>Freeze</b>: pick a player; they bank their hand right away and are done for the round.</li>
-          <li><b>Flip Three</b>: pick a player; they must flip three cards (risky, it can bust them).</li>
-          <li><b>Second Chance</b>: automatically eats one duplicate, saving you from a bust.</li>
-        </ul>
-      </section>
-      <section class="rule-card">
-        <h3>The shoe</h3>
-        <p>One <b>94-card</b> deck for the whole match. Spent cards go to a discard pile, so the shoe shrinks and only reshuffles when it runs out, <b>counting cards</b> pays off.</p>
-      </section>
+      <section class="rule-card"><h3>Goal</h3><p>Highest chips-score after <b>9 rounds</b> wins the pot. You play against Nova, Rook and Pip, taking turns clockwise.</p></section>
+      <section class="rule-card"><h3>Your turn</h3><p><b>Hit</b> as many times as you want. When you're done, <b>Stop</b> to end the turn and keep your hand.</p></section>
+      <section class="rule-card rule-card--accent"><h3>Banking</h3><p>Bank with <b>Bank</b> as your turn's <b>first action</b>, before you draw, and never on an empty hand. Once you draw you can't bank until a later turn.</p></section>
+      <section class="rule-card"><h3>Bust &amp; Clean 7</h3><p>Repeat a number and you <b>bust</b> (0 that round, both copies shown). Get <b>7 unique numbers</b> for a <b>Clean 7</b>: the round ends, everyone still in banks, and you get <b>+15</b>.</p></section>
+      <section class="rule-card"><h3>Action cards</h3><ul class="rule-list"><li><b>Freeze</b>: pick a player; they bank now and are out.</li><li><b>Flip Three</b>: pick a player; they flip three cards.</li><li><b>Second Chance</b>: eats one duplicate and saves you.</li></ul></section>
+      <section class="rule-card"><h3>The shoe</h3><p>One <b>94-card</b> shoe for the whole match. It shrinks as cards are played and only reshuffles when it runs out, so counting cards pays off.</p></section>
     </div>
-    <button class="btn btn--play" data-action="rules-back">Got it</button>
+    <button class="btn btn--play" data-action="rules-back">GOT IT</button>
   </div>`;
 }
 
 export function renderApp(view) {
-  if (view.showRules) return `<div class="phone">${renderRules()}</div>`;
+  if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
   const inMatch = view.snapshot.phase !== "lobby";
   const screen = inMatch ? renderMatch(view) : renderLobby(view);
   const overlay = inMatch ? renderOverlay(view) : "";
-  return `<div class="phone">${screen}${overlay}${renderToast(view)}</div>`;
+  return `<div class="stage">${screen}${overlay}${renderToast(view)}</div>`;
 }

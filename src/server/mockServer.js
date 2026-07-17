@@ -19,6 +19,7 @@ export function createServer() {
     createPlayer({ seat: 0, name: "You", isAI: false }),
     createPlayer({ seat: 1, name: "Nova", isAI: true, ai: PERSONALITIES.cautious }),
     createPlayer({ seat: 2, name: "Rook", isAI: true, ai: PERSONALITIES.reckless }),
+    createPlayer({ seat: 3, name: "Pip", isAI: true, ai: PERSONALITIES.holder }),
   ];
   const n = players.length;
 
@@ -44,9 +45,10 @@ export function createServer() {
   const anyActive = () => players.some((p) => p.turnState === "active");
   const inPlayCount = () => players.reduce((s, p) => s + p.hand.cards.length, 0) + (pendingChoice ? 1 : 0);
 
-  function pushLog(msg) {
-    log.push(msg);
-    if (log.length > 9) log = log.slice(-9);
+  // The log type sets its colour in the UI, the whole match log is kept for scrolling back
+  function pushLog(text, type = "info") {
+    log.push({ text, type });
+    if (log.length > 400) log = log.slice(-400);
   }
 
   function nextActiveSeatAfter(seat) {
@@ -78,18 +80,18 @@ export function createServer() {
         const scCard = idx >= 0 ? hand.cards.splice(idx, 1)[0] : { kind: "action", action: "second_chance" };
         hand.secondChance = false;
         shoe.discard([card, scCard]);
-        pushLog(`${poss(seat)} Second Chance ate the duplicate ${card.value}`);
+        pushLog(`${poss(seat)} Second Chance ate the duplicate ${card.value}`, "second");
         lastEvent = { seat, kind: "saved", card };
         return { resolved: true };
       }
       if (r.bust) {
         shoe.discard([card]); // The card that matched
-        pushLog(`${name(seat)} busted on ${card.value}${tag}`);
+        pushLog(`${name(seat)} busted on ${card.value}${tag}`, "bust");
         lastEvent = { seat, kind: "bust", card };
         return { bust: true };
       }
       if (r.cleanSeven) {
-        pushLog(`${name(seat)} hit a CLEAN 7! +15, round over${tag}`);
+        pushLog(`${name(seat)} hit a CLEAN 7! +15, round over${tag}`, "clean7");
         lastEvent = { seat, kind: "clean7", card };
         return { cleanSeven: true };
       }
@@ -109,16 +111,16 @@ export function createServer() {
       if (!hand.secondChance) {
         hand.secondChance = true;
         hand.cards.push(card);
-        pushLog(`${name(seat)} kept a Second Chance`);
+        pushLog(`${name(seat)} kept a Second Chance`, "second");
       } else {
         const t = players.find((q) => q.seat !== seat && q.turnState === "active" && !q.hand.secondChance);
         if (t) {
           t.hand.secondChance = true;
           t.hand.cards.push(card);
-          pushLog(`${name(seat)} passed a Second Chance to ${t.name}`);
+          pushLog(`${name(seat)} passed a Second Chance to ${t.name}`, "second");
         } else {
           shoe.discard([card]);
-          pushLog(`${name(seat)} discarded a spare Second Chance`);
+          pushLog(`${name(seat)} discarded a spare Second Chance`, "second");
         }
       }
       lastEvent = { seat, kind: "action", card };
@@ -154,12 +156,12 @@ export function createServer() {
   function applyAction(type, fromSeat, target, card) {
     shoe.discard([card]);
     if (type === "freeze") {
-      pushLog(`${name(fromSeat)} froze ${name(target)}, banks ${scoreHand(players[target].hand)}`);
+      pushLog(`${name(fromSeat)} froze ${name(target)}, banks ${scoreHand(players[target].hand)}`, "freeze");
       lastEvent = { seat: target, kind: "frozen" };
       resolveSeat(target, "frozen"); // Frozen means their hand is banked now
       return;
     }
-    pushLog(`${name(fromSeat)} played Flip Three on ${name(target)}`);
+    pushLog(`${name(fromSeat)} played Flip Three on ${name(target)}`, "flip3");
     forcedQueue.push(target, target, target);
     lastEvent = { seat: target, kind: "flip3" };
   }
@@ -241,20 +243,20 @@ export function createServer() {
     dealer = (roundNumber - 1) % n; // Dealer moves clockwise
     currentSeat = dealer;
     phase = PHASES.ROUND;
-    pushLog(`Round ${roundNumber}: ${name(dealer)} starts`);
+    pushLog(`Round ${roundNumber}: ${name(dealer)} starts`, "round");
   }
 
   async function aiAct(seat) {
     const p = players[seat];
     const risk = bustRiskFor(seat);
     if (!p.hitThisTurn && p.hand.cards.length > 0 && aiBankAtStart(p.hand, risk, p.ai)) {
-      pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`);
+      pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`, "bank");
       endTurn(seat, "banked");
       return;
     }
     // Mid turn, the bot can stop and bank next turn instead of drawing again
     if (p.hitThisTurn && aiStop(p.hand, risk, p.ai)) {
-      pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`);
+      pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`, "stop");
       advanceTurn();
       return;
     }
@@ -363,7 +365,7 @@ export function createServer() {
     if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || me.hitThisTurn || me.hand.cards.length === 0) {
       return { ok: false, snapshot: snapshot() };
     }
-    pushLog(`You banked ${scoreHand(me.hand)}`);
+    pushLog(`You banked ${scoreHand(me.hand)}`, "bank");
     endTurn(HUMAN_SEAT, "banked");
     return { ok: true, snapshot: snapshot() };
   }
@@ -375,7 +377,7 @@ export function createServer() {
     if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || !me.hitThisTurn) {
       return { ok: false, snapshot: snapshot() };
     }
-    pushLog(`You stop on ${scoreHand(me.hand)} (bank next turn)`);
+    pushLog(`You stop on ${scoreHand(me.hand)} (bank next turn)`, "stop");
     lastEvent = { seat: HUMAN_SEAT, kind: "stop" };
     advanceTurn();
     return { ok: true, snapshot: snapshot() };
@@ -403,7 +405,7 @@ export function createServer() {
   // A real game server would keep this, here it goes in the browser
   function serialize() {
     return {
-      v: 1,
+      v: 2,
       phase,
       roundNumber,
       currentSeat,
@@ -432,7 +434,7 @@ export function createServer() {
   }
 
   async function restore(blob) {
-    if (!blob || blob.v !== 1) return { ok: false, snapshot: snapshot() };
+    if (!blob || blob.v !== 2) return { ok: false, snapshot: snapshot() };
     phase = blob.phase;
     roundNumber = blob.roundNumber;
     currentSeat = blob.currentSeat;
@@ -522,7 +524,7 @@ export function createServer() {
       standings: ranked.map((p) => ({ seat: p.seat, name: p.name, totalScore: p.totalScore })),
       winner: matchWinner,
       lastEvent,
-      log: log.slice(-7),
+      log: log.slice(-150),
       session: {
         elapsedMs: sessionElapsedMs(session),
         needsRealityCheck: needsRealityCheck(session),

@@ -1,17 +1,21 @@
-// Starts the game, paces the bot turns and saves so a refresh picks up where it left off
+// Starts the game, paces the bot turns, saves the game and plays the big announcements
 
 import { createServer } from "./server/mockServer.js";
 import { renderApp } from "./ui/render.js";
+import { announce, initAudio, sfx } from "./ui/announce.js";
 
 const server = createServer();
 const root = document.getElementById("app");
 const bootAt = Date.now();
 
-const AI_DELAY = 850; // Wait between bot moves, in ms
-const SAVE_KEY = "7bust:save:v1";
+const AI_DELAY = 850;
+const SAVE_KEY = "7bust:save:v2";
 
 const view = { snapshot: null, lastEvent: null, toast: null, entryFee: null };
 let aiTimer = null;
+let audioReady = false;
+let prevPhase = "lobby";
+let lastSig = "";
 
 const fmt = (ms) => {
   const s = Math.floor(ms / 1000);
@@ -20,7 +24,17 @@ const fmt = (ms) => {
 
 function render() {
   view.lastEvent = view.snapshot ? view.snapshot.lastEvent : null;
+  // Keep the log's scroll, follow the bottom unless the player scrolled up
+  const oldLog = document.getElementById("log");
+  let atBottom = true;
+  let prevTop = 0;
+  if (oldLog) {
+    prevTop = oldLog.scrollTop;
+    atBottom = oldLog.scrollHeight - oldLog.scrollTop - oldLog.clientHeight < 28;
+  }
   root.innerHTML = renderApp(view);
+  const newLog = document.getElementById("log");
+  if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
 }
 
 function tickClock() {
@@ -42,8 +56,33 @@ function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(server.serialize()));
   } catch {
-    // Storage can fail in private mode, the game just won't offer to resume
+    // Storage isn't available, the game still works without it
   }
+}
+
+function handleAnnouncements(s) {
+  const le = s.lastEvent;
+  const sig = le ? `${le.kind}:${le.seat}:${le.card ? le.card.value : ""}` : "";
+  if (sig && sig !== lastSig) {
+    lastSig = sig;
+    const mine = le.seat === s.you;
+    if (le.kind === "bust") mine ? announce("bust") : sfx("buzzer");
+    else if (le.kind === "frozen") mine ? announce("frozen") : sfx("freeze");
+    else if (le.kind === "clean7") announce("clean7");
+    else if (le.kind === "flip3" && mine) announce("flip3");
+  }
+  if (s.phase === "match_end" && prevPhase !== "match_end") {
+    announce(s.winner === s.you ? "win" : "lose");
+  }
+  prevPhase = s.phase;
+}
+
+function apply(res) {
+  if (res && res.snapshot) view.snapshot = res.snapshot;
+  render();
+  handleAnnouncements(view.snapshot);
+  save();
+  pump();
 }
 
 function pump() {
@@ -55,33 +94,32 @@ function pump() {
   }, AI_DELAY);
 }
 
-function apply(res) {
-  if (res && res.snapshot) view.snapshot = res.snapshot;
-  render();
-  save();
-  pump();
-}
-
 async function start() {
   const res = await server.startMatch({ entryFee: view.entryFee });
   if (!res.ok) {
     view.snapshot = res.snapshot;
     render();
-    toast(res.reason === "insufficient-balance" ? "Not enough credits for that buy-in." : "Can't start right now.");
+    toast(res.reason === "insufficient-balance" ? "Not enough chips for that buy-in." : "Can't start right now.");
     return;
   }
+  sfx("ding");
   apply(res);
 }
-const hit = async () => apply(await server.hit());
-const stay = async () => apply(await server.stay());
+async function hit() {
+  sfx("tick");
+  apply(await server.hit());
+}
+async function stay() {
+  sfx("ding");
+  apply(await server.stay());
+}
 const stop = async () => apply(await server.stop());
 const next = async () => apply(await server.nextRound());
 const target = async (seat) => apply(await server.resolveChoice({ targetSeat: seat }));
 const resetBalance = async () => {
   apply(await server.resetBalance());
-  toast("Demo balance reset to 1,000 credits.");
+  toast("Chips reset to 1,000.");
 };
-
 function setEntry(fee) {
   view.entryFee = fee;
   render();
@@ -97,11 +135,6 @@ async function verifyFair() {
   toast(hashOk && deckOk ? "✓ Provably fair: seed + shoe verified." : "⚠ Verification mismatch.");
 }
 
-function showLimits() {
-  const rg = view.snapshot.session;
-  toast(`Session ${fmt(rg.elapsedMs)} · limit ${rg.sessionTimeLimitMin}m · reality checks on`);
-}
-
 const showRules = () => {
   view.showRules = true;
   render();
@@ -111,21 +144,13 @@ const hideRules = () => {
   render();
 };
 
-const ACTIONS = {
-  start,
-  hit,
-  stay,
-  stop,
-  next,
-  again: start,
-  verify: verifyFair,
-  limits: showLimits,
-  rules: showRules,
-  "rules-back": hideRules,
-  "reset-balance": resetBalance,
-};
+const ACTIONS = { start, hit, stay, stop, next, again: start, verify: verifyFair, rules: showRules, "rules-back": hideRules, "reset-balance": resetBalance };
 
 root.addEventListener("click", (e) => {
+  if (!audioReady) {
+    initAudio();
+    audioReady = true;
+  }
   const el = e.target.closest("[data-action]");
   if (!el) return;
   e.preventDefault();
@@ -137,20 +162,14 @@ root.addEventListener("click", (e) => {
 });
 
 (async function init() {
-  let resumed = false;
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const blob = JSON.parse(raw);
       if (blob && (blob.phase === "round" || blob.phase === "round_end")) {
-        // Mid-tournament, so resume exactly where they left off
         const res = await server.restore(blob);
-        if (res.ok) {
-          view.snapshot = res.snapshot;
-          resumed = true;
-        }
+        if (res.ok) view.snapshot = res.snapshot;
       } else if (blob) {
-        // Match over or in the lobby, carry the wallet balance into a fresh lobby
         await server.restore({ ...blob, phase: "lobby", tournament: null });
       }
     }
@@ -160,9 +179,12 @@ root.addEventListener("click", (e) => {
 
   if (!view.snapshot) view.snapshot = await server.getState();
   view.entryFee = view.snapshot.config?.defaultEntry ?? 100;
+  // Don't play announcements for a loaded game
+  prevPhase = view.snapshot.phase;
+  const le = view.snapshot.lastEvent;
+  lastSig = le ? `${le.kind}:${le.seat}:${le.card ? le.card.value : ""}` : "";
   render();
   save();
   setInterval(tickClock, 1000);
   pump();
-  if (resumed) toast("Resumed your tournament.");
 })();
