@@ -6,6 +6,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { attachRoomServer } from "./roomServer.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const PORT = Number(process.env.PORT) || 3000;
@@ -87,6 +88,8 @@ const server = http.createServer(async (req, res) => {
     console.error(err);
   }
 });
+
+attachRoomServer(server); // Online play over websockets at /ws
 
 server.listen(PORT, () => {
   console.log(`7Bust dev server running at http://localhost:${PORT}`);

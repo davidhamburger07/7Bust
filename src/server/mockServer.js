@@ -13,14 +13,18 @@ import { ENTRY_TIERS, DEFAULT_ENTRY, HOUSE_RAKE, STARTING_BALANCE, buildPot, pay
 const HUMAN_SEAT = 0;
 const TOTAL_ROUNDS = 9;
 
-export function createServer() {
+// Single player is you against bots with the wallet
+// Multiplayer uses the room's seats and no chips
+export function createServer(config = {}) {
+  const cashless = !!config.cashless;
   const session = createSession();
-  const players = [
-    createPlayer({ seat: 0, name: "You", isAI: false }),
-    createPlayer({ seat: 1, name: "Nova", isAI: true, ai: PERSONALITIES.cautious }),
-    createPlayer({ seat: 2, name: "Rook", isAI: true, ai: PERSONALITIES.reckless }),
-    createPlayer({ seat: 3, name: "Pip", isAI: true, ai: PERSONALITIES.holder }),
+  const roster = config.players || [
+    { name: "You", isAI: false },
+    { name: "Nova", isAI: true, ai: PERSONALITIES.cautious },
+    { name: "Rook", isAI: true, ai: PERSONALITIES.reckless },
+    { name: "Pip", isAI: true, ai: PERSONALITIES.holder },
   ];
+  const players = roster.map((p, seat) => createPlayer({ seat, name: p.name, isAI: p.isAI, ai: p.ai || null }));
   const n = players.length;
 
   let phase = PHASES.LOBBY;
@@ -214,14 +218,18 @@ export function createServer() {
       const maxTotal = Math.max(...players.map((p) => p.totalScore));
       const winnerSeats = players.filter((p) => p.totalScore === maxTotal).map((p) => p.seat);
       matchWinner = winnerSeats[0];
-      const each = payoutPerWinner(tournament.prizePool, winnerSeats.length);
-      const youWon = winnerSeats.includes(HUMAN_SEAT);
-      tournament.winnerSeats = winnerSeats;
-      tournament.payout = each;
-      tournament.youPayout = youWon ? each : 0;
-      tournament.youNet = tournament.youPayout - tournament.entryFee; // Won minus the buy-in
-      tournament.settled = true;
-      if (youWon) session.balance += each;
+      if (!cashless && tournament) {
+        // Top scorers split the pot and the house keeps its rake
+        // The single player wallet gets paid if they placed
+        const each = payoutPerWinner(tournament.prizePool, winnerSeats.length);
+        const youWon = winnerSeats.includes(HUMAN_SEAT);
+        tournament.winnerSeats = winnerSeats;
+        tournament.payout = each;
+        tournament.youPayout = youWon ? each : 0;
+        tournament.youNet = tournament.youPayout - tournament.entryFee;
+        tournament.settled = true;
+        if (youWon) session.balance += each;
+      }
       lastReveal = { serverSeed, clientSeed, serverSeedHash };
       phase = PHASES.MATCH_END;
     } else {
@@ -270,19 +278,17 @@ export function createServer() {
 
   async function startMatch({ entryFee = DEFAULT_ENTRY } = {}) {
     assertPhase(phase, "START_MATCH");
-    const fee = ENTRY_TIERS.includes(entryFee) ? entryFee : DEFAULT_ENTRY;
-    if (session.balance < fee) {
-      return { ok: false, reason: "insufficient-balance", snapshot: snapshot() };
+    if (cashless) {
+      // Multiplayer has no wallet or pot, just play to win
+      tournament = null;
+    } else {
+      const fee = ENTRY_TIERS.includes(entryFee) ? entryFee : DEFAULT_ENTRY;
+      if (session.balance < fee) {
+        return { ok: false, reason: "insufficient-balance", snapshot: snapshot() };
+      }
+      session.balance -= fee;
+      tournament = { ...buildPot(fee, n), settled: false, payout: 0, winnerSeats: [], youPayout: 0, youNet: -fee };
     }
-    session.balance -= fee;
-    tournament = {
-      ...buildPot(fee, n),
-      settled: false,
-      payout: 0,
-      winnerSeats: [],
-      youPayout: 0,
-      youNet: -fee,
-    };
 
     serverSeed = randomSeedHex(32);
     serverSeedHash = await sha256Hex(serverSeed);
@@ -334,7 +340,7 @@ export function createServer() {
       return { ok: true, snapshot: snapshot() };
     }
 
-    if (currentSeat === HUMAN_SEAT) return { ok: false, snapshot: snapshot() };
+    if (!players[currentSeat].isAI) return { ok: false, snapshot: snapshot() }; // A player's turn, wait for their move
     if (players[currentSeat].turnState !== "active") {
       advanceTurn();
       return { ok: true, snapshot: snapshot() };
@@ -343,62 +349,64 @@ export function createServer() {
     return { ok: true, snapshot: snapshot() };
   }
 
-  async function hit() {
+  async function hit(seat = HUMAN_SEAT) {
     assertPhase(phase, "HIT");
-    if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || players[HUMAN_SEAT].turnState !== "active") {
-      return { ok: false, snapshot: snapshot() };
+    const me = players[seat];
+    if (pendingChoice || forcedQueue.length || currentSeat !== seat || me.isAI || me.turnState !== "active") {
+      return { ok: false, snapshot: snapshot(seat) };
     }
-    players[HUMAN_SEAT].hitThisTurn = true;
-    const r = await drawInto(HUMAN_SEAT);
-    if (r.needsChoice) return { ok: true, snapshot: snapshot() };
-    if (r.bust) endTurn(HUMAN_SEAT, "busted");
-    else if (r.cleanSeven) endRoundByCleanSeven(HUMAN_SEAT);
-    else if (players[HUMAN_SEAT].turnState !== "active") advanceTurn();
+    me.hitThisTurn = true;
+    const r = await drawInto(seat);
+    if (r.needsChoice) return { ok: true, snapshot: snapshot(seat) };
+    if (r.bust) endTurn(seat, "busted");
+    else if (r.cleanSeven) endRoundByCleanSeven(seat);
+    else if (me.turnState !== "active") advanceTurn(); // In case they used "Freeze" on themselves
     // Keeps the turn, the player can draw again or stop
-    return { ok: true, snapshot: snapshot() };
+    return { ok: true, snapshot: snapshot(seat) };
   }
 
-  async function stay() {
+  async function stay(seat = HUMAN_SEAT) {
     assertPhase(phase, "STAY");
     // Can only bank as the first move of a turn, and never with an empty hand
-    const me = players[HUMAN_SEAT];
-    if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || me.hitThisTurn || me.hand.cards.length === 0) {
-      return { ok: false, snapshot: snapshot() };
+    const me = players[seat];
+    if (pendingChoice || forcedQueue.length || currentSeat !== seat || me.isAI || me.hitThisTurn || me.hand.cards.length === 0) {
+      return { ok: false, snapshot: snapshot(seat) };
     }
-    pushLog(`You banked ${scoreHand(me.hand)}`, "bank");
-    endTurn(HUMAN_SEAT, "banked");
-    return { ok: true, snapshot: snapshot() };
+    pushLog(`${name(seat)} banked ${scoreHand(me.hand)}`, "bank");
+    endTurn(seat, "banked");
+    return { ok: true, snapshot: snapshot(seat) };
   }
 
-  async function stop() {
+  async function stop(seat = HUMAN_SEAT) {
     assertPhase(phase, "STOP");
     // Ends the turn after drawing, the hand is kept to bank later
-    const me = players[HUMAN_SEAT];
-    if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || !me.hitThisTurn) {
-      return { ok: false, snapshot: snapshot() };
+    const me = players[seat];
+    if (pendingChoice || forcedQueue.length || currentSeat !== seat || me.isAI || !me.hitThisTurn) {
+      return { ok: false, snapshot: snapshot(seat) };
     }
-    pushLog(`You stop on ${scoreHand(me.hand)} (bank next turn)`, "stop");
-    lastEvent = { seat: HUMAN_SEAT, kind: "stop" };
+    pushLog(`${name(seat)} stops on ${scoreHand(me.hand)} (banks next turn)`, "stop");
+    lastEvent = { seat, kind: "stop" };
     advanceTurn();
-    return { ok: true, snapshot: snapshot() };
+    return { ok: true, snapshot: snapshot(seat) };
   }
 
-  async function resolveChoice({ targetSeat }) {
+  async function resolveChoice({ targetSeat, actor } = {}) {
     assertPhase(phase, "RESOLVE_CHOICE");
     if (!pendingChoice || !pendingChoice.eligible.includes(targetSeat)) {
       return { ok: false, snapshot: snapshot() };
     }
+    if (actor != null && actor !== pendingChoice.seat) return { ok: false, snapshot: snapshot(actor) }; // Only the player who drew it picks
     const { type, seat, card } = pendingChoice;
     pendingChoice = null;
     applyAction(type, seat, targetSeat, card);
     // Drawing the action card counts as the turn's draw, the player keeps the turn
     // unless they froze themselves
     if (players[seat].turnState !== "active") advanceTurn();
-    return { ok: true, snapshot: snapshot() };
+    return { ok: true, snapshot: snapshot(seat) };
   }
 
-  async function getState() {
-    return snapshot();
+  async function getState(youSeat = HUMAN_SEAT) {
+    return snapshot(youSeat);
   }
 
   // Saves the whole game so a player who reconnects can carry on
@@ -496,30 +504,35 @@ export function createServer() {
     };
   }
 
-  function snapshot() {
+  // Most of the table is the same for everyone, only the fields about you change per seat
+  function snapshot(youSeat = HUMAN_SEAT) {
     const acting = forcedQueue.length ? forcedQueue[0] : currentSeat;
     const ranked = [...players].sort((a, b) => b.totalScore - a.totalScore);
-    const human = players[HUMAN_SEAT];
+    const me = players[youSeat] || players[HUMAN_SEAT];
+    const seat = me.seat;
     const yourTurn =
-      phase === PHASES.ROUND && !pendingChoice && forcedQueue.length === 0 && currentSeat === HUMAN_SEAT && human.turnState === "active";
+      phase === PHASES.ROUND && !pendingChoice && forcedQueue.length === 0 && currentSeat === seat && me.turnState === "active";
     return {
       phase,
-      you: HUMAN_SEAT,
+      you: seat,
+      cashless,
       round: { number: roundNumber, total: TOTAL_ROUNDS },
       dealer,
       shoe: shoe ? shoe.counts(inPlayCount()) : { remaining: DECK_SIZE, discard: 0, inPlay: 0, size: DECK_SIZE },
       actingSeat: acting,
       yourTurn,
-      youHitThisTurn: human.hitThisTurn,
-      canBank: yourTurn && !human.hitThisTurn && human.hand.cards.length > 0,
+      youHitThisTurn: me.hitThisTurn,
+      canBank: yourTurn && !me.hitThisTurn && me.hand.cards.length > 0,
       autoStep:
         phase === PHASES.ROUND &&
         !pendingChoice &&
-        (forcedQueue.length > 0 || (currentSeat !== HUMAN_SEAT && players[currentSeat].turnState === "active")),
-      yourBustRisk: shoe ? bustRiskFor(HUMAN_SEAT) : 0,
-      pendingChoice: pendingChoice
-        ? { type: pendingChoice.type, eligible: pendingChoice.eligible.map((s) => ({ seat: s, name: name(s) })) }
-        : null,
+        (forcedQueue.length > 0 || (players[currentSeat].isAI && players[currentSeat].turnState === "active")),
+      yourBustRisk: shoe ? bustRiskFor(seat) : 0,
+      pendingChoice:
+        pendingChoice && pendingChoice.seat === seat
+          ? { type: pendingChoice.type, eligible: pendingChoice.eligible.map((s) => ({ seat: s, name: name(s) })) }
+          : null,
+      pendingSeat: pendingChoice ? pendingChoice.seat : null,
       players: players.map((p) => publicPlayer(p, acting)),
       standings: ranked.map((p) => ({ seat: p.seat, name: p.name, totalScore: p.totalScore })),
       winner: matchWinner,
@@ -532,11 +545,14 @@ export function createServer() {
       },
       fair: { serverSeedHash, clientSeed },
       reveal: lastReveal,
-      wallet: { balance: session.balance },
+      wallet: cashless ? null : { balance: session.balance },
       config: { entryTiers: ENTRY_TIERS, defaultEntry: DEFAULT_ENTRY, rakePct: HOUSE_RAKE, seats: n },
       tournament,
     };
   }
 
-  return Object.freeze({ getState, startMatch, nextRound, step, hit, stay, stop, resolveChoice, verify, resetBalance, serialize, restore });
+  // Used by the room server to send updates and run the bots
+  const snapshotFor = (seat = HUMAN_SEAT) => snapshot(seat);
+
+  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, verify, resetBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
 }

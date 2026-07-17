@@ -1,0 +1,14 @@
+{
+  "name": "7bust",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "7Bust: a casino-style press-your-luck card game (single-player vs AI, and online rooms).",
+  "scripts": {
+    "start": "node serve.mjs",
+    "dev": "PORT=3001 node serve.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.1"
+  }
+}
