@@ -4,6 +4,7 @@ import { createServer } from "./server/mockServer.js";
 import { renderApp } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice } from "./ui/announce.js";
 import { initRadio, startRadio } from "./ui/radio.js";
+import { flyCard } from "./ui/fly.js";
 import { createNet } from "./net/netClient.js";
 
 const server = createServer();
@@ -78,11 +79,15 @@ function handleAnnouncements(s) {
   if (sig && sig !== lastSig) {
     lastSig = sig;
     const mine = le.seat === s.you;
+    if (le.from != null && le.from !== le.seat && (le.kind === "frozen" || le.kind === "flip3" || le.kind === "sc_pass")) {
+      flyCard(le.from, le.seat, le.kind);
+    }
     if (le.card) sfx("card"); // Any player's card plays the sound, not just yours
     if (le.kind === "bust") mine ? announce("bust") : sfx("buzzer");
     else if (le.kind === "frozen") mine ? announce("frozen") : sfx("freeze");
     else if (le.kind === "clean7") announce("clean7");
     else if (le.kind === "flip3" && mine) announce("flip3");
+    else if (le.kind === "sc_pass") mine ? playVoice("second") : sfx("sparkle");
     else if (le.kind === "modifier") {
       sfx("sparkle");
       if (mine && le.card && le.card.op === "mult") playVoice("double");

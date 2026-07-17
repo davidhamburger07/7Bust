@@ -67,8 +67,9 @@ function shoe(s) {
 }
 
 function seat(p, newSeat) {
+  const sc = p.secondChance ? " has-sc" : "";
   return `
-  <div class="seat ${p.isCurrent ? "current" : ""} ${p.turnState}">
+  <div class="seat ${p.isCurrent ? "current" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
     <div class="seat-top"><span class="seat-name">${p.name}${dealerChip(p)}</span>${badge(p.turnState)}</div>
     <div class="seat-hand">${handCards(p, { mini: true, newSeat })}${p.secondChance ? '<span class="sc-dot">2nd</span>' : ""}</div>
     <div class="seat-foot"><span class="seat-hand-score num">${handScoreText(p)}</span><span class="seat-total">total ${p.totalScore}</span></div>
@@ -78,8 +79,9 @@ function seat(p, newSeat) {
 function youSeat(p, view) {
   const newSeat = view.lastEvent ? view.lastEvent.seat : -1;
   const pips = Array.from({ length: TARGET }, (_, i) => `<span class="pip ${i < p.uniqueCount ? "on" : ""}"></span>`).join("");
+  const sc = p.secondChance ? " has-sc" : "";
   return `
-  <div class="you-seat ${p.isCurrent ? "current" : ""}">
+  <div class="you-seat ${p.isCurrent ? "current" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
     <div class="you-top">
       <span class="you-name">YOU${dealerChip(p)} ${badge(p.turnState)}</span>
       <span class="you-score num">hand <b>${handScoreText(p)}</b> · total <b>${p.totalScore}</b></span>
@@ -110,6 +112,27 @@ function dock(view) {
   const a = s.actingSeat;
   const who = a === s.you ? "Your forced flips" : `${s.players[a].name} is playing`;
   return `<div class="dock-wait"><span class="spinner"></span>${who}…</div>`;
+}
+
+function leaderPanel(s) {
+  const rows = s.standings
+    .map((st, i) => {
+      const p = s.players[st.seat];
+      const medal = ["gold", "silver", "bronze"][i] || "";
+      return `
+      <div class="lb-row ${st.seat === s.you ? "you" : ""}">
+        <span class="lb-rank ${medal} num">${i + 1}</span>
+        <span class="lb-name">${st.seat === s.you ? "You" : st.name}${i === 0 && st.totalScore > 0 ? " 👑" : ""}</span>
+        <span class="lb-state${p.turnState === "busted" ? " bust" : ""}">${p.turnState === "busted" ? "✕" : p.roundDelta > 0 ? `+${p.roundDelta}` : ""}</span>
+        <span class="lb-score num">${st.totalScore}</span>
+      </div>`;
+    })
+    .join("");
+  return `
+  <div class="leaderpanel">
+    <div class="logpanel-title">Leaderboard</div>
+    <div class="lb">${rows}</div>
+  </div>`;
 }
 
 function logPanel(s) {
@@ -185,6 +208,8 @@ export function renderMatch(view) {
         <button class="icon-btn" data-action="rules" aria-label="How to play">?</button>
       </span>
     </div>
+
+    ${leaderPanel(s)}
 
     <div class="felt">
       <div class="felt-spot"></div>

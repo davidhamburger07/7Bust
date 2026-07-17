@@ -116,18 +116,20 @@ export function createServer(config = {}) {
         hand.secondChance = true;
         hand.cards.push(card);
         pushLog(`${name(seat)} kept a Second Chance`, "second");
+        lastEvent = { seat, kind: "action", card };
       } else {
         const t = players.find((q) => q.seat !== seat && q.turnState === "active" && !q.hand.secondChance);
         if (t) {
           t.hand.secondChance = true;
           t.hand.cards.push(card);
           pushLog(`${name(seat)} passed a Second Chance to ${t.name}`, "second");
+          lastEvent = { seat: t.seat, kind: "sc_pass", from: seat, card }; // "Second Chance" goes to the other player
         } else {
           shoe.discard([card]);
           pushLog(`${name(seat)} discarded a spare Second Chance`, "second");
+          lastEvent = { seat, kind: "action", card };
         }
       }
-      lastEvent = { seat, kind: "action", card };
       return { resolved: true };
     }
 
@@ -161,13 +163,13 @@ export function createServer(config = {}) {
     shoe.discard([card]);
     if (type === "freeze") {
       pushLog(`${name(fromSeat)} froze ${name(target)}, banks ${scoreHand(players[target].hand)}`, "freeze");
-      lastEvent = { seat: target, kind: "frozen" };
+      lastEvent = { seat: target, kind: "frozen", from: fromSeat };
       resolveSeat(target, "frozen"); // Frozen means their hand is banked now
       return;
     }
     pushLog(`${name(fromSeat)} played Flip Three on ${name(target)}`, "flip3");
     forcedQueue.push(target, target, target);
-    lastEvent = { seat: target, kind: "flip3" };
+    lastEvent = { seat: target, kind: "flip3", from: fromSeat };
   }
 
   function bankHand(seat) {
