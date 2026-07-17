@@ -1,4 +1,4 @@
-// How the bots play, each turn they draw a card or bank
+// How the bots play. Each turn they bank or push at the start, then stop or draw again
 // A bit of randomness makes them feel real, it's never used for the shuffle
 
 import { scoreHand } from "./round.js";
@@ -8,12 +8,15 @@ export const PERSONALITIES = {
   reckless: { stayScore: 24, riskTolerance: 0.52, jitter: 5 },
 };
 
-// True means draw another card, false means bank
-// An empty hand can't be banked, so the bot has to draw first
-export function decideHit(hand, risk, p) {
-  if (hand.cards.length === 0) return true;
-  if (hand.numbers.length >= 6) return risk < 0.7; // One card from a "Flip 7", usually worth it
+// Start of a turn with cards in hand, bank them or push for more
+export function aiBankAtStart(hand, risk, p) {
+  const s = scoreHand(hand);
   const target = p.stayScore + (Math.random() * 2 - 1) * p.jitter;
-  if (scoreHand(hand) >= target) return false;
-  return risk <= p.riskTolerance;
+  return s >= target || risk > p.riskTolerance;
+}
+
+// While pushing, stop and keep the hand for next turn, or draw again
+export function aiStop(hand, risk, p) {
+  if (hand.cards.length === 0) return false; // Has to take at least one card
+  return risk > p.riskTolerance || scoreHand(hand) >= p.stayScore;
 }

@@ -7,7 +7,7 @@ import { sha256Hex, randomSeedHex } from "../engine/rng.js";
 import { PHASES, assertPhase } from "../engine/stateMachine.js";
 import { newHand, applyNumber, applyModifier, scoreHand, uniqueCount, bustRisk } from "../engine/round.js";
 import { createPlayer, createSession, sessionElapsedMs, needsRealityCheck } from "../engine/player.js";
-import { PERSONALITIES, decideHit } from "../engine/ai.js";
+import { PERSONALITIES, aiBankAtStart, aiStop } from "../engine/ai.js";
 
 const HUMAN_SEAT = 0;
 const TOTAL_ROUNDS = 9;
@@ -87,7 +87,7 @@ export function createServer() {
         return { bust: true };
       }
       if (r.flip7) {
-        pushLog(`${name(seat)} hit FLIP 7! +15${tag}`);
+        pushLog(`${name(seat)} hit FLIP 7! +15, round over${tag}`);
         lastEvent = { seat, kind: "flip7", card };
         return { flip7: true };
       }
@@ -152,7 +152,7 @@ export function createServer() {
   function applyAction(type, fromSeat, target, card) {
     shoe.discard([card]);
     if (type === "freeze") {
-      pushLog(`${name(fromSeat)} froze ${name(target)} on ${scoreHand(players[target].hand)}`);
+      pushLog(`${name(fromSeat)} froze ${name(target)}, banks ${scoreHand(players[target].hand)}`);
       lastEvent = { seat: target, kind: "frozen" };
       resolveSeat(target, "frozen"); // Frozen means their hand is banked now
       return;
@@ -187,8 +187,20 @@ export function createServer() {
 
   function advanceTurn() {
     const next = nextActiveSeatAfter(currentSeat);
-    if (next === null) finishRound();
-    else currentSeat = next;
+    if (next === null) {
+      finishRound();
+    } else {
+      currentSeat = next;
+      players[next].hitThisTurn = false; // New turn, banking is allowed again
+    }
+  }
+
+  // "Flip 7" ends the round, everyone still in banks and the player who got it gets the bonus
+  function endRoundByFlip7(flipperSeat) {
+    for (const p of players) {
+      if (p.turnState === "active") resolveSeat(p.seat, p.seat === flipperSeat ? "flip7" : "banked");
+    }
+    finishRound();
   }
 
   function finishRound() {
@@ -209,6 +221,7 @@ export function createServer() {
       shoe.discard(p.hand.cards); // Clears last round's cards, busted hands too
       p.hand = newHand();
       p.turnState = "active";
+      p.hitThisTurn = false;
       p.roundDelta = 0;
     }
     dealer = (roundNumber - 1) % n; // Dealer moves clockwise
@@ -219,16 +232,24 @@ export function createServer() {
 
   async function aiAct(seat) {
     const p = players[seat];
-    const wantHit = p.hand.cards.length === 0 || decideHit(p.hand, bustRiskFor(seat), p.ai);
-    if (!wantHit) {
+    const risk = bustRiskFor(seat);
+    if (!p.hitThisTurn && p.hand.cards.length > 0 && aiBankAtStart(p.hand, risk, p.ai)) {
       pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`);
       endTurn(seat, "banked");
       return;
     }
+    // Mid turn, the bot can stop and bank next turn instead of drawing again
+    if (p.hitThisTurn && aiStop(p.hand, risk, p.ai)) {
+      pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`);
+      advanceTurn();
+      return;
+    }
+    p.hitThisTurn = true;
     const r = await drawInto(seat);
     if (r.bust) endTurn(seat, "busted");
-    else if (r.flip7) endTurn(seat, "flip7");
-    else advanceTurn(); // One card per turn, move on
+    else if (r.flip7) endRoundByFlip7(seat);
+    else if (players[seat].turnState !== "active") advanceTurn(); // Like drawing "Freeze" and using it on themselves
+    // Keeps the turn, the bot decides again next step
   }
 
   async function startMatch() {
@@ -243,6 +264,7 @@ export function createServer() {
       p.roundDelta = 0;
       p.hand = newHand();
       p.turnState = "active";
+      p.hitThisTurn = false;
     }
     matchWinner = null;
     lastReveal = null;
@@ -272,8 +294,9 @@ export function createServer() {
           forcedQueue = forcedQueue.filter((s) => s !== seat);
           resolveSeat(seat, "busted");
         } else if (r.flip7) {
-          forcedQueue = forcedQueue.filter((s) => s !== seat);
-          resolveSeat(seat, "flip7");
+          forcedQueue = [];
+          endRoundByFlip7(seat);
+          return { ok: true, snapshot: snapshot() };
         }
       }
       if (!anyActive()) finishRound();
@@ -295,21 +318,38 @@ export function createServer() {
     if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || players[HUMAN_SEAT].turnState !== "active") {
       return { ok: false, snapshot: snapshot() };
     }
+    players[HUMAN_SEAT].hitThisTurn = true;
     const r = await drawInto(HUMAN_SEAT);
     if (r.needsChoice) return { ok: true, snapshot: snapshot() };
     if (r.bust) endTurn(HUMAN_SEAT, "busted");
-    else if (r.flip7) endTurn(HUMAN_SEAT, "flip7");
-    else advanceTurn(); // One card per turn, move on
+    else if (r.flip7) endRoundByFlip7(HUMAN_SEAT);
+    else if (players[HUMAN_SEAT].turnState !== "active") advanceTurn();
+    // Keeps the turn, the player can draw again or stop
     return { ok: true, snapshot: snapshot() };
   }
 
   async function stay() {
     assertPhase(phase, "STAY");
-    if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || players[HUMAN_SEAT].hand.cards.length === 0) {
+    // Can only bank as the first move of a turn, and never with an empty hand
+    const me = players[HUMAN_SEAT];
+    if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || me.hitThisTurn || me.hand.cards.length === 0) {
       return { ok: false, snapshot: snapshot() };
     }
-    pushLog(`You banked ${scoreHand(players[HUMAN_SEAT].hand)}`);
+    pushLog(`You banked ${scoreHand(me.hand)}`);
     endTurn(HUMAN_SEAT, "banked");
+    return { ok: true, snapshot: snapshot() };
+  }
+
+  async function stop() {
+    assertPhase(phase, "STOP");
+    // Ends the turn after drawing, the hand is kept to bank later
+    const me = players[HUMAN_SEAT];
+    if (pendingChoice || forcedQueue.length || currentSeat !== HUMAN_SEAT || !me.hitThisTurn) {
+      return { ok: false, snapshot: snapshot() };
+    }
+    pushLog(`You stop on ${scoreHand(me.hand)} (bank next turn)`);
+    lastEvent = { seat: HUMAN_SEAT, kind: "stop" };
+    advanceTurn();
     return { ok: true, snapshot: snapshot() };
   }
 
@@ -321,10 +361,9 @@ export function createServer() {
     const { type, seat, card } = pendingChoice;
     pendingChoice = null;
     applyAction(type, seat, targetSeat, card);
-    // Drawing the action card was the player's one card this turn, move on
-    if (players[seat].turnState === "active") advanceTurn();
-    else if (!anyActive()) finishRound();
-    else if (players[currentSeat].turnState !== "active") advanceTurn();
+    // Drawing the action card counts as the turn's draw, the player keeps the turn
+    // unless they froze themselves
+    if (players[seat].turnState !== "active") advanceTurn();
     return { ok: true, snapshot: snapshot() };
   }
 
@@ -372,7 +411,8 @@ export function createServer() {
       shoe: shoe ? shoe.counts(inPlayCount()) : { remaining: DECK_SIZE, discard: 0, inPlay: 0, size: DECK_SIZE },
       actingSeat: acting,
       yourTurn,
-      canBank: yourTurn && human.hand.cards.length > 0,
+      youHitThisTurn: human.hitThisTurn,
+      canBank: yourTurn && !human.hitThisTurn && human.hand.cards.length > 0,
       autoStep:
         phase === PHASES.ROUND &&
         !pendingChoice &&
@@ -396,5 +436,5 @@ export function createServer() {
     };
   }
 
-  return Object.freeze({ getState, startMatch, nextRound, step, hit, stay, resolveChoice, verify });
+  return Object.freeze({ getState, startMatch, nextRound, step, hit, stay, stop, resolveChoice, verify });
 }

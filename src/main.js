@@ -55,6 +55,7 @@ function apply(res) {
 const start = async () => apply(await server.startMatch());
 const hit = async () => apply(await server.hit());
 const stay = async () => apply(await server.stay());
+const stop = async () => apply(await server.stop());
 const next = async () => apply(await server.nextRound());
 const target = async (seat) => apply(await server.resolveChoice({ targetSeat: seat }));
 
@@ -82,7 +83,7 @@ const hideRules = () => {
   render();
 };
 
-const ACTIONS = { start, hit, stay, next, again: start, verify: verifyFair, limits: showLimits, rules: showRules, "rules-back": hideRules };
+const ACTIONS = { start, hit, stay, stop, next, again: start, verify: verifyFair, limits: showLimits, rules: showRules, "rules-back": hideRules };
 
 root.addEventListener("click", (e) => {
   const el = e.target.closest("[data-action]");

@@ -141,10 +141,14 @@ function dock(view) {
     const risk = Math.round(s.yourBustRisk * 100);
     const heat = heatTriple(me.uniqueCount);
     const pulsing = me.uniqueCount >= 5 ? " pulsing" : "";
-    const staySub = s.canBank ? me.handScore : "draw first";
+    // After drawing this turn you can't bank, "Stop" ends the turn and keeps your hand
+    // At the start of a turn you can bank if you have a card
+    const left = s.youHitThisTurn
+      ? `<button class="btn btn--bank" data-action="stop">Stop<span class="sub">hold ${me.handScore}</span></button>`
+      : `<button class="btn btn--bank${s.canBank ? " can-bank" : ""}" data-action="stay" ${s.canBank ? "" : "disabled"}>Bank<span class="sub">${s.canBank ? me.handScore : "draw first"}</span></button>`;
     return `
     <div class="dock" style="--heat:${heat}">
-      <button class="btn btn--bank${s.canBank ? " can-bank" : ""}" data-action="stay" ${s.canBank ? "" : "disabled"}>Bank<span class="sub">${staySub}</span></button>
+      ${left}
       <button class="btn btn--flip${pulsing}" data-action="hit">Hit →<span class="sub">bust risk ${risk}%</span></button>
     </div>`;
   }
@@ -166,9 +170,9 @@ export function renderLobby(view) {
       <div class="wordmark">7<span>BUST</span></div>
       <p class="tagline">Nine rounds, three players, taking turns clockwise. Flip cards for points, but a repeat number busts your round.</p>
       <ul class="rules">
-        <li><b>Hit</b> to flip · <b>Bank</b> by staying (you must hold a card)</li>
-        <li>A repeat number <b>busts</b> you · <b>7 unique</b> = Flip 7, +15</li>
-        <li>A round ends when everyone has <b>banked</b> or <b>busted</b></li>
+        <li><b>Hit</b> for as many cards as you dare · <b>Bank</b> to score</li>
+        <li>Bank only at a turn's <b>start</b>: after drawing, <b>Stop</b> and bank next turn</li>
+        <li>Repeat a number → <b>bust</b> · <b>Flip 7</b> ends the round, +15</li>
         <li>One <b>94-card shoe</b>: it shrinks all match, so count cards</li>
       </ul>
       <button class="btn btn--play" data-action="start">Start match &nbsp;→</button>
@@ -288,15 +292,15 @@ export function renderRules() {
       </section>
       <section class="rule-card">
         <h3>Your turn</h3>
-        <p>On your turn you take <b>one action</b>: <b>Hit</b> to flip a card, or <b>Bank</b> (Stay) to lock in your hand and finish the round. Play then passes clockwise.</p>
+        <p>On your turn you can <b>Hit</b> as many times as you want, your hand builds up. When you're done drawing, <b>Stop</b> to end your turn and keep your hand for later. Play then passes clockwise.</p>
       </section>
       <section class="rule-card rule-card--accent">
-        <h3>You can't bank an empty hand</h3>
-        <p>You must hold at least one card to bank, so your first turn each round you have to Hit. The earliest you can bank is a later turn, when play comes back to you.</p>
+        <h3>How banking works</h3>
+        <p>You bank with <b>Bank (Stay)</b>: but only as your turn's <b>first action</b>, before you draw, and never on an empty hand. So once you draw this turn you can't bank until a <b>later turn</b>: Stop now, then Bank when play comes back to you (which leaves you exposed to a Flip Three in the meantime).</p>
       </section>
       <section class="rule-card">
         <h3>Bust &amp; Flip 7</h3>
-        <p>Flip a number you already hold and you <b>bust</b>: score 0 for the round (both copies are shown). Reach <b>7 unique numbers</b> for a <b>Flip 7</b>: it banks automatically with +15.</p>
+        <p>Flip a number you already hold and you <b>bust</b>: score 0 for the round (both copies are shown). Reach <b>7 unique numbers</b> for a <b>Flip 7</b>: the <b>whole round ends</b>: everyone still in banks their hand, and you get a <b>+15</b> bonus.</p>
       </section>
       <section class="rule-card">
         <h3>End of a round</h3>

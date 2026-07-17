@@ -12,6 +12,7 @@ const ALLOWED = Object.freeze({
   START_MATCH: [PHASES.LOBBY, PHASES.MATCH_END],
   HIT: [PHASES.ROUND],
   STAY: [PHASES.ROUND],
+  STOP: [PHASES.ROUND], // Ends your turn after drawing, keeping your hand to bank later
   STEP: [PHASES.ROUND], // Plays one bot or forced move, the game sets the pace
   RESOLVE_CHOICE: [PHASES.ROUND],
   NEXT_ROUND: [PHASES.ROUND_END],

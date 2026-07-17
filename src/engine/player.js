@@ -7,8 +7,9 @@ export function createPlayer({ seat, name, isAI = false, ai = null }) {
     isAI,
     ai,
     totalScore: 0,
-    hand: newHand(), // Reset every round, hands don't carry over
+    hand: newHand(), // Reset every round but kept between the player's turns in that round
     turnState: "active", // active, banked, busted, flip7 or frozen, reset each round
+    hitThisTurn: false, // Banking is only allowed as the first move of a turn
     lastGain: 0,
     roundDelta: 0,
   };
