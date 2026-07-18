@@ -206,6 +206,7 @@ export function renderMatch(view) {
         ${s.wallet ? `<span class="balance-chip">${chipStack(s.wallet.balance)}</span>` : online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
         <span class="clock">◔ <span class="num" data-clock>${fmtTime(s.session.elapsedMs)}</span></span>
         <button class="icon-btn" data-action="rules" aria-label="How to play">?</button>
+        <button class="exit-btn" data-action="exit" aria-label="Exit to the main menu">EXIT</button>
       </span>
     </div>
 
@@ -287,6 +288,26 @@ export function renderOverlay(view) {
     </div></div>`;
   }
   return "";
+}
+
+export function renderExitConfirm(view) {
+  const s = view.snapshot;
+  const stakes =
+    view.mode === "online"
+      ? "The table keeps playing without you, the house takes over your cards."
+      : s.tournament && !s.tournament.settled
+        ? `Your ${s.tournament.entryFee}-chip buy-in is forfeit and this match is abandoned.`
+        : "This match will be abandoned.";
+  return `
+  <div class="overlay"><div class="result result--exit">
+    <div class="kicker">Hold up</div>
+    <h2>LEAVE THE TABLE?</h2>
+    <p class="exit-note">${stakes}</p>
+    <div class="exit-row">
+      <button class="btn btn--play" data-action="exit-no">KEEP PLAYING</button>
+      <button class="btn btn--exit" data-action="exit-yes">YES, EXIT</button>
+    </div>
+  </div></div>`;
 }
 
 export function renderToast(view) {
@@ -422,10 +443,12 @@ export function renderApp(view) {
       const scr = o.screen === "playing" ? renderOnlineDealing() : renderOnline(view);
       return `<div class="stage">${scr}${renderToast(view)}</div>`;
     }
-    return `<div class="stage">${renderMatch(view)}${renderOverlay(view)}${renderToast(view)}</div>`;
+    const confirm = view.confirmExit ? renderExitConfirm(view) : "";
+    return `<div class="stage">${renderMatch(view)}${renderOverlay(view)}${confirm}${renderToast(view)}</div>`;
   }
   const inMatch = view.snapshot.phase !== "lobby";
   const screen = inMatch ? renderMatch(view) : renderLobby(view);
   const overlay = inMatch ? renderOverlay(view) : "";
-  return `<div class="stage">${screen}${overlay}${renderToast(view)}</div>`;
+  const confirm = inMatch && view.confirmExit ? renderExitConfirm(view) : "";
+  return `<div class="stage">${screen}${overlay}${confirm}${renderToast(view)}</div>`;
 }

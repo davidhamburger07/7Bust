@@ -3,7 +3,7 @@
 
 export function createNet(handlers = {}) {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const url = `${proto}://${location.host}/ws`;
+  const url = `${proto}://${location.host}/api/ws`; // Local and Vercel both serve the same path
   let ws = null;
   let queue = [];
   let closed = false;
@@ -47,6 +47,7 @@ export function createNet(handlers = {}) {
     rejoin: (code, id) => send({ type: "rejoin", code, id }),
     start: () => send({ type: "start" }),
     intent: (obj) => send({ type: "intent", ...obj }),
+    leave: () => send({ type: "leave" }),
     close: () => {
       closed = true;
       queue = [];

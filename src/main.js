@@ -197,6 +197,7 @@ function ensureNet() {
     onLobby(msg) {
       view.mode = "online";
       view.online = view.online || { screen: "waiting", name: "", error: null, lobby: null };
+      reconnectTries = 0;
       view.online.self = msg.self;
       view.online.error = null;
       view.online.lobby = { code: msg.code, status: msg.status, seats: msg.seats, you: msg.you, self: msg.self, isHost: msg.isHost };
@@ -229,12 +230,14 @@ function ensureNet() {
       render();
     },
     onClose() {
-      // Lost connection mid-game, try a few times to get back into our seat
-      if (view.mode === "online" && view.online && view.online.screen === "playing" && reconnectTries < 8) {
+      // Vercel closes every WebSocket after a few minutes, so drops are normal
+      // Get back into our seat, with a limit on retries
+      const screen = view.mode === "online" && view.online ? view.online.screen : null;
+      if ((screen === "playing" || screen === "waiting") && reconnectTries < 8) {
         const c = loadNet();
         if (c && c.code && c.id) {
           reconnectTries += 1;
-          toast("Reconnecting…");
+          if (screen === "playing") toast("Reconnecting…");
           setTimeout(() => net && net.rejoin(c.code, c.id), 1200);
         }
       }
@@ -296,7 +299,10 @@ function mpStart() {
   net && net.start();
 }
 async function mpLeave() {
-  if (net) net.close();
+  if (net) {
+    net.leave(); // Free the seat, mid-game a bot takes it over
+    net.close();
+  }
   net = null;
   clearNet();
   reconnectTries = 0;
@@ -339,6 +345,27 @@ async function verifyFair() {
   toast(hashOk && deckOk ? "✓ Provably fair: seed + shoe verified." : "⚠ Verification mismatch.");
 }
 
+function askExit() {
+  view.confirmExit = true;
+  render();
+}
+function cancelExit() {
+  view.confirmExit = false;
+  render();
+}
+async function confirmExitYes() {
+  view.confirmExit = false;
+  if (view.mode === "online") {
+    await mpLeave(); // Sends the leave message, a bot plays the seat on
+    return;
+  }
+  if (aiTimer) {
+    clearTimeout(aiTimer); // Stop any queued bot move before closing the match
+    aiTimer = null;
+  }
+  apply(await server.abandonMatch());
+}
+
 const showRules = () => {
   view.showRules = true;
   render();
@@ -359,6 +386,9 @@ const ACTIONS = {
   rules: showRules,
   "rules-back": hideRules,
   "reset-balance": resetBalance,
+  exit: askExit,
+  "exit-no": cancelExit,
+  "exit-yes": confirmExitYes,
   "mp-open": openOnline,
   "mp-menu": onlineMenu,
   "mp-create": mpCreate,
@@ -394,6 +424,9 @@ root.addEventListener("input", (e) => {
     e.target.value = e.target.value.toUpperCase();
     view.online.codeInput = e.target.value;
   }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && view.confirmExit) cancelExit();
 });
 root.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !view.online) return;

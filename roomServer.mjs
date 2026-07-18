@@ -48,6 +48,7 @@ function broadcastState(room) {
 
 function stopAiLoop(room) {
   if (room.aiTimer) {
+    if (process.env.DEBUG_AI) console.log(`[ai ${room.code}] loop stopped`);
     clearInterval(room.aiTimer);
     room.aiTimer = null;
   }
@@ -123,6 +124,8 @@ async function handle(ws, msg) {
       ws.playerId = p.id;
       broadcastLobby(room);
       if (room.game) send(ws, { type: "state", snapshot: room.game.snapshotFor(p.seat) });
+      // The bot loop stops when the last player disconnects, so start it again when they come back
+      if (room.status === "playing" && !room.aiTimer) startAiLoop(room);
       break;
     }
     case "start": {
@@ -132,6 +135,30 @@ async function handle(ws, msg) {
       const canStart = room.status === "lobby" || (room.game && room.game.snapshotFor(0).phase === "match_end");
       if (!canStart) return;
       await startGame(room);
+      break;
+    }
+    case "leave": {
+      // The player chose to leave, not a dropped connection, so free the seat for good
+      const room = rooms.get(ws.roomCode);
+      if (!room) return;
+      const idx = room.players.findIndex((x) => x.id === ws.playerId);
+      if (idx < 0) return;
+      const p = room.players.splice(idx, 1)[0];
+      ws.roomCode = null;
+      ws.playerId = null;
+      if (room.players.length === 0) {
+        stopAiLoop(room);
+        rooms.delete(room.code);
+        return;
+      }
+      if (room.hostId === p.id) room.hostId = room.players[0].id; // Pass host on to the next player
+      if (room.status === "lobby") {
+        room.players.forEach((q, i) => (q.seat = i)); // Close up the seats before the deal
+      } else if (room.game) {
+        await room.game.convertToAI(p.seat); // A bot plays their hand from here
+        broadcastState(room);
+      }
+      broadcastLobby(room);
       break;
     }
     case "intent": {
@@ -178,8 +205,10 @@ function onClose(ws) {
   }
 }
 
-export function attachRoomServer(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+// Pass a path to only take upgrades there, like the local server does
+// Null takes any path, Vercel only sends /api/ws traffic here anyway
+export function attachRoomServer(httpServer, { path = "/api/ws" } = {}) {
+  const wss = path ? new WebSocketServer({ server: httpServer, path }) : new WebSocketServer({ server: httpServer });
   wss.on("connection", (ws) => {
     ws.roomCode = null;
     ws.playerId = null;
@@ -192,8 +221,13 @@ export function attachRoomServer(httpServer) {
       }
       handle(ws, msg).catch((e) => console.error("handle", e));
     });
-    ws.on("close", () => onClose(ws));
-    ws.on("error", () => {});
+    ws.on("close", (code, reason) => {
+      if (process.env.DEBUG_AI) console.log(`[ws close] code=${code} reason=${reason || "(none)"} room=${ws.roomCode}`);
+      onClose(ws);
+    });
+    ws.on("error", (e) => {
+      if (process.env.DEBUG_AI) console.log(`[ws error] ${e.message}`);
+    });
   });
-  console.log("Room server (WebSocket) attached at /ws");
+  console.log(`Room server (WebSocket) attached at ${path || "(any path)"}`);
 }

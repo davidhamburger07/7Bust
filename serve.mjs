@@ -89,7 +89,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-attachRoomServer(server); // Online play over websockets at /ws
+// Websockets share this server, and Node's timeouts can drop them in the middle of a match
+// Turned off here, they only guard against slow clients which don't matter locally
+server.headersTimeout = 0;
+server.requestTimeout = 0;
+
+attachRoomServer(server, { path: "/api/ws" }); // Same path the live server uses
 
 server.listen(PORT, () => {
   console.log(`7Bust dev server running at http://localhost:${PORT}`);

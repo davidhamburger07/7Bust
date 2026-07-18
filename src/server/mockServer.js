@@ -407,6 +407,37 @@ export function createServer(config = {}) {
     return { ok: true, snapshot: snapshot(seat) };
   }
 
+  // Leaving mid match goes back to the lobby and loses the buy-in
+  async function abandonMatch() {
+    if (phase === PHASES.LOBBY) return { ok: false, snapshot: snapshot() };
+    phase = PHASES.LOBBY;
+    pendingChoice = null;
+    forcedQueue = [];
+    lastEvent = null;
+    matchWinner = null;
+    tournament = null;
+    pushLog("Match abandoned", "info");
+    return { ok: true, snapshot: snapshot() };
+  }
+
+  // A player left an online game, so a bot plays their seat and the table doesn't stall
+  async function convertToAI(seat, ai = null) {
+    const p = players[seat];
+    if (!p || p.isAI) return { ok: false, snapshot: snapshot() };
+    p.isAI = true;
+    p.ai = ai || PERSONALITIES.cautious;
+    pushLog(`${p.name} left the table, the house plays their hand`, "info");
+    // If they left during a "Freeze" or "Flip Three" choice, pick the target for them now
+    if (pendingChoice && pendingChoice.seat === seat) {
+      const { type, card } = pendingChoice;
+      pendingChoice = null;
+      const target = chooseActionTarget(type, seat);
+      applyAction(type, seat, target, card);
+      if (players[seat].turnState !== "active") advanceTurn();
+    }
+    return { ok: true, snapshot: snapshot() };
+  }
+
   async function getState(youSeat = HUMAN_SEAT) {
     return snapshot(youSeat);
   }
@@ -556,5 +587,5 @@ export function createServer(config = {}) {
   // Used by the room server to send updates and run the bots
   const snapshotFor = (seat = HUMAN_SEAT) => snapshot(seat);
 
-  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, verify, resetBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
+  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, abandonMatch, convertToAI, verify, resetBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
 }

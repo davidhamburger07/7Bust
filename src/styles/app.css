@@ -307,6 +307,32 @@
   font-weight: 900;
 }
 
+.exit-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 77, 77, 0.55);
+  background: rgba(96, 16, 16, 0.5);
+  color: #ffbcbc;
+  font-family: var(--font-body);
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  transition: transform 0.1s var(--ease-pop), opacity 0.15s;
+}
+.exit-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 77, 77, 0.9);
+  color: #ffdede;
+}
+.exit-btn:active {
+  transform: translateY(1px);
+}
+.exit-btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
 .felt {
   grid-area: felt;
   position: relative;
@@ -1101,6 +1127,36 @@
 .ghost {
   color: var(--muted);
   font-size: 14px;
+}
+
+.result--exit {
+  max-width: 420px;
+  box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.75), var(--shadow-big);
+}
+.result--exit h2 {
+  color: #ffb0b0;
+  text-shadow: 0 0 24px rgba(255, 77, 77, 0.5), 4px 4px 0 #5c1414;
+}
+.exit-note {
+  color: var(--muted);
+  font-size: 15px;
+  max-width: 34ch;
+  margin: 0 auto;
+}
+.exit-row {
+  display: flex;
+  gap: var(--s3);
+  justify-content: center;
+  margin-top: var(--s5);
+  flex-wrap: wrap;
+}
+.exit-row .btn {
+  font-size: 18px;
+  width: auto;
+}
+.btn--exit {
+  background: linear-gradient(180deg, #ffd2d2, #ff8b8b);
+  color: #4a0f0f;
 }
 
 @keyframes fade {
