@@ -5,7 +5,7 @@ import { renderApp, chatLines } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume } from "./ui/radio.js";
 import { flyCard } from "./ui/fly.js";
-import { showEmote, showSpeech } from "./ui/bubbles.js";
+import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
 
@@ -280,7 +280,10 @@ function handleAnnouncements(s) {
     }
   }
   if (s.phase === "round" && s.round.number !== prevRound) sfx("shuffle");
-  if (s.shoe && s.shoe.reshuffles > prevReshuffles) sfx("shuffle");
+  if (s.shoe && s.shoe.reshuffles > prevReshuffles) {
+    sfx("shuffle");
+    showShuffle();
+  }
   prevRound = s.round.number;
   if (s.shoe) prevReshuffles = s.shoe.reshuffles;
   // One card off a "Clean 7", play a tense line

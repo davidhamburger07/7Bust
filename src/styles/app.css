@@ -350,7 +350,8 @@
   flex-direction: column;
   align-items: center;
   gap: var(--s3);
-  padding: var(--s4) var(--s4) var(--s3);
+  /* Extra bottom padding so the curved rail never cuts into your cards or progress pips */
+  padding: var(--s4) var(--s4) var(--s6);
   overflow: hidden;
   min-height: 0;
 }
@@ -365,22 +366,28 @@
   top: 30%;
   left: 50%;
   transform: translateX(-50%);
-  width: 92%;
-  max-width: 760px;
+  width: 88%;
+  max-width: 720px;
   opacity: 0.85;
   pointer-events: none;
+  overflow: visible; /* Letters at the ends of the arc draw outside the viewBox, don't clip them */
 }
 .arc-t {
   font-family: var(--font-num);
-  font-size: 22px;
-  letter-spacing: 0.12em;
+  font-size: 19px;
+  letter-spacing: 0.1em;
   fill: rgba(255, 224, 150, 0.55);
 }
 
+/* The deck sits in the middle of the table between the opponents and your seat */
 .dealer-zone {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
   z-index: 1;
+  margin: auto 0;
 }
 .shoe {
   display: flex;
@@ -388,9 +395,9 @@
   gap: var(--s3);
 }
 .shoe-pile {
-  width: 52px;
-  height: 72px;
-  border-radius: 8px;
+  width: 62px;
+  height: 86px;
+  border-radius: 9px;
   background: repeating-linear-gradient(45deg, #3a2a12 0 5px, #241606 5px 10px);
   border: 2px solid var(--gold-lo);
 }
@@ -587,6 +594,29 @@
   border-color: var(--gold);
   background: rgba(255, 210, 74, 0.18);
 }
+.badge--next {
+  color: #ffdfa0;
+  border-color: var(--amber);
+  background: rgba(255, 158, 44, 0.18);
+  animation: nextpulse 1.1s ease-in-out infinite;
+}
+@keyframes nextpulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.seat.next,
+.you-seat.next {
+  border-style: dashed;
+  border-color: rgba(255, 158, 44, 0.75);
+}
+.next-note {
+  color: var(--amber);
+}
+.next-note.muted-note {
+  color: var(--faint);
+  font-weight: 700;
+}
 
 .card {
   width: 46px;
@@ -738,6 +768,10 @@
   gap: var(--s2);
   min-height: 66px;
   align-items: center;
+  /* A very long hand scrolls in its own panel instead of running off the table */
+  max-height: clamp(70px, 26vh, 210px);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .progress {
   display: flex;
@@ -1650,6 +1684,90 @@
   font-size: 16px;
 }
 
+.shuffle-fx {
+  position: fixed;
+  z-index: 96;
+  pointer-events: none;
+}
+.shuf-card {
+  position: absolute;
+  left: -20px;
+  top: -28px;
+  width: 40px;
+  height: 56px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(45deg, #3a2a12 0 5px, #241606 5px 10px);
+  border: 2px solid var(--gold-lo);
+  box-shadow: var(--shadow-card);
+  animation: shufout 1.9s var(--ease-out) both;
+}
+.shuf-1 { --sx: -120px; --sy: -40px; --sr: -260deg; }
+.shuf-2 { --sx: 120px; --sy: -46px; --sr: 300deg; animation-delay: 0.05s; }
+.shuf-3 { --sx: -90px; --sy: 55px; --sr: 220deg; animation-delay: 0.1s; }
+.shuf-4 { --sx: 95px; --sy: 60px; --sr: -240deg; animation-delay: 0.15s; }
+.shuf-5 { --sx: -45px; --sy: -85px; --sr: 320deg; animation-delay: 0.08s; }
+.shuf-6 { --sx: 50px; --sy: 90px; --sr: -300deg; animation-delay: 0.12s; }
+@keyframes shufout {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    transform: translate(var(--sx), var(--sy)) rotate(var(--sr)) scale(1.08);
+    opacity: 1;
+  }
+  62% {
+    transform: translate(var(--sx), var(--sy)) rotate(var(--sr)) scale(1.08);
+    opacity: 1;
+  }
+  92% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+}
+.shuf-txt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: 30px;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  text-shadow: 0 0 24px rgba(255, 210, 74, 0.65), 3px 3px 0 #6e4d12, 0 0 2px #000;
+  white-space: nowrap;
+  animation: shuftxt 1.9s var(--ease-pop) both;
+}
+@keyframes shuftxt {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2) rotate(-6deg);
+    opacity: 0;
+  }
+  14% {
+    transform: translate(-50%, -50%) scale(1.15) rotate(2deg);
+    opacity: 1;
+  }
+  24% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  82% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.7);
+    opacity: 0;
+  }
+}
+
 /* Host only button to kick a player from the waiting room */
 .kick-btn {
   width: 26px;
@@ -1739,7 +1857,8 @@
     padding: 0 2px;
     min-width: 0;
   }
-  .matchbar .clock {
+  .matchbar .clock,
+  .matchbar .icon-btn[data-action="rules"] {
     display: none; /* Least useful on a phone, the bar has to fit on one line */
   }
   .dealer-note {
@@ -1793,8 +1912,8 @@
     gap: var(--s2);
   }
   .shoe-pile {
-    width: 40px;
-    height: 56px;
+    width: 48px;
+    height: 66px;
   }
   .shoe-labels {
     font-size: 10px;

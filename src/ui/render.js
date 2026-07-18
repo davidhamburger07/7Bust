@@ -53,7 +53,7 @@ function dealerChip(p) {
   return p.isDealer ? '<span class="deal-chip" title="Deals this round">D</span>' : "";
 }
 
-function shoe(s) {
+function deckPile(s) {
   const layers = Math.max(2, Math.round((s.shoe.remaining / s.shoe.size) * 8));
   const sh = [];
   for (let i = 1; i <= layers; i++) sh.push(`${(i * 1.5).toFixed(1)}px ${(i * 1.5).toFixed(1)}px 0 -1px #2a1a0c`);
@@ -62,7 +62,7 @@ function shoe(s) {
   <div class="shoe">
     <div class="shoe-pile" style="box-shadow:${sh.join(",")}"></div>
     <div class="shoe-labels">
-      <span>Shoe <b class="num">${s.shoe.remaining}</b></span>
+      <span>Deck <b class="num">${s.shoe.remaining}</b></span>
       <span class="muted">out <b class="num">${s.shoe.discard}</b></span>
     </div>
   </div>`;
@@ -70,24 +70,37 @@ function shoe(s) {
 
 const aiTag = (p) => (p.isAI ? '<span class="ai-chip">AI</span>' : "");
 
-function seat(p, newSeat) {
+// Turns go clockwise, skipping anyone who banked, busted or is frozen
+function upNext(s) {
+  if (s.phase !== "round") return -1;
+  const n = s.players.length;
+  for (let i = 1; i <= n; i++) {
+    const cand = (s.actingSeat + i) % n;
+    if (s.players[cand].turnState === "active") return cand;
+  }
+  return -1;
+}
+
+function seat(p, newSeat, nextSeat) {
   const sc = p.secondChance ? " has-sc" : "";
+  const isNext = p.seat === nextSeat && !p.isCurrent;
   return `
-  <div class="seat ${p.isCurrent ? "current" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
-    <div class="seat-top"><span class="seat-name">${p.name}${aiTag(p)}${dealerChip(p)}</span>${badge(p.turnState)}</div>
+  <div class="seat ${p.isCurrent ? "current" : ""}${isNext ? " next" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
+    <div class="seat-top"><span class="seat-name">${p.name}${aiTag(p)}${dealerChip(p)}</span>${isNext ? '<span class="badge badge--next">NEXT</span>' : badge(p.turnState)}</div>
     <div class="seat-hand">${handCards(p, { mini: true, newSeat })}${p.secondChance ? '<span class="sc-dot">2nd</span>' : ""}</div>
     <div class="seat-foot"><span class="seat-hand-score num">${handScoreText(p)}</span><span class="seat-total">total ${p.totalScore}</span></div>
   </div>`;
 }
 
-function youSeat(p, view) {
+function youSeat(p, view, nextSeat) {
   const newSeat = view.lastEvent ? view.lastEvent.seat : -1;
   const pips = Array.from({ length: TARGET }, (_, i) => `<span class="pip ${i < p.uniqueCount ? "on" : ""}"></span>`).join("");
   const sc = p.secondChance ? " has-sc" : "";
+  const isNext = p.seat === nextSeat && !p.isCurrent;
   return `
-  <div class="you-seat ${p.isCurrent ? "current" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
+  <div class="you-seat ${p.isCurrent ? "current" : ""}${isNext ? " next" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
     <div class="you-top">
-      <span class="you-name">YOU${view.snapshot && view.snapshot.yourHands > 1 ? `<span class="hand-ix">HAND ${(view.snapshot.yourSeats || []).indexOf(p.seat) + 1}/${view.snapshot.yourHands}</span>` : ""}${dealerChip(p)} ${badge(p.turnState)}</span>
+      <span class="you-name">YOU${view.snapshot && view.snapshot.yourHands > 1 ? `<span class="hand-ix">HAND ${(view.snapshot.yourSeats || []).indexOf(p.seat) + 1}/${view.snapshot.yourHands}</span>` : ""}${dealerChip(p)} ${isNext ? '<span class="badge badge--next">YOU\'RE NEXT</span>' : badge(p.turnState)}</span>
       <span class="you-score num">hand <b>${handScoreText(p)}</b> · total <b>${p.totalScore}</b></span>
     </div>
     <div class="you-hand">${handCards(p, { newSeat })}${p.secondChance ? '<span class="sc-dot big">2nd chance</span>' : ""}</div>
@@ -140,7 +153,14 @@ function dock(view) {
   }
   const a = s.actingSeat;
   const who = a === s.you ? "Your forced flips" : `${s.players[a].name} is playing`;
-  return `<div class="dock-wait"><span class="spinner"></span>${who}…</div>`;
+  const nextSeat = upNext(s);
+  const nextNote =
+    nextSeat === s.you && a !== s.you
+      ? ' <b class="next-note">· you\'re up next!</b>'
+      : nextSeat >= 0 && nextSeat !== a
+        ? ` <span class="next-note muted-note">· then ${nextSeat === s.you ? "you" : s.players[nextSeat].name}</span>`
+        : "";
+  return `<div class="dock-wait"><span class="spinner"></span>${who}…${nextNote}</div>`;
 }
 
 function leaderPanel(s) {
@@ -249,7 +269,8 @@ export function renderMatch(view) {
   const online = view.mode === "online" && view.online && view.online.lobby ? view.online.lobby : null;
   const me = s.players[s.you];
   const newSeat = s.lastEvent ? s.lastEvent.seat : -1;
-  const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat)).join("");
+  const nextSeat = upNext(s);
+  const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat, nextSeat)).join("");
   return `
   <div class="screen screen--match">
     <div class="matchbar">
@@ -271,9 +292,9 @@ export function renderMatch(view) {
       <div class="felt-spot"></div>
       ${arc()}
       ${pauseBanner(view)}
-      <div class="dealer-zone">${shoe(s)}${s.tournament ? `<div class="pot-chip">POT <b class="num">${s.tournament.pot}</b> · pays <b class="num">${s.tournament.prizePool}</b></div>` : ""}</div>
       <div class="opponents">${opps}</div>
-      ${youSeat(me, view)}
+      <div class="dealer-zone">${deckPile(s)}${s.tournament ? `<div class="pot-chip">POT <b class="num">${s.tournament.pot}</b> · pays <b class="num">${s.tournament.prizePool}</b></div>` : ""}</div>
+      ${youSeat(me, view, nextSeat)}
     </div>
 
     <div class="rightcol">${logPanel(s)}${view.mode === "online" ? chatPanel(view) : ""}</div>
@@ -438,11 +459,11 @@ export function renderRules() {
         <p><b>7 unique numbers</b> ends the whole round: everyone still in banks, and you pocket a <b>+15</b> bonus.</p></section>
       <section class="rule-card"><h3>Action cards</h3>
         <div class="rules-demo">${ract("FRZ", "freeze")}${ract("+3", "flip3")}${ract("2ND", "second")}${ract("👁", "future")}</div>
-        <ul class="rule-list"><li><b>Freeze</b>: pick a player; they bank now and are out of the round.</li><li><b>Flip Three</b>: pick a player; they must flip three cards.</li><li><b>Second Chance</b>: eats one duplicate and saves you from a bust.</li><li><b>See the Future</b>: privately peek at the shoe's next card. The fortune expires as soon as anyone draws.</li></ul></section>
+        <ul class="rule-list"><li><b>Freeze</b>: pick a player; they bank now and are out of the round.</li><li><b>Flip Three</b>: pick a player; they must flip three cards.</li><li><b>Second Chance</b>: eats one duplicate and saves you from a bust.</li><li><b>See the Future</b>: privately peek at the deck's next card. The fortune expires as soon as anyone draws.</li></ul></section>
       <section class="rule-card"><h3>Modifiers</h3>
         <div class="rules-demo">${rmod("+2")}${rmod("+4")}${rmod("+6")}${rmod("+8")}${rmod("+10")}${rmod("×2")}</div>
         <p>Bonus cards that boost a banked hand: <b>+X</b> adds points, <b>×2</b> doubles your number sum. They can't bust you.</p></section>
-      <section class="rule-card"><h3>The shoe</h3><p>One <b>97-card</b> shoe for the whole match. It shrinks as cards are played and only reshuffles when it runs out, counting cards pays off. Online hosts pick the match length (1-9 rounds), the buy-in, multi-hand play and the disconnect rule.</p></section>
+      <section class="rule-card"><h3>The deck</h3><p>One <b>97-card</b> deck for the whole match. It shrinks as cards are played and only reshuffles when it runs out, counting cards pays off. Online hosts pick the match length (1-9 rounds), the buy-in, multi-hand play and the disconnect rule.</p></section>
     </div>
     <button class="btn btn--play" data-action="rules-back">GOT IT</button>
   </div>`;

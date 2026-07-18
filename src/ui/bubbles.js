@@ -26,6 +26,20 @@ export function showEmote(seat, emoji) {
   setTimeout(() => el.remove(), 2600);
 }
 
+export function showShuffle() {
+  const pile = document.querySelector(".shoe-pile");
+  if (!pile) return;
+  const r = pile.getBoundingClientRect();
+  document.querySelectorAll(".shuffle-fx").forEach((e) => e.remove());
+  const el = document.createElement("div");
+  el.className = "shuffle-fx";
+  el.style.left = `${r.left + r.width / 2}px`;
+  el.style.top = `${r.top + r.height / 2}px`;
+  el.innerHTML = Array.from({ length: 6 }, (_, i) => `<span class="shuf-card shuf-${i + 1}"></span>`).join("") + `<span class="shuf-txt">RESHUFFLING</span>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2100);
+}
+
 export function showSpeech(seat, text) {
   const a = anchor(seat);
   if (!a) return;
