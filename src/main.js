@@ -93,6 +93,21 @@ const fmt = (ms) => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
+// Desktop draws at one fixed size scaled to fit the window, so it looks the same on every screen
+// Phones keep their own layout
+const CANVAS_W = 1500;
+const CANVAS_H = 880;
+function fitStage() {
+  if (window.innerWidth < 900) {
+    document.documentElement.style.removeProperty("--stage-scale");
+    return;
+  }
+  const s = Math.min(window.innerWidth / CANVAS_W, (window.innerHeight * 0.98) / CANVAS_H);
+  document.documentElement.style.setProperty("--stage-scale", s.toFixed(4));
+}
+window.addEventListener("resize", fitStage);
+window.addEventListener("orientationchange", fitStage);
+
 function render() {
   view.lastEvent = view.snapshot ? view.snapshot.lastEvent : null;
   // Keep the log's scroll, follow the bottom unless the player scrolled up
@@ -855,6 +870,7 @@ root.addEventListener("keydown", (e) => {
 });
 
 (async function init() {
+  fitStage();
   initRadio();
   try {
     view.showTos = !localStorage.getItem(TOS_KEY);

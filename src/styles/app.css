@@ -3,19 +3,21 @@
 .stage {
   position: relative;
   width: 100%;
-  max-width: 1680px; /* Room for the leaderboard, the table and the log and chat */
   height: 100dvh;
   overflow: hidden;
 }
+/* On desktop the game is a fixed size table scaled to fit the window */
+/* main.js keeps --stage-scale updated on resize so every screen sees the same table */
 @media (min-width: 900px) {
   .stage {
-    height: 96dvh;
-    max-height: 1100px;
+    width: 1500px;
+    height: 880px;
+    flex: none;
+    zoom: var(--stage-scale, 1);
     border-radius: 26px;
     box-shadow: 0 40px 120px -30px #000, inset 0 0 0 2px rgba(255, 210, 74, 0.12);
   }
 }
-/* Wider side panels on big screens are set near the end of this file */
 .screen {
   position: absolute;
   inset: 0;
@@ -2701,17 +2703,9 @@
   }
 }
 
-/* Bigger screens first get wider side panels, then bigger cards, seats and text */
-/* The biggest ones scale the whole game up to fill a 4K screen */
-@media (min-width: 1400px) {
-  .screen--match {
-    grid-template-columns: 264px 1fr 372px;
-  }
-}
-@media (min-width: 1500px) {
-  .stage {
-    max-height: min(1220px, 98dvh);
-  }
+/* Sizes for the fixed desktop table, main.js scales the whole game up or down from here */
+/* Later in the file than the base desktop layout on purpose so these win */
+@media (min-width: 900px) {
   .screen--match {
     grid-template-columns: 280px 1fr 396px;
     gap: var(--s5);
@@ -2865,13 +2859,5 @@
   }
   .lobby {
     max-width: 520px;
-  }
-}
-@media (min-width: 2000px) {
-  .stage {
-    /* Zoom also scales the screen height, so divide it back out or the dock goes off the bottom */
-    zoom: 1.25;
-    height: calc(96dvh / 1.25);
-    max-height: calc(1220px / 1.25);
   }
 }
