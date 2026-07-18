@@ -100,14 +100,39 @@ const CANVAS_H = 880;
 function fitStage() {
   if (window.innerWidth < 900) {
     document.documentElement.style.removeProperty("--stage-scale");
+    dockRadio();
     return;
   }
   // Small margin so the game's rounded corners never touch the window edge
   const s = Math.min((window.innerWidth * 0.99) / CANVAS_W, (window.innerHeight * 0.96) / CANVAS_H);
   document.documentElement.style.setProperty("--stage-scale", s.toFixed(4));
+  dockRadio();
 }
 window.addEventListener("resize", fitStage);
 window.addEventListener("orientationchange", fitStage);
+
+// The radio lives outside #app so redraws don't break it. On desktop it sits bottom left
+// Phones keep it as a small button top right
+function dockRadio() {
+  requestAnimationFrame(() => {
+    const r = document.getElementById("radio");
+    if (!r) return;
+    if (window.innerWidth < 900) {
+      r.style.left = "";
+      r.style.top = "";
+      r.style.right = "";
+      r.style.bottom = "";
+      return;
+    }
+    const st = document.querySelector(".stage");
+    if (!st) return;
+    const b = st.getBoundingClientRect();
+    r.style.left = `${Math.round(b.left + 16)}px`;
+    r.style.top = `${Math.round(b.bottom - r.offsetHeight - 12)}px`;
+    r.style.right = "auto";
+    r.style.bottom = "auto";
+  });
+}
 
 function render() {
   view.lastEvent = view.snapshot ? view.snapshot.lastEvent : null;
@@ -144,6 +169,7 @@ function render() {
     if (chatList) chatList.scrollTop = chatList.scrollHeight;
   }
   tickClock(); // Show the right time straight away, no 0:00 flicker
+  dockRadio(); // Keeps the radio in the game's corner between screens
 }
 
 function tickClock() {

@@ -344,8 +344,8 @@
   border-radius: 88px 88px 110px 110px;
   background: radial-gradient(72% 82% at 50% 26%, var(--felt-hi), var(--felt) 46%, var(--felt-lo) 100%);
   border: 12px solid var(--rail);
-  box-shadow: 0 0 0 3px var(--gold-lo), inset 0 0 0 2px rgba(255, 210, 74, 0.22),
-    inset 0 12px 44px rgba(0, 0, 0, 0.45), var(--shadow-big);
+  /* No inner gold ring, the seats cover its sides and the bottom arc shows as a stray line */
+  box-shadow: 0 0 0 3px var(--gold-lo), inset 0 12px 44px rgba(0, 0, 0, 0.45), var(--shadow-big);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2224,11 +2224,13 @@
 }
 
 .screen--online {
-  align-items: center;
-  justify-content: center;
   padding: var(--s5);
+  overflow-y: auto; /* An eight seat setup card can be taller than the screen, so it scrolls */
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-lo) transparent;
 }
 .mp-card {
+  margin: auto; /* Centred when it fits, scrolls from the top when it doesn't */
   position: relative;
   width: 100%;
   max-width: 440px;
@@ -2426,12 +2428,11 @@
   font-weight: 900;
 }
 
+/* The whole screen scrolls, so the seat list doesn't need its own scrollbar */
 .mp-seats {
   display: grid;
   gap: var(--s2);
   text-align: left;
-  max-height: 44vh;
-  overflow-y: auto;
 }
 .mp-seats > .mp-label {
   margin-bottom: 2px;
