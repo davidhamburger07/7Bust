@@ -7,6 +7,14 @@ export function createNet(handlers = {}) {
   let ws = null;
   let queue = [];
   let closed = false;
+  let pingTimer = null;
+
+  function stopPing() {
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
+  }
 
   function open() {
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
@@ -14,6 +22,11 @@ export function createNet(handlers = {}) {
     ws = new WebSocket(url);
     ws.onopen = () => {
       handlers.onOpen && handlers.onOpen();
+      // A waiting room can be quiet for minutes, pinging stops proxies closing the connection
+      stopPing();
+      pingTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
+      }, 25000);
       const pending = queue;
       queue = [];
       pending.forEach((m) => ws.send(JSON.stringify(m)));
@@ -27,9 +40,12 @@ export function createNet(handlers = {}) {
       }
       if (msg.type === "lobby") handlers.onLobby && handlers.onLobby(msg);
       else if (msg.type === "state") handlers.onState && handlers.onState(msg.snapshot);
+      else if (msg.type === "chat") handlers.onChat && handlers.onChat(msg.list);
+      else if (msg.type === "emote") handlers.onEmote && handlers.onEmote(msg);
       else if (msg.type === "error") handlers.onError && handlers.onError(msg);
     };
     ws.onclose = () => {
+      stopPing();
       if (!closed) handlers.onClose && handlers.onClose();
     };
     ws.onerror = () => handlers.onError && handlers.onError({ error: "Connection problem" });
@@ -48,10 +64,13 @@ export function createNet(handlers = {}) {
     start: () => send({ type: "start" }),
     config: (obj) => send({ type: "config", ...obj }),
     intent: (obj) => send({ type: "intent", ...obj }),
+    chat: (text) => send({ type: "chat", text }),
+    emote: (emoji) => send({ type: "emote", emoji }),
     leave: () => send({ type: "leave" }),
     close: () => {
       closed = true;
       queue = [];
+      stopPing();
       if (ws) ws.close();
     },
   };

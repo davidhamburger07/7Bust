@@ -36,6 +36,12 @@ export async function createShoe({ serverSeed, clientSeed, restore = null }) {
     if (cards && cards.length) discardPile.push(...cards);
   }
 
+  // Shows the next card without drawing it, for "See the Future"
+  // Null when the shoe is empty, the next shuffle hasn't happened yet
+  function peek() {
+    return cursor < order.length ? { ...order[cursor] } : null;
+  }
+
   // Unseen cards left in the shoe by number, for honest bust odds
   function remainingNumberCounts() {
     const counts = {};
@@ -61,5 +67,5 @@ export async function createShoe({ serverSeed, clientSeed, restore = null }) {
     return { nonce, order, cursor, discard: discardPile };
   }
 
-  return { draw, discard, remainingNumberCounts, counts, getState, getNonce: () => nonce };
+  return { draw, discard, peek, remainingNumberCounts, counts, getState, getNonce: () => nonce };
 }

@@ -6,11 +6,12 @@ import { attachRoomServer } from "../roomServer.mjs";
 const server = http.createServer();
 const info = attachRoomServer(server, { path: null }); // Only /api/ws traffic gets here
 
-// A plain GET says which room store this runs on
-// Redis shares rooms between servers, memory means Redis isn't set up
+// A plain GET says which room store this runs on, and the names of any Redis settings
+// Only the names are shown, never the values
 server.on("request", (req, res) => {
+  const envNames = Object.keys(process.env).filter((k) => /REDIS|^KV_|UPSTASH/i.test(k));
   res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-  res.end(JSON.stringify({ ok: true, store: info.store() }));
+  res.end(JSON.stringify({ ok: true, store: info.store(), env: envNames }));
 });
 
 export default server;

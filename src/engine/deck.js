@@ -3,9 +3,9 @@
 import { makeStream } from "./rng.js";
 
 export const MAX_VALUE = 12;
-export const DECK_SIZE = 94;
+export const DECK_SIZE = 97;
 
-export const ACTIONS = ["freeze", "flip3", "second_chance"];
+export const ACTIONS = ["freeze", "flip3", "second_chance", "see_future"];
 export const ADD_MODIFIERS = [2, 4, 6, 8, 10];
 
 export function buildDeck() {
@@ -27,7 +27,7 @@ export function buildDeck() {
 export function cardLabel(card) {
   if (card.kind === "number") return String(card.value);
   if (card.kind === "modifier") return card.op === "mult" ? "×2" : `+${card.amount}`;
-  return { freeze: "FRZ", flip3: "+3", second_chance: "2ND" }[card.action];
+  return { freeze: "FRZ", flip3: "+3", second_chance: "2ND", see_future: "👁" }[card.action];
 }
 
 // Fair shuffle anyone can check, the same seeds always give the same order

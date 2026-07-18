@@ -5,6 +5,8 @@ import { renderApp } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice } from "./ui/announce.js";
 import { initRadio, startRadio } from "./ui/radio.js";
 import { flyCard } from "./ui/fly.js";
+import { showEmote, showSpeech } from "./ui/bubbles.js";
+import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
 
 const server = createServer();
@@ -12,11 +14,13 @@ const root = document.getElementById("app");
 const bootAt = Date.now();
 
 const AI_DELAY = 850;
-const SAVE_KEY = "7bust:save:v2";
+const SAVE_KEY = "7bust:save:v3"; // The deck changed, older saves can't resume
 const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
+const LEDGER_KEY = "7bust:mpledger"; // Each online match's buy-in and payout only count once
+const HISTORY_KEY = "7bust:history";
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
-const view = { snapshot: null, lastEvent: null, toast: null, entryFee: null, mode: "solo", online: null };
+const view = { snapshot: null, lastEvent: null, toast: null, entryFee: null, mode: "solo", online: null, chat: [], chatDraft: "", chatFocus: false, showHistory: false, soloBalance: 0 };
 let net = null;
 let aiTimer = null;
 let audioReady = false;
@@ -46,6 +50,17 @@ function render() {
   root.innerHTML = renderApp(view);
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
+  const chatList = document.getElementById("chatlist");
+  if (chatList) chatList.scrollTop = chatList.scrollHeight;
+  // A full redraw takes focus from the chat box, so give it back
+  if (view.chatFocus) {
+    const ci = document.getElementById("chat-in");
+    if (ci) {
+      ci.focus();
+      const end = ci.value.length;
+      ci.setSelectionRange(end, end);
+    }
+  }
 }
 
 function tickClock() {
@@ -72,6 +87,88 @@ function save() {
   }
 }
 
+// Online buy-ins come off the solo chip balance at the deal and the payout lands at the end
+// Each match only counts once
+async function settleMpWallet(s) {
+  if (view.mode !== "online" || !s || !s.tournament || !s.fair || !s.fair.serverSeedHash) return;
+  const key = s.fair.serverSeedHash;
+  let led;
+  try {
+    led = JSON.parse(localStorage.getItem(LEDGER_KEY) || "null");
+  } catch {
+    led = null;
+  }
+  if (!led || led.key !== key) led = { key, debited: false, credited: false };
+  let changed = false;
+  if (!led.debited && s.phase !== "lobby") {
+    led.debited = true;
+    changed = true;
+    await server.adjustBalance(-s.tournament.entryFee);
+    toast(`Buy-in taken: −${s.tournament.entryFee} chips`);
+  }
+  if (!led.credited && s.phase === "match_end" && s.tournament.settled) {
+    led.credited = true;
+    changed = true;
+    if (s.tournament.youPayout > 0) {
+      await server.adjustBalance(s.tournament.youPayout);
+      toast(`You collect ${s.tournament.youPayout} chips!`);
+    }
+  }
+  if (changed) {
+    try {
+      localStorage.setItem(LEDGER_KEY, JSON.stringify(led));
+      localStorage.setItem(SAVE_KEY, JSON.stringify(server.serialize()));
+    } catch {
+      // Storage isn't available, the game still works without it
+    }
+    view.soloBalance = (await server.getState()).wallet.balance;
+  }
+}
+
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+// Every match that ends, solo and online, goes in the local match history with the full table
+function recordHistory(s) {
+  const key = s.fair && s.fair.serverSeedHash;
+  if (!key) return;
+  const list = loadHistory();
+  if (list.some((h) => h.key === key)) return;
+  const ranked = [...s.players].sort((a, b) => b.totalScore - a.totalScore);
+  list.unshift({
+    key,
+    at: Date.now(),
+    mode: view.mode,
+    room: view.mode === "online" && view.online && view.online.lobby ? view.online.lobby.code : null,
+    rounds: s.round.total,
+    entryFee: s.tournament ? s.tournament.entryFee : 0,
+    youNet: s.tournament ? s.tournament.youNet : null,
+    winner: s.players[s.winner] ? (s.winner === s.you ? "You" : s.players[s.winner].name) : "?",
+    youWon: s.winner === s.you,
+    players: ranked.map((p, i) => ({
+      place: i + 1,
+      name: p.seat === s.you ? "You" : p.name,
+      isAI: p.isAI,
+      score: p.totalScore,
+      busts: p.stats ? p.stats.busts : 0,
+      bestBank: p.stats ? p.stats.bestBank : 0,
+      clean7s: p.stats ? p.stats.clean7s : 0,
+      frozen: p.stats ? p.stats.frozen : 0,
+      peeks: p.stats ? p.stats.peeks : 0,
+    })),
+  });
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 30)));
+  } catch {
+    // Storage isn't available, the game still works without it
+  }
+}
+
 function handleAnnouncements(s) {
   const you = s.players[s.you];
   const le = s.lastEvent;
@@ -88,11 +185,19 @@ function handleAnnouncements(s) {
     else if (le.kind === "clean7") announce("clean7");
     else if (le.kind === "flip3" && mine) announce("flip3");
     else if (le.kind === "sc_pass") mine ? playVoice("second") : sfx("sparkle");
+    else if (le.kind === "see_future") sfx("sparkle");
     else if (le.kind === "modifier") {
       sfx("sparkle");
       if (mine && le.card && le.card.op === "mult") playVoice("double");
     } else if (mine && (le.kind === "saved" || (le.kind === "action" && le.card && le.card.action === "second_chance"))) {
       playVoice("second");
+    }
+    // At solo tables the bots emote and talk locally, online the room server sends these
+    if (view.mode === "solo") {
+      for (const r of aiReactions(le, s.players)) {
+        if (r.emoji) showEmote(r.seat, r.emoji);
+        if (r.text) showSpeech(r.seat, r.text);
+      }
     }
   }
   if (s.phase === "round" && s.round.number !== prevRound) sfx("shuffle");
@@ -107,12 +212,16 @@ function handleAnnouncements(s) {
     lastFlavorAt = Date.now();
   }
   prevYourTurn = s.yourTurn;
-  if (s.phase === "match_end" && prevPhase !== "match_end") announce(s.winner === s.you ? "win" : "lose");
+  if (s.phase === "match_end" && prevPhase !== "match_end") {
+    announce(s.winner === s.you ? "win" : "lose");
+    recordHistory(s);
+  }
   prevPhase = s.phase;
 }
 
 function apply(res) {
   if (res && res.snapshot) view.snapshot = res.snapshot;
+  if (view.snapshot && view.snapshot.wallet) view.soloBalance = view.snapshot.wallet.balance;
   render();
   handleAnnouncements(view.snapshot);
   save();
@@ -200,7 +309,7 @@ function ensureNet() {
       reconnectTries = 0;
       view.online.self = msg.self;
       view.online.error = null;
-      view.online.lobby = { code: msg.code, status: msg.status, size: msg.size, slots: msg.slots, filled: msg.filled, you: msg.you, self: msg.self, isHost: msg.isHost };
+      view.online.lobby = { code: msg.code, status: msg.status, size: msg.size, slots: msg.slots, filled: msg.filled, entry: msg.entry || 0, rounds: msg.rounds || 9, you: msg.you, self: msg.self, isHost: msg.isHost };
       persistNet(msg.code, msg.self, view.online.name);
       if (msg.status === "playing") {
         if (view.online.screen !== "playing" && view.snapshot && view.snapshot.cashless) view.online.screen = "playing";
@@ -217,6 +326,21 @@ function ensureNet() {
       view.online.screen = "playing";
       render();
       handleAnnouncements(snapshot);
+      settleMpWallet(snapshot);
+    },
+    onChat(list) {
+      const seen = new Set(view.chat.map((c) => `${c.at}:${c.seat}:${c.text}`));
+      for (const c of list || []) {
+        if (c.ai && !seen.has(`${c.at}:${c.seat}:${c.text}`) && view.online && view.online.screen === "playing") {
+          showSpeech(c.seat, c.text);
+        }
+      }
+      const changed = JSON.stringify(list) !== JSON.stringify(view.chat);
+      view.chat = list || [];
+      if (changed) render();
+    },
+    onEmote(msg) {
+      if (view.online && view.online.screen === "playing") showEmote(msg.seat, msg.emoji);
     },
     onError(msg) {
       if (!view.online) return;
@@ -303,7 +427,7 @@ function mpStart() {
   sfx("ding");
   net && net.start();
 }
-// Seat count and each seat set to open, a bot or off
+// Seat count, each seat set to open, a bot or off, plus stakes and length
 function mpSize(n) {
   sfx("click");
   net && net.config({ size: n });
@@ -313,6 +437,36 @@ function mpSlot(index, t) {
   if (!net) return;
   if (t.startsWith("ai-")) net.config({ slot: { index, type: "ai", ai: t.slice(3) } });
   else net.config({ slot: { index, type: t } });
+}
+function mpEntry(fee) {
+  sfx("chips");
+  net && net.config({ entry: fee });
+}
+function mpRounds(r) {
+  sfx("click");
+  net && net.config({ rounds: r });
+}
+
+function sendChat() {
+  const text = (view.chatDraft || "").trim();
+  if (!text || !net) return;
+  net.chat(text);
+  view.chatDraft = "";
+  const ci = document.getElementById("chat-in");
+  if (ci) ci.value = "";
+}
+function sendEmote(e) {
+  if (net) net.emote(e);
+}
+
+function openHistory() {
+  view.showHistory = true;
+  view.history = loadHistory();
+  render();
+}
+function closeHistory() {
+  view.showHistory = false;
+  render();
 }
 async function mpLeave() {
   if (net) {
@@ -405,6 +559,9 @@ const ACTIONS = {
   exit: askExit,
   "exit-no": cancelExit,
   "exit-yes": confirmExitYes,
+  history: openHistory,
+  "history-back": closeHistory,
+  "chat-send": sendChat,
   "mp-open": openOnline,
   "mp-menu": onlineMenu,
   "mp-create": mpCreate,
@@ -430,12 +587,19 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "entry") return setEntry(Number(el.dataset.fee));
   if (el.dataset.action === "mp-size") return mpSize(Number(el.dataset.size));
   if (el.dataset.action === "mp-slot") return mpSlot(Number(el.dataset.index), el.dataset.t);
+  if (el.dataset.action === "mp-entry") return mpEntry(Number(el.dataset.fee));
+  if (el.dataset.action === "mp-rounds") return mpRounds(Number(el.dataset.r));
+  if (el.dataset.action === "emote") return sendEmote(el.dataset.e);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();
 });
 
-// Keep the typed room name and code in state so a redraw doesn't wipe them
+// Keep the typed room name, code and chat in state so a redraw doesn't wipe them
 root.addEventListener("input", (e) => {
+  if (e.target.id === "chat-in") {
+    view.chatDraft = e.target.value;
+    return;
+  }
   if (!view.online) return;
   if (e.target.id === "mp-name") view.online.name = e.target.value;
   if (e.target.id === "mp-code") {
@@ -443,11 +607,23 @@ root.addEventListener("input", (e) => {
     view.online.codeInput = e.target.value;
   }
 });
+root.addEventListener("focusin", (e) => {
+  if (e.target.id === "chat-in") view.chatFocus = true;
+});
+root.addEventListener("focusout", (e) => {
+  if (e.target.id === "chat-in") view.chatFocus = false;
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && view.confirmExit) cancelExit();
 });
 root.addEventListener("keydown", (e) => {
-  if (e.key !== "Enter" || !view.online) return;
+  if (e.key !== "Enter") return;
+  if (e.target.id === "chat-in") {
+    e.preventDefault();
+    sendChat();
+    return;
+  }
+  if (!view.online) return;
   if (e.target.id === "mp-code") {
     e.preventDefault();
     mpJoin();
@@ -476,6 +652,7 @@ root.addEventListener("keydown", (e) => {
 
   if (!view.snapshot) view.snapshot = await server.getState();
   view.entryFee = view.snapshot.config?.defaultEntry ?? 100;
+  view.soloBalance = view.snapshot.wallet ? view.snapshot.wallet.balance : 0;
   // Don't play announcements for a loaded game
   prevPhase = view.snapshot.phase;
   prevYourTurn = view.snapshot.yourTurn;

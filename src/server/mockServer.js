@@ -11,12 +11,14 @@ import { PERSONALITIES, aiBankAtStart, aiStop } from "../engine/ai.js";
 import { ENTRY_TIERS, DEFAULT_ENTRY, HOUSE_RAKE, STARTING_BALANCE, buildPot, payoutPerWinner } from "../engine/tournament.js";
 
 const HUMAN_SEAT = 0;
-const TOTAL_ROUNDS = 9;
+const DEFAULT_ROUNDS = 9;
 
 // Single player is you against bots with the wallet
-// Multiplayer uses the room's seats and no chips
+// Multiplayer has no chips here, the host picks the buy-in and each player settles their own
 export function createServer(config = {}) {
   const cashless = !!config.cashless;
+  const totalRounds = Math.min(9, Math.max(1, Math.round(config.rounds || DEFAULT_ROUNDS)));
+  const roomEntryFee = cashless && ENTRY_TIERS.includes(config.entryFee) ? config.entryFee : 0;
   const session = createSession();
   const roster = config.players || [
     { name: "You", isAI: false },
@@ -26,6 +28,8 @@ export function createServer(config = {}) {
   ];
   const players = roster.map((p, seat) => createPlayer({ seat, name: p.name, isAI: p.isAI, ai: p.ai || null }));
   const n = players.length;
+  const freshStats = () => ({ busts: 0, clean7s: 0, frozen: 0, bestBank: 0, peeks: 0 });
+  players.forEach((p) => (p.stats = freshStats()));
 
   let phase = PHASES.LOBBY;
   let roundNumber = 0;
@@ -33,6 +37,7 @@ export function createServer(config = {}) {
   let dealer = 0;
   let forcedQueue = []; // Seats that still owe "Flip Three" draws, these go before normal turns
   let pendingChoice = null;
+  let peeks = {}; // The card each seat saw with "See the Future", cleared on the next draw
   let lastEvent = null;
   let matchWinner = null;
   let log = [];
@@ -45,6 +50,7 @@ export function createServer(config = {}) {
   let tournament = null;
 
   const name = (seat) => players[seat].name;
+  const aiKeyOf = (p) => (p.isAI && p.ai ? Object.keys(PERSONALITIES).find((k) => PERSONALITIES[k] === p.ai) || null : null);
   const poss = (seat) => (players[seat].name === "You" ? "Your" : `${players[seat].name}'s`);
   const anyActive = () => players.some((p) => p.turnState === "active");
   const inPlayCount = () => players.reduce((s, p) => s + p.hand.cards.length, 0) + (pendingChoice ? 1 : 0);
@@ -69,6 +75,7 @@ export function createServer(config = {}) {
   }
 
   async function drawInto(seat, { forced = false } = {}) {
+    peeks = {}; // Taking the top card clears every "See the Future" peek
     const card = await shoe.draw();
     return resolveCard(seat, card, { forced, auto: players[seat].isAI || forced });
   }
@@ -90,11 +97,13 @@ export function createServer(config = {}) {
       }
       if (r.bust) {
         shoe.discard([card]); // The card that matched
+        players[seat].stats.busts += 1;
         pushLog(`${name(seat)} busted on ${card.value}${tag}`, "bust");
         lastEvent = { seat, kind: "bust", card };
         return { bust: true };
       }
       if (r.cleanSeven) {
+        players[seat].stats.clean7s += 1;
         pushLog(`${name(seat)} hit a CLEAN 7! +15, round over${tag}`, "clean7");
         lastEvent = { seat, kind: "clean7", card };
         return { cleanSeven: true };
@@ -111,6 +120,17 @@ export function createServer(config = {}) {
       return { resolved: true };
     }
 
+    if (card.action === "see_future") {
+      // "See the Future" shows only this seat the top card of the shoe
+      // It's gone as soon as anyone draws
+      const next = shoe.peek();
+      shoe.discard([card]); // "See the Future" is used up straight away
+      peeks[seat] = next;
+      players[seat].stats.peeks += 1;
+      pushLog(`${name(seat)} peeked at the future 👁`, "future");
+      lastEvent = { seat, kind: "see_future", card };
+      return { resolved: true };
+    }
     if (card.action === "second_chance") {
       if (!hand.secondChance) {
         hand.secondChance = true;
@@ -162,6 +182,7 @@ export function createServer(config = {}) {
   function applyAction(type, fromSeat, target, card) {
     shoe.discard([card]);
     if (type === "freeze") {
+      players[target].stats.frozen += 1;
       pushLog(`${name(fromSeat)} froze ${name(target)}, banks ${scoreHand(players[target].hand)}`, "freeze");
       lastEvent = { seat: target, kind: "frozen", from: fromSeat };
       resolveSeat(target, "frozen"); // Frozen means their hand is banked now
@@ -178,6 +199,7 @@ export function createServer(config = {}) {
     p.totalScore += gain;
     p.lastGain = gain;
     p.roundDelta = gain;
+    p.stats.bestBank = Math.max(p.stats.bestBank, gain);
     shoe.discard(p.hand.cards);
     p.hand = newHand();
     return gain;
@@ -214,23 +236,18 @@ export function createServer(config = {}) {
   }
 
   function finishRound() {
-    if (roundNumber >= TOTAL_ROUNDS) {
+    if (roundNumber >= totalRounds) {
       // Ranks the players and pays out the pot, top scorers split it and the house keeps its rake
-      // The player's wallet gets paid if they placed
+      // Solo pays the wallet here, online each player settles their own
       const maxTotal = Math.max(...players.map((p) => p.totalScore));
       const winnerSeats = players.filter((p) => p.totalScore === maxTotal).map((p) => p.seat);
       matchWinner = winnerSeats[0];
-      if (!cashless && tournament) {
-        // Top scorers split the pot and the house keeps its rake
-        // The single player wallet gets paid if they placed
+      if (tournament && !tournament.settled) {
         const each = payoutPerWinner(tournament.prizePool, winnerSeats.length);
-        const youWon = winnerSeats.includes(HUMAN_SEAT);
         tournament.winnerSeats = winnerSeats;
         tournament.payout = each;
-        tournament.youPayout = youWon ? each : 0;
-        tournament.youNet = tournament.youPayout - tournament.entryFee;
         tournament.settled = true;
-        if (youWon) session.balance += each;
+        if (!cashless && winnerSeats.includes(HUMAN_SEAT)) session.balance += each;
       }
       lastReveal = { serverSeed, clientSeed, serverSeedHash };
       phase = PHASES.MATCH_END;
@@ -243,6 +260,7 @@ export function createServer(config = {}) {
     pendingChoice = null;
     forcedQueue = [];
     lastEvent = null;
+    peeks = {};
     for (const p of players) {
       shoe.discard(p.hand.cards); // Clears last round's cards, busted hands too
       p.hand = newHand();
@@ -259,13 +277,31 @@ export function createServer(config = {}) {
   async function aiAct(seat) {
     const p = players[seat];
     const risk = bustRiskFor(seat);
-    if (!p.hitThisTurn && p.hand.cards.length > 0 && aiBankAtStart(p.hand, risk, p.ai)) {
+    // Knowing the next card from "See the Future" beats guessing
+    // stop if it busts and draw if it's safe
+    const known = peeks[seat];
+    const knownBust = known && known.kind === "number" && p.hand.numbers.includes(known.value) && !p.hand.secondChance;
+    const knownSafe = known && !(known.kind === "number" && p.hand.numbers.includes(known.value));
+    if (knownBust) {
+      if (!p.hitThisTurn && p.hand.cards.length > 0) {
+        pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`, "bank");
+        endTurn(seat, "banked");
+        return;
+      }
+      if (p.hitThisTurn) {
+        pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`, "stop");
+        advanceTurn();
+        return;
+      }
+      // Empty hand and has to act, so it draws
+    }
+    if (!knownSafe && !p.hitThisTurn && p.hand.cards.length > 0 && aiBankAtStart(p.hand, risk, p.ai)) {
       pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`, "bank");
       endTurn(seat, "banked");
       return;
     }
     // Mid turn, the bot can stop and bank next turn instead of drawing again
-    if (p.hitThisTurn && aiStop(p.hand, risk, p.ai)) {
+    if (!knownSafe && p.hitThisTurn && aiStop(p.hand, risk, p.ai)) {
       pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`, "stop");
       advanceTurn();
       return;
@@ -281,15 +317,16 @@ export function createServer(config = {}) {
   async function startMatch({ entryFee = DEFAULT_ENTRY } = {}) {
     assertPhase(phase, "START_MATCH");
     if (cashless) {
-      // Multiplayer has no wallet or pot, just play to win
-      tournament = null;
+      // Multiplayer keeps no wallets here. With a buy-in the pot is still worked out
+      // and each player settles their own chips from it
+      tournament = roomEntryFee > 0 ? { ...buildPot(roomEntryFee, n), settled: false, payout: 0, winnerSeats: [] } : null;
     } else {
       const fee = ENTRY_TIERS.includes(entryFee) ? entryFee : DEFAULT_ENTRY;
       if (session.balance < fee) {
         return { ok: false, reason: "insufficient-balance", snapshot: snapshot() };
       }
       session.balance -= fee;
-      tournament = { ...buildPot(fee, n), settled: false, payout: 0, winnerSeats: [], youPayout: 0, youNet: -fee };
+      tournament = { ...buildPot(fee, n), settled: false, payout: 0, winnerSeats: [] };
     }
 
     serverSeed = randomSeedHex(32);
@@ -303,6 +340,7 @@ export function createServer(config = {}) {
       p.hand = newHand();
       p.turnState = "active";
       p.hitThisTurn = false;
+      p.stats = freshStats();
     }
     matchWinner = null;
     lastReveal = null;
@@ -446,13 +484,14 @@ export function createServer(config = {}) {
   // A real game server would keep this, here it goes in the browser
   function serialize() {
     return {
-      v: 2,
+      v: 3, // Save version, bumped for "See the Future" and player stats
       phase,
       roundNumber,
       currentSeat,
       dealer,
       forcedQueue: forcedQueue.slice(),
       pendingChoice,
+      peeks: { ...peeks },
       lastEvent,
       matchWinner,
       log: log.slice(),
@@ -469,19 +508,21 @@ export function createServer(config = {}) {
         hitThisTurn: p.hitThisTurn,
         lastGain: p.lastGain,
         roundDelta: p.roundDelta,
+        stats: { ...p.stats },
         hand: serializeHand(p.hand),
       })),
     };
   }
 
   async function restore(blob) {
-    if (!blob || blob.v !== 2) return { ok: false, snapshot: snapshot() };
+    if (!blob || blob.v !== 3) return { ok: false, snapshot: snapshot() };
     phase = blob.phase;
     roundNumber = blob.roundNumber;
     currentSeat = blob.currentSeat;
     dealer = blob.dealer;
     forcedQueue = (blob.forcedQueue || []).slice();
     pendingChoice = blob.pendingChoice || null;
+    peeks = blob.peeks || {};
     lastEvent = blob.lastEvent || null;
     matchWinner = blob.matchWinner ?? null;
     log = (blob.log || []).slice();
@@ -498,6 +539,7 @@ export function createServer(config = {}) {
       p.hitThisTurn = pd.hitThisTurn;
       p.lastGain = pd.lastGain;
       p.roundDelta = pd.roundDelta;
+      p.stats = pd.stats || freshStats();
       p.hand = deserializeHand(pd.hand);
     }
     shoe = blob.shoe ? await createShoe({ serverSeed, clientSeed, restore: blob.shoe }) : null;
@@ -508,6 +550,12 @@ export function createServer(config = {}) {
   async function resetBalance() {
     if (phase === PHASES.ROUND) return { ok: false, snapshot: snapshot() };
     session.balance = STARTING_BALANCE;
+    return { ok: true, snapshot: snapshot() };
+  }
+
+  // Online buy-ins come off the solo wallet, taken when the match deals and paid when it ends
+  async function adjustBalance(delta) {
+    session.balance = Math.max(0, session.balance + Math.round(delta || 0));
     return { ok: true, snapshot: snapshot() };
   }
 
@@ -522,7 +570,9 @@ export function createServer(config = {}) {
       seat: p.seat,
       name: p.name,
       isAI: p.isAI,
+      aiType: aiKeyOf(p),
       isDealer: p.seat === dealer,
+      stats: { ...p.stats },
       turnState: p.turnState,
       numbers: p.hand.numbers.slice(),
       bustCard: p.hand.bustCard,
@@ -549,7 +599,7 @@ export function createServer(config = {}) {
       phase,
       you: seat,
       cashless,
-      round: { number: roundNumber, total: TOTAL_ROUNDS },
+      round: { number: roundNumber, total: totalRounds },
       dealer,
       shoe: shoe ? shoe.counts(inPlayCount()) : { remaining: DECK_SIZE, discard: 0, inPlay: 0, size: DECK_SIZE },
       actingSeat: acting,
@@ -561,6 +611,7 @@ export function createServer(config = {}) {
         !pendingChoice &&
         (forcedQueue.length > 0 || (players[currentSeat].isAI && players[currentSeat].turnState === "active")),
       yourBustRisk: shoe ? bustRiskFor(seat) : 0,
+      yourPeek: peeks[seat] || null, // "See the Future" card, only this seat sees it
       pendingChoice:
         pendingChoice && pendingChoice.seat === seat
           ? { type: pendingChoice.type, eligible: pendingChoice.eligible.map((s) => ({ seat: s, name: name(s) })) }
@@ -580,12 +631,19 @@ export function createServer(config = {}) {
       reveal: lastReveal,
       wallet: cashless ? null : { balance: session.balance },
       config: { entryTiers: ENTRY_TIERS, defaultEntry: DEFAULT_ENTRY, rakePct: HOUSE_RAKE, seats: n },
-      tournament,
+      // What this seat paid into the pot and can win
+      tournament: tournament
+        ? {
+            ...tournament,
+            youPayout: tournament.settled && tournament.winnerSeats.includes(seat) ? tournament.payout : 0,
+            youNet: (tournament.settled && tournament.winnerSeats.includes(seat) ? tournament.payout : 0) - tournament.entryFee,
+          }
+        : null,
     };
   }
 
   // Used by the room server to send updates and run the bots
   const snapshotFor = (seat = HUMAN_SEAT) => snapshot(seat);
 
-  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, abandonMatch, convertToAI, verify, resetBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
+  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, abandonMatch, convertToAI, verify, resetBalance, adjustBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
 }
