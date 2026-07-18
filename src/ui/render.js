@@ -379,35 +379,70 @@ function renderOnlineConnecting(o) {
   </div>`;
 }
 
+// The three AI types you can seat
+// The pill shows the type's name, the seat shows the table name, a second Rook is "Knight"
+const AI_PILLS = [
+  { ai: "reckless", label: "Rook" },
+  { ai: "cautious", label: "Nova" },
+  { ai: "holder", label: "Pip" },
+];
+
+function slotRow(s, L) {
+  const isYou = s.index === L.you;
+  if (s.type === "human") {
+    return `
+    <div class="mp-seat ${isYou ? "me" : ""} ${s.connected ? "" : "gone"}">
+      <span class="mp-seat-badge num">${s.index + 1}</span>
+      <span class="mp-seat-name">${s.name}${s.isHost ? '<span class="mp-host">HOST</span>' : ""}${isYou ? '<span class="mp-you">YOU</span>' : ""}</span>
+      <span class="mp-seat-dot ${s.connected ? "on" : ""}"></span>
+    </div>`;
+  }
+  const label =
+    s.type === "ai"
+      ? `<span class="mp-seat-name">${s.name}<span class="mp-ai-tag">house AI</span></span>`
+      : s.type === "open"
+        ? `<span class="mp-seat-name muted-name">Waiting for a player…</span>`
+        : `<span class="mp-seat-name muted-name">Seat off</span>`;
+  const pills = L.isHost
+    ? `<span class="slot-pills">
+        <button class="spill ${s.type === "open" ? "on" : ""}" data-action="mp-slot" data-index="${s.index}" data-t="open" title="A friend can take this seat">OPEN</button>
+        ${AI_PILLS.map((a) => `<button class="spill spill--ai ${s.type === "ai" && s.ai === a.ai ? "on" : ""}" data-action="mp-slot" data-index="${s.index}" data-t="ai-${a.ai}" title="Seat a ${a.label}-type AI">${a.label.toUpperCase()}</button>`).join("")}
+        <button class="spill spill--off ${s.type === "empty" ? "on" : ""}" data-action="mp-slot" data-index="${s.index}" data-t="empty" title="Nobody plays this seat">OFF</button>
+      </span>`
+    : "";
+  return `
+  <div class="mp-seat cfg ${s.type === "empty" ? "off" : ""}">
+    <span class="mp-seat-badge num">${s.index + 1}</span>
+    ${label}
+    ${pills}
+  </div>`;
+}
+
 function renderOnlineWaiting(o) {
   const L = o.lobby;
-  const seats = L.seats
-    .map(
-      (p) => `
-      <div class="mp-seat ${p.seat === L.you ? "me" : ""} ${p.connected ? "" : "gone"}">
-        <span class="mp-seat-badge num">${p.seat + 1}</span>
-        <span class="mp-seat-name">${p.name}${p.isHost ? '<span class="mp-host">HOST</span>' : ""}${p.seat === L.you ? '<span class="mp-you">YOU</span>' : ""}</span>
-        <span class="mp-seat-dot ${p.connected ? "on" : ""}"></span>
-      </div>`
-    )
-    .join("");
-  const empty = Math.max(0, 4 - L.seats.length);
-  const emptyRows = Array.from({ length: empty }, () => `<div class="mp-seat empty"><span class="mp-seat-badge num">·</span><span class="mp-seat-name">Open, house AI fills in</span></div>`).join("");
+  const rows = L.slots.map((s) => slotRow(s, L)).join("");
+  const sizes = L.isHost
+    ? `<div class="mp-sizerow"><span class="mp-label">Table size</span><span class="slot-pills">${[3, 4, 5, 6, 7, 8]
+        .map((n) => `<button class="spill ${n === L.size ? "on" : ""}" data-action="mp-size" data-size="${n}">${n}</button>`)
+        .join("")}</span></div>`
+    : "";
+  const canDeal = L.filled >= 2;
   const startBtn = L.isHost
-    ? `<button class="btn btn--play" data-action="mp-start">START GAME</button>`
+    ? `<button class="btn btn--play" data-action="mp-start" ${canDeal ? "" : "disabled"}>START GAME<span class="sub">${L.filled} of ${L.size} seats playing${canDeal ? "" : ", seat a friend or an AI"}</span></button>`
     : `<div class="wait-host">Waiting for the host to start…</div>`;
   return `
   <div class="screen screen--online">
-    <div class="mp-card">
+    <div class="mp-card mp-card--wide">
       <button class="icon-btn mp-close" data-action="mp-leave" aria-label="Leave room">←</button>
       <div class="mp-codehead">
         <span class="mp-label">Room code</span>
         <div class="mp-code num">${L.code}</div>
         <button class="link mp-copy" data-action="mp-copy">Copy invite link</button>
       </div>
+      ${sizes}
       <div class="mp-seats">
-        <div class="mp-label">At the table (${L.seats.length})</div>
-        ${seats}${emptyRows}
+        <div class="mp-label">At the table</div>
+        ${rows}
       </div>
       ${onlineError(o)}
       ${startBtn}

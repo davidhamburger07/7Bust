@@ -46,6 +46,7 @@ export function createNet(handlers = {}) {
     join: (code, name) => send({ type: "join", code, name }),
     rejoin: (code, id) => send({ type: "rejoin", code, id }),
     start: () => send({ type: "start" }),
+    config: (obj) => send({ type: "config", ...obj }),
     intent: (obj) => send({ type: "intent", ...obj }),
     leave: () => send({ type: "leave" }),
     close: () => {

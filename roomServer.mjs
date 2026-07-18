@@ -6,14 +6,17 @@ import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
 
 const AI_DELAY = 850;
-const MAX_SEATS = 6;
-const AI_POOL = [
-  { name: "Nova", ai: PERSONALITIES.cautious },
-  { name: "Rook", ai: PERSONALITIES.reckless },
-  { name: "Pip", ai: PERSONALITIES.holder },
-  { name: "Ace", ai: PERSONALITIES.cautious },
-  { name: "Duke", ai: PERSONALITIES.reckless },
-];
+const MIN_SIZE = 3;
+const MAX_SIZE = 8;
+const DEFAULT_SIZE = 4;
+
+// Each bot type has its own names, used in order
+// The first Rook type bot is "Rook", the second is "Knight"
+const AI_NAMES = {
+  reckless: ["Rook", "Knight", "Blitz", "Gambit", "Torch", "Rocket", "Viper", "Dash"],
+  cautious: ["Nova", "Sage", "Vega", "Orbit", "Quill", "Tally", "Prism", "Astra"],
+  holder: ["Pip", "Perch", "Pebble", "Moss", "Tuck", "Nest", "Drift", "Sloth"],
+};
 
 const rooms = new Map();
 
@@ -30,16 +33,27 @@ function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
 
+// The waiting room, one entry per seat in order
+// Bot seats show the name they'll get when the cards are dealt
 function lobbyView(room) {
-  return {
-    code: room.code,
-    status: room.status,
-    seats: room.players.map((p) => ({ seat: p.seat, name: p.name, connected: p.connected, isHost: p.id === room.hostId })),
-  };
+  const used = { reckless: 0, cautious: 0, holder: 0 };
+  const slots = [];
+  for (let i = 0; i < room.size; i++) {
+    const p = room.players.find((x) => x.slot === i);
+    if (p) {
+      slots.push({ index: i, type: "human", name: p.name, connected: p.connected, isHost: p.id === room.hostId });
+    } else {
+      const s = room.slots[i];
+      if (s.type === "ai") slots.push({ index: i, type: "ai", ai: s.ai, name: AI_NAMES[s.ai][used[s.ai]++ % AI_NAMES[s.ai].length] });
+      else slots.push({ index: i, type: s.type });
+    }
+  }
+  const filled = slots.filter((s) => s.type === "human" || s.type === "ai").length;
+  return { code: room.code, status: room.status, size: room.size, slots, filled };
 }
 function broadcastLobby(room) {
   const view = lobbyView(room);
-  room.players.forEach((p) => send(p.ws, { type: "lobby", you: p.seat, self: p.id, isHost: p.id === room.hostId, ...view }));
+  room.players.forEach((p) => send(p.ws, { type: "lobby", you: p.slot, self: p.id, isHost: p.id === room.hostId, ...view }));
 }
 function broadcastState(room) {
   if (!room.game) return;
@@ -68,13 +82,28 @@ function startAiLoop(room) {
   }, AI_DELAY);
 }
 
+// Deal what the host set up, off seats and open seats nobody took are skipped
+// The game numbers seats with no gaps, so each player's seat is worked out again here
 async function startGame(room) {
-  const size = Math.min(MAX_SEATS, Math.max(4, room.players.length));
-  const roster = room.players.map((p) => ({ name: p.name, isAI: false }));
-  let ai = 0;
-  while (roster.length < size) {
-    const a = AI_POOL[ai++ % AI_POOL.length];
-    roster.push({ name: a.name, isAI: true, ai: a.ai });
+  const roster = [];
+  const used = { reckless: 0, cautious: 0, holder: 0 };
+  for (let i = 0; i < room.size; i++) {
+    const p = room.players.find((x) => x.slot === i);
+    if (p) {
+      p.seat = roster.length;
+      roster.push({ name: p.name, isAI: false });
+    } else {
+      const s = room.slots[i];
+      if (s.type === "ai") {
+        const pool = AI_NAMES[s.ai];
+        roster.push({ name: pool[used[s.ai]++ % pool.length], isAI: true, ai: PERSONALITIES[s.ai] });
+      }
+    }
+  }
+  if (roster.length < 2) {
+    const host = room.players.find((x) => x.id === room.hostId);
+    if (host) send(host.ws, { type: "error", error: "Fill at least one more seat (a player or an AI) to deal.", soft: true });
+    return;
   }
   room.game = createGame({ cashless: true, players: roster });
   await room.game.startMatch();
@@ -92,8 +121,18 @@ async function handle(ws, msg) {
         code = newCode();
       } while (rooms.has(code));
       const pid = newId();
-      const room = { code, hostId: pid, players: [], game: null, status: "lobby", aiTimer: null };
-      room.players.push({ id: pid, seat: 0, name: cleanName(msg.name), ws, connected: true });
+      const room = {
+        code,
+        hostId: pid,
+        players: [],
+        size: DEFAULT_SIZE,
+        // Seat 0 is the host's, the rest start open for friends and the host can change them
+        slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
+        game: null,
+        status: "lobby",
+        aiTimer: null,
+      };
+      room.players.push({ id: pid, slot: 0, seat: 0, name: cleanName(msg.name), ws, connected: true });
       rooms.set(code, room);
       ws.roomCode = code;
       ws.playerId = pid;
@@ -104,12 +143,45 @@ async function handle(ws, msg) {
       const room = rooms.get(String(msg.code || "").toUpperCase());
       if (!room) return send(ws, { type: "error", error: "Room not found" });
       if (room.status !== "lobby") return send(ws, { type: "error", error: "That game already started" });
-      if (room.players.length >= MAX_SEATS) return send(ws, { type: "error", error: "Room is full" });
+      // Take the lowest open seat nobody is sitting in
+      let slot = -1;
+      for (let i = 0; i < room.size; i++) {
+        if (room.slots[i].type === "open" && !room.players.some((x) => x.slot === i)) {
+          slot = i;
+          break;
+        }
+      }
+      if (slot < 0) return send(ws, { type: "error", error: "Room is full" });
       const pid = newId();
-      const seat = room.players.length;
-      room.players.push({ id: pid, seat, name: cleanName(msg.name), ws, connected: true });
+      room.players.push({ id: pid, slot, seat: slot, name: cleanName(msg.name), ws, connected: true });
       ws.roomCode = room.code;
       ws.playerId = pid;
+      broadcastLobby(room);
+      break;
+    }
+    case "config": {
+      // Table setup, only the host and only in the waiting room
+      const room = rooms.get(ws.roomCode);
+      if (!room || ws.playerId !== room.hostId || room.status !== "lobby") return;
+      if (msg.size != null) {
+        const n = Math.round(Number(msg.size));
+        if (!(n >= MIN_SIZE && n <= MAX_SIZE)) return;
+        const highest = Math.max(...room.players.map((x) => x.slot));
+        if (n <= highest) return send(ws, { type: "error", error: "Someone is sitting in one of those chairs.", soft: true });
+        room.size = n;
+      }
+      if (msg.slot) {
+        const i = Math.round(Number(msg.slot.index));
+        const t = msg.slot.type;
+        if (!(i >= 1 && i < room.size)) return;
+        if (room.players.some((x) => x.slot === i)) return send(ws, { type: "error", error: "That chair is taken.", soft: true });
+        if (t === "ai") {
+          if (!AI_NAMES[msg.slot.ai]) return;
+          room.slots[i] = { type: "ai", ai: msg.slot.ai };
+        } else if (t === "open" || t === "empty") {
+          room.slots[i] = { type: t, ai: null };
+        } else return;
+      }
       broadcastLobby(room);
       break;
     }
@@ -152,12 +224,11 @@ async function handle(ws, msg) {
         return;
       }
       if (room.hostId === p.id) room.hostId = room.players[0].id; // Pass host on to the next player
-      if (room.status === "lobby") {
-        room.players.forEach((q, i) => (q.seat = i)); // Close up the seats before the deal
-      } else if (room.game) {
+      if (room.status !== "lobby" && room.game) {
         await room.game.convertToAI(p.seat); // A bot plays their hand from here
         broadcastState(room);
       }
+      // In the lobby their seat just opens up for the next player
       broadcastLobby(room);
       break;
     }

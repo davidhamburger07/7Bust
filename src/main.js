@@ -200,7 +200,7 @@ function ensureNet() {
       reconnectTries = 0;
       view.online.self = msg.self;
       view.online.error = null;
-      view.online.lobby = { code: msg.code, status: msg.status, seats: msg.seats, you: msg.you, self: msg.self, isHost: msg.isHost };
+      view.online.lobby = { code: msg.code, status: msg.status, size: msg.size, slots: msg.slots, filled: msg.filled, you: msg.you, self: msg.self, isHost: msg.isHost };
       persistNet(msg.code, msg.self, view.online.name);
       if (msg.status === "playing") {
         if (view.online.screen !== "playing" && view.snapshot && view.snapshot.cashless) view.online.screen = "playing";
@@ -221,7 +221,12 @@ function ensureNet() {
     onError(msg) {
       if (!view.online) return;
       const err = msg.error || "Something went wrong.";
-      if (/not found|full|already started|seat/i.test(err)) {
+      if (msg.soft) {
+        toast(err);
+        return;
+      }
+      const fatal = ["Room not found", "That game already started", "Room is full", "Seat not found"];
+      if (fatal.includes(err)) {
         clearNet();
         view.online.lobby = null;
         if (view.online.screen === "connecting" || view.online.screen === "playing") view.online.screen = view.online.hadRoom ? "menu" : "join";
@@ -297,6 +302,17 @@ function mpJoin() {
 function mpStart() {
   sfx("ding");
   net && net.start();
+}
+// Seat count and each seat set to open, a bot or off
+function mpSize(n) {
+  sfx("click");
+  net && net.config({ size: n });
+}
+function mpSlot(index, t) {
+  sfx("click");
+  if (!net) return;
+  if (t.startsWith("ai-")) net.config({ slot: { index, type: "ai", ai: t.slice(3) } });
+  else net.config({ slot: { index, type: t } });
 }
 async function mpLeave() {
   if (net) {
@@ -412,6 +428,8 @@ root.addEventListener("click", (e) => {
   if (el.disabled) return;
   if (el.dataset.action === "target") return target(Number(el.dataset.seat));
   if (el.dataset.action === "entry") return setEntry(Number(el.dataset.fee));
+  if (el.dataset.action === "mp-size") return mpSize(Number(el.dataset.size));
+  if (el.dataset.action === "mp-slot") return mpSlot(Number(el.dataset.index), el.dataset.t);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();
 });
