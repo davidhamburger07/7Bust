@@ -1826,6 +1826,101 @@
   padding: 4px 0;
 }
 
+/* Seven full size seats wrap to two rows and push your hand off the screen */
+/* With five or more players the whole table shrinks so it all fits */
+@media (min-width: 900px) {
+  .crowded .felt {
+    gap: var(--s2);
+    padding-bottom: 40px;
+  }
+  .crowded .opponents {
+    gap: 8px;
+  }
+  .crowded .seat {
+    min-width: 122px;
+    max-width: 142px;
+    padding: 6px 10px 8px;
+    gap: 4px;
+  }
+  .crowded .seat-name {
+    font-size: 13px;
+  }
+  .crowded .badge {
+    font-size: 9px;
+    padding: 1px 5px;
+  }
+  .crowded .seat-hand {
+    min-height: 34px;
+    gap: 2px;
+  }
+  .crowded .card.card--mini {
+    width: 24px;
+    height: 34px;
+    border-radius: 4px;
+  }
+  .crowded .card.card--mini .face {
+    font-size: 13px;
+  }
+  .crowded .modcard.modcard--mini {
+    height: 34px;
+    min-width: 22px;
+    font-size: 11px;
+  }
+  .crowded .seat-hand-score {
+    font-size: 16px;
+  }
+  .crowded .seat-total {
+    font-size: 10px;
+  }
+  .crowded .sc-dot {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  .crowded .dealer-zone {
+    gap: var(--s3);
+  }
+  .crowded .shoe-pile {
+    width: 54px;
+    height: 76px;
+  }
+  .crowded .shoe-labels {
+    font-size: 12px;
+  }
+  .crowded .pot-chip {
+    font-size: 12px;
+    padding: 5px 13px;
+  }
+  .crowded .you-seat {
+    padding: var(--s3) var(--s4);
+    gap: 5px;
+  }
+  .crowded .you-name {
+    font-size: 19px;
+  }
+  .crowded .you-hand {
+    min-height: 66px;
+    max-height: 150px;
+  }
+  .crowded .you-hand .card {
+    width: 50px;
+    height: 70px;
+  }
+  .crowded .you-hand .card .face {
+    font-size: 26px;
+  }
+  .crowded .modcard {
+    height: 70px;
+    min-width: 34px;
+    font-size: 15px;
+  }
+  .crowded .pip {
+    height: 7px;
+  }
+  .crowded .arc-t {
+    font-size: 18px;
+  }
+}
+
 @media (max-width: 899px) {
   /* On phones the radio is one button in the top right, clear of every control */
   /* In a match it drops just below the match bar */

@@ -272,7 +272,7 @@ export function renderMatch(view) {
   const nextSeat = upNext(s);
   const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat, nextSeat)).join("");
   return `
-  <div class="screen screen--match">
+  <div class="screen screen--match${s.players.length >= 5 ? " crowded" : ""}">
     <div class="matchbar">
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
