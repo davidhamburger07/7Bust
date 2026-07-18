@@ -13,6 +13,9 @@ const MAX_SIZE = 8;
 const DEFAULT_SIZE = 4;
 const ENTRY_OPTIONS = [0, 50, 100, 250]; // 0 is a friendly game with no chips
 const CHAT_MAX = 30;
+const DROP_AFTER_MS = 60000; // After a minute offline the drop rule kicks in
+const PAUSE_MS = 120000;
+const PAUSE_VOTE_MS = 25000;
 
 // Each bot type has its own names, used in order
 // The first Rook type bot is "Rook", the second is "Knight"
@@ -80,10 +83,13 @@ async function detachLocal(ws) {
 function rosterToPlayers(roster) {
   return roster.map((r) => ({ name: r.name, isAI: r.isAI, ai: r.isAI ? PERSONALITIES[r.aiKey] : null }));
 }
+function gameConfig(room) {
+  return { cashless: true, entryFee: room.entry || 0, rounds: room.rounds || 9 };
+}
 async function gameFor(room) {
   // Rebuild with the table settings too, rounds and buy-in aren't in the saved state
   // Rebuilding with defaults would quietly change the match
-  const g = createGame({ cashless: true, players: rosterToPlayers(room.roster), entryFee: room.entry || 0, rounds: room.rounds || 9 });
+  const g = createGame({ ...gameConfig(room), players: rosterToPlayers(room.roster) });
   await g.restore(room.game);
   return g;
 }
@@ -94,6 +100,10 @@ function syncGame(room, g) {
   room.phase = s.phase;
   room.auto = s.autoStep;
 }
+
+const seatsOf = (p) => p.seats || [p.seat];
+const connectedPlayers = (room) => room.players.filter((x) => x.connected);
+const handsOf = (p) => (p.hands == null ? 1 : p.hands);
 
 // The waiting room, one entry per seat in order
 // Bot seats show the name they'll get when the cards are dealt
@@ -111,7 +121,48 @@ function lobbyView(room) {
     }
   }
   const filled = slots.filter((s) => s.type === "human" || s.type === "ai").length;
-  return { code: room.code, status: room.status, size: room.size, slots, filled, entry: room.entry || 0, rounds: room.rounds || 9 };
+  return {
+    code: room.code,
+    status: room.status,
+    size: room.size,
+    slots,
+    filled,
+    entry: room.entry || 0,
+    rounds: room.rounds || 9,
+    multiHand: !!room.multiHand,
+    dropRule: room.dropRule || "ai",
+  };
+}
+
+function aiSlotCount(room) {
+  let n = 0;
+  for (let i = 0; i < room.size; i++) {
+    if (room.slots[i].type === "ai" && !room.players.some((x) => x.slot === i)) n++;
+  }
+  return n;
+}
+
+// Buy-in phase, how many more hands this player can take
+function maxHandsFor(room, player) {
+  const others = room.players.filter((x) => x.id !== player.id).reduce((a, x) => a + handsOf(x), 0);
+  return Math.max(1, Math.min(4, room.size - others - aiSlotCount(room)));
+}
+
+function buyinView(room) {
+  if (room.status !== "buyin") return null;
+  return {
+    fee: room.entry || 0,
+    picks: room.players.map((p) => ({ name: p.name, hands: p.hands, connected: p.connected })),
+    maxByPlayer: Object.fromEntries(room.players.map((p) => [p.id, maxHandsFor(room, p)])),
+  };
+}
+
+function pauseView(room) {
+  const v = room.pauseVote;
+  return {
+    until: room.pausedUntil || 0,
+    vote: v ? { name: v.name, yes: v.yes.length, no: v.no.length, needed: Math.floor(connectedPlayers(room).length / 2) + 1, expiresAt: v.expiresAt } : null,
+  };
 }
 
 // Everything a server needs to update its sockets, built once by the server that made the change
@@ -119,16 +170,33 @@ async function payloadFor(room, { withLobby = false, game = null } = {}) {
   const payload = {
     status: room.status,
     hostId: room.hostId,
-    players: room.players.map((x) => ({ id: x.id, slot: x.slot, seat: x.seat })),
+    players: room.players.map((x) => ({ id: x.id, slot: x.slot, seats: seatsOf(x), pauseUsed: !!x.pauseUsed })),
     lobby: lobbyView(room),
+    buyin: buyinView(room),
+    pause: pauseView(room),
     withLobby,
     chat: room.chat || [],
     snaps: null,
   };
   if (room.status === "playing" && room.game) {
     const g = game || (await gameFor(room));
+    const acting = g.snapshotFor(0).actingSeat;
     payload.snaps = {};
-    for (const pl of room.players) payload.snaps[pl.seat] = g.snapshotFor(pl.seat);
+    for (const pl of room.players) {
+      const mySeats = seatsOf(pl);
+      const seat = mySeats.includes(acting) ? acting : mySeats[0];
+      const snap = g.snapshotFor(seat);
+      // How many hands this player has, so the game can settle their whole wallet
+      snap.yourHands = mySeats.length;
+      snap.yourSeats = mySeats;
+      if (snap.tournament) {
+        snap.yourTotalFee = snap.tournament.entryFee * mySeats.length;
+        snap.yourTotalPayout = snap.tournament.settled
+          ? mySeats.reduce((a, s) => a + (snap.tournament.winnerSeats.includes(s) ? snap.tournament.payout : 0), 0)
+          : 0;
+      }
+      payload.snaps[pl.id] = snap;
+    }
   }
   return payload;
 }
@@ -146,11 +214,21 @@ function deliver(code, payload) {
     if (!reg) continue;
     const me = payload.players.find((p) => p.id === reg.playerId);
     if (!me) continue;
-    if (payload.status === "lobby" || payload.withLobby) {
-      send(ws, { type: "lobby", you: me.slot, self: me.id, isHost: me.id === payload.hostId, ...payload.lobby });
+    if (payload.status === "lobby" || payload.status === "buyin" || payload.withLobby) {
+      send(ws, {
+        type: "lobby",
+        you: me.slot,
+        self: me.id,
+        isHost: me.id === payload.hostId,
+        pauseUsed: me.pauseUsed,
+        maxHands: payload.buyin ? payload.buyin.maxByPlayer[me.id] : null,
+        buyin: payload.buyin,
+        pause: payload.pause,
+        ...payload.lobby,
+      });
     }
-    if (payload.status === "playing" && payload.snaps && payload.snaps[me.seat] != null) {
-      send(ws, { type: "state", snapshot: payload.snaps[me.seat] });
+    if (payload.status === "playing" && payload.snaps && payload.snaps[me.id]) {
+      send(ws, { type: "state", snapshot: payload.snaps[me.id], pause: payload.pause, pauseUsed: me.pauseUsed });
     }
     send(ws, { type: "chat", list: payload.chat || [] });
   }
@@ -181,8 +259,86 @@ async function emitAiChatter(room, g) {
   }
 }
 
+// Each player's hands go in seat order, extra hands are named like "Alice 2", then the bots
+// Off seats and open seats nobody took don't play
+async function deal(room, hostWs) {
+  const roster = [];
+  const used = { reckless: 0, cautious: 0, holder: 0 };
+  for (const p of [...room.players].sort((a, b) => a.slot - b.slot)) {
+    const hands = room.multiHand ? handsOf(p) : 1;
+    p.seats = [];
+    for (let h = 0; h < hands; h++) {
+      p.seats.push(roster.length);
+      roster.push({ name: h === 0 ? p.name : `${p.name} ${h + 1}`, isAI: false, aiKey: null });
+    }
+    p.seat = p.seats[0];
+  }
+  for (let i = 0; i < room.size && roster.length < MAX_SIZE; i++) {
+    const s = room.slots[i];
+    if (s.type === "ai" && !room.players.some((x) => x.slot === i)) {
+      const pool = AI_NAMES[s.ai];
+      roster.push({ name: pool[used[s.ai]++ % pool.length], isAI: true, aiKey: s.ai });
+    }
+  }
+  if (roster.length < 2) {
+    if (hostWs) send(hostWs, { type: "error", error: "Fill at least one more seat (a player or an AI) to deal.", soft: true });
+    room.status = "lobby";
+    return false;
+  }
+  room.roster = roster;
+  const g = createGame({ ...gameConfig(room), players: rosterToPlayers(roster) });
+  await g.startMatch();
+  syncGame(room, g);
+  room.status = "playing";
+  room.reactSig = "";
+  room.pausedUntil = 0;
+  room.pauseVote = null;
+  room.lastStepAt = Date.now();
+  await saveAndPublish(room, { withLobby: true, game: g });
+  return true;
+}
+
+// Removes a player who left, or was offline for a minute
+async function removePlayer(room, playerId, { viaRule = false } = {}) {
+  const idx = room.players.findIndex((x) => x.id === playerId);
+  if (idx < 0) return false;
+  const p = room.players.splice(idx, 1)[0];
+  if (room.players.length === 0) {
+    await store.del(room.code);
+    return true;
+  }
+  if (room.hostId === p.id) room.hostId = room.players[0].id; // Pass host on to the next player
+  if (room.status === "playing" && room.game) {
+    const g = await gameFor(room);
+    const useAI = !viaRule || (room.dropRule || "ai") === "ai";
+    for (const seat of seatsOf(p)) {
+      if (useAI) {
+        await g.convertToAI(seat); // A bot plays their hand from here
+        room.roster[seat] = { name: room.roster[seat].name, isAI: true, aiKey: "cautious" };
+      } else {
+        await g.retireSeat(seat); // The seat banks and sits out the rest of the match
+      }
+    }
+    syncGame(room, g);
+    await store.set(room.code, room);
+    await store.publish(room.code, await payloadFor(room, { withLobby: true, game: g }));
+  } else if (room.status === "buyin") {
+    // Once everyone still here has picked, deal
+    if (room.players.every((x) => x.hands != null || !x.connected)) {
+      room.players.forEach((x) => (x.hands = handsOf(x)));
+      await deal(room, null);
+    } else {
+      await saveAndPublish(room, { withLobby: true });
+    }
+  } else {
+    // In the lobby their seat just opens up for the next player
+    await saveAndPublish(room, { withLobby: true });
+  }
+  return true;
+}
+
 // Bot pacing. Every server with players in the room ticks
-// The lock and the shared last step time make the table move once per beat
+// The lock moves the table once per beat. Also drops offline players and ends pause votes
 function ensureTicker(code) {
   if (tickers.has(code)) return;
   const t = { busy: false, timer: null };
@@ -192,21 +348,43 @@ function ensureTicker(code) {
     try {
       const peek = await store.get(code);
       if (!peek) return stopTicker(code);
-      if (peek.status !== "playing" || !peek.auto) return;
-      if (Date.now() - (peek.lastStepAt || 0) < AI_DELAY - 80) return;
+      const now = Date.now();
+      const paused = (peek.pausedUntil || 0) > now;
+      const voteExpired = peek.pauseVote && peek.pauseVote.expiresAt < now;
+      const dropDue = peek.players.some((p) => !p.connected && p.disconnectedAt && now - p.disconnectedAt > DROP_AFTER_MS);
+      const stepDue = peek.status === "playing" && peek.auto && !paused && now - (peek.lastStepAt || 0) >= AI_DELAY - 80;
+      if (!voteExpired && !dropDue && !stepDue) return;
       const token = await store.lock(code, { retries: 0 });
       if (!token) return;
       try {
         const room = await store.get(code);
-        if (!room || room.status !== "playing" || !room.auto) return;
-        if (Date.now() - (room.lastStepAt || 0) < AI_DELAY - 80) return;
-        const g = await gameFor(room);
-        await g.step();
-        syncGame(room, g);
-        await emitAiChatter(room, g);
-        room.lastStepAt = Date.now();
-        await store.set(code, room);
-        await store.publish(code, await payloadFor(room, { game: g }));
+        if (!room) return;
+        let dirty = false;
+        if (room.pauseVote && room.pauseVote.expiresAt < Date.now()) {
+          pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `Pause vote by ${room.pauseVote.name} failed.`, ai: true });
+          room.pauseVote = null;
+          dirty = true;
+        }
+        for (const p of [...room.players]) {
+          if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt > DROP_AFTER_MS) {
+            pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `${p.name} was dropped after a minute offline.`, ai: true });
+            const gone = await removePlayer(room, p.id, { viaRule: true });
+            if (gone && !(await store.get(code))) return; // The room was deleted
+            dirty = false; // Removing the player already saved and sent it
+          }
+        }
+        const stillPaused = (room.pausedUntil || 0) > Date.now();
+        if (room.status === "playing" && room.auto && !stillPaused && Date.now() - (room.lastStepAt || 0) >= AI_DELAY - 80) {
+          const g = await gameFor(room);
+          await g.step();
+          syncGame(room, g);
+          await emitAiChatter(room, g);
+          room.lastStepAt = Date.now();
+          await store.set(code, room);
+          await store.publish(code, await payloadFor(room, { game: g }));
+        } else if (dirty) {
+          await saveAndPublish(room);
+        }
       } finally {
         await store.unlock(code, token);
       }
@@ -255,15 +433,19 @@ async function handle(ws, msg) {
         status: "lobby",
         phase: "lobby",
         size: DEFAULT_SIZE,
-        entry: 0, // Buy-in per player, 0 is a friendly game. The host sets it
+        entry: 0, // Buy-in per hand, 0 is a friendly game. The host sets it
         rounds: 9, // Match length, the host sets it
+        multiHand: false, // Host setting, players can buy more than one hand
+        dropRule: "ai", // After a minute offline, "ai" lets a bot play on and "kick" retires the seat
         // Seat 0 is the host's, the rest start open for friends and the host can change them
         slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
-        players: [{ id: pid, slot: 0, seat: 0, name: cleanName(msg.name), connected: true }],
+        players: [{ id: pid, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null }],
         chat: [],
         roster: null,
         game: null,
         auto: false,
+        pausedUntil: 0,
+        pauseVote: null,
         lastStepAt: 0,
       };
       await store.set(code, room);
@@ -288,7 +470,7 @@ async function handle(ws, msg) {
         }
         if (slot < 0) return send(ws, { type: "error", error: "Room is full" });
         const pid = newId();
-        room.players.push({ id: pid, slot, seat: slot, name: cleanName(msg.name), connected: true });
+        room.players.push({ id: pid, slot, seat: slot, seats: [slot], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null });
         await store.set(code, room);
         await attachLocal(ws, code, pid);
         await store.publish(code, await payloadFor(room));
@@ -306,6 +488,7 @@ async function handle(ws, msg) {
         const p = room.players.find((x) => x.id === msg.id);
         if (!p) return send(ws, { type: "error", error: "Seat not found" });
         p.connected = true;
+        p.disconnectedAt = null;
         await store.set(code, room);
         await attachLocal(ws, code, p.id);
         await store.publish(code, await payloadFor(room, { withLobby: true }));
@@ -347,6 +530,8 @@ async function handle(ws, msg) {
           if (!(r >= 1 && r <= 9)) return;
           room.rounds = r;
         }
+        if (msg.multiHand != null) room.multiHand = !!msg.multiHand;
+        if (msg.dropRule === "ai" || msg.dropRule === "kick") room.dropRule = msg.dropRule;
         await saveAndPublish(room);
       });
       break;
@@ -356,34 +541,120 @@ async function handle(ws, msg) {
         if (ws.playerId !== room.hostId) return;
         // Start from the waiting room, or deal a new match once the last one is over
         if (!(room.status === "lobby" || room.phase === "match_end")) return;
-        // Deal what the host set up, players in their seats and bots with their names
-        // Off seats and open seats nobody took are skipped
-        const roster = [];
-        const used = { reckless: 0, cautious: 0, holder: 0 };
-        for (let i = 0; i < room.size; i++) {
-          const p = room.players.find((x) => x.slot === i);
-          if (p) {
-            p.seat = roster.length;
-            roster.push({ name: p.name, isAI: false, aiKey: null });
-          } else {
-            const s = room.slots[i];
-            if (s.type === "ai") {
-              const pool = AI_NAMES[s.ai];
-              roster.push({ name: pool[used[s.ai]++ % pool.length], isAI: true, aiKey: s.ai });
-            }
+        if (room.multiHand) {
+          // Let every player pick how many hands first
+          room.status = "buyin";
+          room.players.forEach((p) => (p.hands = null));
+          await saveAndPublish(room, { withLobby: true });
+        } else {
+          await deal(room, ws);
+        }
+      });
+      break;
+    }
+    case "hands": {
+      // Buy-in phase, this player takes some hands and pays a buy-in for each
+      await withRoom(ws, async (room) => {
+        if (room.status !== "buyin") return;
+        const p = room.players.find((x) => x.id === ws.playerId);
+        if (!p) return;
+        const n = Math.round(Number(msg.count));
+        if (!(n >= 1)) return;
+        p.hands = Math.min(n, maxHandsFor(room, p));
+        if (room.players.every((x) => x.hands != null || !x.connected)) {
+          room.players.forEach((x) => (x.hands = handsOf(x)));
+          await deal(room, null);
+        } else {
+          await saveAndPublish(room, { withLobby: true });
+        }
+      });
+      break;
+    }
+    case "dealnow": {
+      // Host shortcut in the buy-in phase, anyone who hasn't picked plays one hand
+      await withRoom(ws, async (room) => {
+        if (room.status !== "buyin" || ws.playerId !== room.hostId) return;
+        room.players.forEach((x) => (x.hands = handsOf(x)));
+        await deal(room, ws);
+      });
+      break;
+    }
+    case "intent": {
+      await withRoom(ws, async (room) => {
+        if (room.status !== "playing" || !room.game) return;
+        if ((room.pausedUntil || 0) > Date.now()) return;
+        const p = room.players.find((x) => x.id === ws.playerId);
+        if (!p) return;
+        const g = await gameFor(room);
+        // With several hands, play whichever of yours has the turn
+        const mySeats = seatsOf(p);
+        const acting = g.snapshotFor(0).actingSeat;
+        const seat = mySeats.includes(acting) ? acting : mySeats[0];
+        try {
+          if (msg.intent === "hit") await g.hit(seat);
+          else if (msg.intent === "stay") await g.stay(seat);
+          else if (msg.intent === "stop") await g.stop(seat);
+          else if (msg.intent === "resolveChoice") await g.resolveChoice({ targetSeat: msg.targetSeat, actor: seat });
+          else if (msg.intent === "next") {
+            if (g.snapshotFor(0).phase === "round_end") await g.nextRound();
           }
+        } catch (e) {
+          // Not allowed, ignore it and send the state again
         }
-        if (roster.length < 2) {
-          return send(ws, { type: "error", error: "Fill at least one more seat (a player or an AI) to deal.", soft: true });
-        }
-        room.roster = roster;
-        const g = createGame({ cashless: true, players: rosterToPlayers(roster), entryFee: room.entry || 0, rounds: room.rounds || 9 });
-        await g.startMatch();
         syncGame(room, g);
-        room.status = "playing";
-        room.reactSig = "";
-        room.lastStepAt = Date.now();
-        await saveAndPublish(room, { withLobby: true, game: g });
+        await emitAiChatter(room, g);
+        await saveAndPublish(room, { game: g });
+      });
+      break;
+    }
+    case "pause": {
+      // Each player gets one two minute pause, if most of the table votes yes
+      await withRoom(ws, async (room) => {
+        if (room.status !== "playing" || room.pauseVote || (room.pausedUntil || 0) > Date.now()) return;
+        const p = room.players.find((x) => x.id === ws.playerId);
+        if (!p || p.pauseUsed) return send(ws, { type: "error", error: "You've already used your pause.", soft: true });
+        const humans = connectedPlayers(room).length;
+        if (humans <= 1) {
+          p.pauseUsed = true;
+          room.pausedUntil = Date.now() + PAUSE_MS;
+          pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `${p.name} paused the game (2 min).`, ai: true });
+        } else {
+          room.pauseVote = { id: p.id, name: p.name, yes: [p.id], no: [], expiresAt: Date.now() + PAUSE_VOTE_MS };
+          pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `${p.name} asks for a 2-minute pause, vote now.`, ai: true });
+        }
+        await saveAndPublish(room);
+      });
+      break;
+    }
+    case "pvote": {
+      await withRoom(ws, async (room) => {
+        const v = room.pauseVote;
+        if (!v || v.expiresAt < Date.now()) return;
+        const p = room.players.find((x) => x.id === ws.playerId);
+        if (!p || v.yes.includes(p.id) || v.no.includes(p.id)) return;
+        (msg.agree ? v.yes : v.no).push(p.id);
+        const needed = Math.floor(connectedPlayers(room).length / 2) + 1;
+        if (v.yes.length >= needed) {
+          const initiator = room.players.find((x) => x.id === v.id);
+          if (initiator) initiator.pauseUsed = true;
+          room.pausedUntil = Date.now() + PAUSE_MS;
+          room.pauseVote = null;
+          pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `Pause granted, back in 2 minutes.`, ai: true });
+        } else if (v.no.length >= needed) {
+          room.pauseVote = null;
+          pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `Pause vote failed.`, ai: true });
+        }
+        await saveAndPublish(room);
+      });
+      break;
+    }
+    case "resume": {
+      await withRoom(ws, async (room) => {
+        if (!((room.pausedUntil || 0) > Date.now())) return;
+        if (ws.playerId !== room.hostId && !room.players.some((x) => x.id === ws.playerId && x.pauseUsed)) return;
+        room.pausedUntil = 0;
+        pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: "Game resumed.", ai: true });
+        await saveAndPublish(room);
       });
       break;
     }
@@ -407,37 +678,15 @@ async function handle(ws, msg) {
       const now = Date.now();
       if (ws.lastEmoteAt && now - ws.lastEmoteAt < 1200) return;
       if (!PLAYER_EMOTES.includes(msg.emoji)) return;
-      ws.lastEmoteAt = now;
       const code = ws.roomCode;
       if (!code) return;
+      ws.lastEmoteAt = now;
       const room = await store.get(code);
       if (!room || room.status !== "playing") return;
       const p = room.players.find((x) => x.id === ws.playerId);
       if (!p) return;
-      await store.publish(code, { kind: "emote", seat: p.seat, emoji: msg.emoji });
-      break;
-    }
-    case "intent": {
-      await withRoom(ws, async (room) => {
-        if (room.status !== "playing" || !room.game) return;
-        const p = room.players.find((x) => x.id === ws.playerId);
-        if (!p) return;
-        const g = await gameFor(room);
-        try {
-          if (msg.intent === "hit") await g.hit(p.seat);
-          else if (msg.intent === "stay") await g.stay(p.seat);
-          else if (msg.intent === "stop") await g.stop(p.seat);
-          else if (msg.intent === "resolveChoice") await g.resolveChoice({ targetSeat: msg.targetSeat, actor: p.seat });
-          else if (msg.intent === "next") {
-            if (g.snapshotFor(0).phase === "round_end") await g.nextRound();
-          }
-        } catch (e) {
-          // Not allowed, ignore it and send the state again
-        }
-        syncGame(room, g);
-        await emitAiChatter(room, g);
-        await saveAndPublish(room, { game: g });
-      });
+      const acting = room.game ? seatsOf(p)[0] : p.seat;
+      await store.publish(code, { kind: "emote", seat: acting, emoji: msg.emoji });
       break;
     }
     case "leave": {
@@ -449,25 +698,7 @@ async function handle(ws, msg) {
         const room = await store.get(code);
         const reg = await detachLocal(ws);
         if (!room || !reg) return;
-        const idx = room.players.findIndex((x) => x.id === reg.playerId);
-        if (idx < 0) return;
-        const p = room.players.splice(idx, 1)[0];
-        if (room.players.length === 0) {
-          await store.del(code);
-          return;
-        }
-        if (room.hostId === p.id) room.hostId = room.players[0].id; // Pass host on to the next player
-        if (room.status === "playing" && room.game) {
-          const g = await gameFor(room);
-          await g.convertToAI(p.seat); // A bot plays their hand from here
-          room.roster[p.seat] = { name: p.name, isAI: true, aiKey: "cautious" }; // Saved in the roster so it lasts after a rebuild
-          syncGame(room, g);
-          await store.set(code, room);
-          await store.publish(code, await payloadFor(room, { withLobby: true, game: g }));
-        } else {
-          // In the lobby their seat just opens up for the next player
-          await saveAndPublish(room, { withLobby: true });
-        }
+        await removePlayer(room, reg.playerId, { viaRule: false });
       } finally {
         if (token) await store.unlock(code, token);
       }
@@ -488,7 +719,8 @@ async function onSocketClose(ws) {
     const p = room.players.find((x) => x.id === reg.playerId);
     if (!p) return;
     p.connected = false;
-    await saveAndPublish(room, { withLobby: room.status === "lobby" });
+    p.disconnectedAt = Date.now(); // The drop rule kicks in a minute from now
+    await saveAndPublish(room, { withLobby: room.status !== "playing" });
   } finally {
     if (token) await store.unlock(reg.code, token);
   }

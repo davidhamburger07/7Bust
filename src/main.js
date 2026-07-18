@@ -1,7 +1,7 @@
 // Starts the game, paces the bot turns, saves the game and plays the big announcements
 
 import { createServer } from "./server/mockServer.js";
-import { renderApp } from "./ui/render.js";
+import { renderApp, chatLines } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice } from "./ui/announce.js";
 import { initRadio, startRadio } from "./ui/radio.js";
 import { flyCard } from "./ui/fly.js";
@@ -20,7 +20,24 @@ const LEDGER_KEY = "7bust:mpledger"; // Each online match's buy-in and payout on
 const HISTORY_KEY = "7bust:history";
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
-const view = { snapshot: null, lastEvent: null, toast: null, entryFee: null, mode: "solo", online: null, chat: [], chatDraft: "", chatFocus: false, showHistory: false, soloBalance: 0 };
+const TOS_KEY = "7bust:tos:v1";
+const view = {
+  snapshot: null,
+  lastEvent: null,
+  toast: null,
+  entryFee: null,
+  mode: "solo",
+  online: null,
+  chat: [],
+  chatDraft: "",
+  chatFocus: false,
+  showHistory: false,
+  soloBalance: 0,
+  clockText: "00:00",
+  pause: null,
+  pauseUsed: false,
+  showTos: false,
+};
 let net = null;
 let aiTimer = null;
 let audioReady = false;
@@ -56,26 +73,36 @@ function render() {
       ? !!(view.online && view.online.screen === "playing" && view.snapshot.cashless)
       : view.snapshot.phase !== "lobby");
   document.body.classList.toggle("scr-match", matchVisible);
+  // The chat panel survives redraws, it's taken out, the page swapped, then put back
+  // So typing, focus and the phone keyboard are never interrupted
+  const liveChat = document.getElementById("chatpanel");
+  if (liveChat) liveChat.remove();
   root.innerHTML = renderApp(view);
+  const freshChat = document.getElementById("chatpanel");
+  if (liveChat && freshChat) freshChat.replaceWith(liveChat);
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
-  const chatList = document.getElementById("chatlist");
-  if (chatList) chatList.scrollTop = chatList.scrollHeight;
-  // A full redraw takes focus from the chat box, so give it back
-  if (view.chatFocus) {
-    const ci = document.getElementById("chat-in");
-    if (ci) {
-      ci.focus();
-      const end = ci.value.length;
-      ci.setSelectionRange(end, end);
-    }
+  if (!liveChat) {
+    const chatList = document.getElementById("chatlist");
+    if (chatList) chatList.scrollTop = chatList.scrollHeight;
   }
+  tickClock(); // Show the right time straight away, no 0:00 flicker
 }
 
 function tickClock() {
-  const t = fmt(Date.now() - bootAt);
-  document.querySelectorAll("[data-clock]").forEach((el) => (el.textContent = t));
+  view.clockText = fmt(Date.now() - bootAt);
+  document.querySelectorAll("[data-clock]").forEach((el) => (el.textContent = view.clockText));
+  const left = view.pause && view.pause.until > Date.now() ? Math.ceil((view.pause.until - Date.now()) / 1000) : 0;
+  document.querySelectorAll("[data-pauseleft]").forEach((el) => {
+    el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  });
+  if (view.pause && view.pause.until > 0 && view.pause.until <= Date.now() && !pauseCleared) {
+    pauseCleared = true;
+    view.pause = { ...view.pause, until: 0 };
+    render();
+  }
 }
+let pauseCleared = false;
 
 function toast(msg) {
   view.toast = msg;
@@ -109,18 +136,20 @@ async function settleMpWallet(s) {
   }
   if (!led || led.key !== key) led = { key, debited: false, credited: false };
   let changed = false;
+  const totalFee = s.yourTotalFee != null ? s.yourTotalFee : s.tournament.entryFee; // Multi-hand pays a fee per hand
+  const totalPayout = s.yourTotalPayout != null ? s.yourTotalPayout : s.tournament.youPayout;
   if (!led.debited && s.phase !== "lobby") {
     led.debited = true;
     changed = true;
-    await server.adjustBalance(-s.tournament.entryFee);
-    toast(`Buy-in taken: −${s.tournament.entryFee} chips`);
+    await server.adjustBalance(-totalFee);
+    toast(`Buy-in taken: −${totalFee} chips${s.yourHands > 1 ? ` (${s.yourHands} hands)` : ""}`);
   }
   if (!led.credited && s.phase === "match_end" && s.tournament.settled) {
     led.credited = true;
     changed = true;
-    if (s.tournament.youPayout > 0) {
-      await server.adjustBalance(s.tournament.youPayout);
-      toast(`You collect ${s.tournament.youPayout} chips!`);
+    if (totalPayout > 0) {
+      await server.adjustBalance(totalPayout);
+      toast(`You collect ${totalPayout} chips!`);
     }
   }
   if (changed) {
@@ -318,35 +347,66 @@ function ensureNet() {
       reconnectTries = 0;
       view.online.self = msg.self;
       view.online.error = null;
-      view.online.lobby = { code: msg.code, status: msg.status, size: msg.size, slots: msg.slots, filled: msg.filled, entry: msg.entry || 0, rounds: msg.rounds || 9, you: msg.you, self: msg.self, isHost: msg.isHost };
+      view.online.lobby = {
+        code: msg.code,
+        status: msg.status,
+        size: msg.size,
+        slots: msg.slots,
+        filled: msg.filled,
+        entry: msg.entry || 0,
+        rounds: msg.rounds || 9,
+        multiHand: !!msg.multiHand,
+        dropRule: msg.dropRule || "ai",
+        you: msg.you,
+        self: msg.self,
+        isHost: msg.isHost,
+      };
+      if (msg.pause) view.pause = msg.pause;
+      view.pauseUsed = !!msg.pauseUsed;
       persistNet(msg.code, msg.self, view.online.name);
       if (msg.status === "playing") {
         if (view.online.screen !== "playing" && view.snapshot && view.snapshot.cashless) view.online.screen = "playing";
         // Otherwise wait for the first state to switch us in
+      } else if (msg.status === "buyin") {
+        view.online.screen = "buyin";
+        view.online.buyin = msg.buyin || null;
+        view.online.maxHands = msg.maxHands || 1;
       } else {
         view.online.screen = "waiting";
+        view.online.buyin = null;
+        view.online.myHands = null;
       }
       render();
     },
-    onState(snapshot) {
+    onState(snapshot, extra) {
       if (!view.online) return;
       reconnectTries = 0;
       view.snapshot = snapshot;
       view.online.screen = "playing";
+      if (extra) {
+        view.pause = extra.pause || null;
+        view.pauseUsed = !!extra.pauseUsed;
+        if (view.pause && view.pause.until > Date.now()) pauseCleared = false;
+      }
       render();
       handleAnnouncements(snapshot);
       settleMpWallet(snapshot);
     },
     onChat(list) {
+      // Each new chat line pops as a bubble over that player's seat
+      // The chat panel is a live DOM node, so it's updated directly without a redraw
       const seen = new Set(view.chat.map((c) => `${c.at}:${c.seat}:${c.text}`));
       for (const c of list || []) {
-        if (c.ai && !seen.has(`${c.at}:${c.seat}:${c.text}`) && view.online && view.online.screen === "playing") {
+        if (c.seat >= 0 && !seen.has(`${c.at}:${c.seat}:${c.text}`) && view.online && view.online.screen === "playing") {
           showSpeech(c.seat, c.text);
         }
       }
-      const changed = JSON.stringify(list) !== JSON.stringify(view.chat);
       view.chat = list || [];
-      if (changed) render();
+      const cl = document.getElementById("chatlist");
+      if (cl) {
+        cl.innerHTML = chatLines(view.chat);
+        cl.scrollTop = cl.scrollHeight;
+      }
     },
     onEmote(msg) {
       if (view.online && view.online.screen === "playing") showEmote(msg.seat, msg.emoji);
@@ -454,6 +514,46 @@ function mpEntry(fee) {
 function mpRounds(r) {
   sfx("click");
   net && net.config({ rounds: r });
+}
+function mpMulti(on) {
+  sfx("click");
+  net && net.config({ multiHand: !!on });
+}
+function mpDrop(rule) {
+  sfx("click");
+  net && net.config({ dropRule: rule });
+}
+function mpHands(n) {
+  sfx("chips");
+  if (view.online) view.online.myHands = n;
+  net && net.hands(n);
+  render();
+}
+function mpDealNow() {
+  sfx("ding");
+  net && net.dealnow();
+}
+function askPause() {
+  sfx("click");
+  net && net.pause();
+}
+function votePause(agree) {
+  sfx("click");
+  net && net.pvote(agree);
+}
+function resumeGame() {
+  sfx("ding");
+  net && net.resume();
+}
+function acceptTos() {
+  try {
+    localStorage.setItem(TOS_KEY, String(Date.now()));
+  } catch {
+    // Storage isn't available, the game still works without it
+  }
+  view.showTos = false;
+  sfx("ding");
+  render();
 }
 
 function sendChat() {
@@ -571,6 +671,16 @@ const ACTIONS = {
   history: openHistory,
   "history-back": closeHistory,
   "chat-send": sendChat,
+  "tos-accept": acceptTos,
+  tos: () => {
+    view.showTos = true;
+    render();
+  },
+  pause: askPause,
+  "pvote-yes": () => votePause(true),
+  "pvote-no": () => votePause(false),
+  resume: resumeGame,
+  "mp-dealnow": mpDealNow,
   "mp-open": openOnline,
   "mp-menu": onlineMenu,
   "mp-create": mpCreate,
@@ -598,6 +708,9 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "mp-slot") return mpSlot(Number(el.dataset.index), el.dataset.t);
   if (el.dataset.action === "mp-entry") return mpEntry(Number(el.dataset.fee));
   if (el.dataset.action === "mp-rounds") return mpRounds(Number(el.dataset.r));
+  if (el.dataset.action === "mp-multi") return mpMulti(el.dataset.on === "1");
+  if (el.dataset.action === "mp-drop") return mpDrop(el.dataset.rule);
+  if (el.dataset.action === "mp-hands") return mpHands(Number(el.dataset.n));
   if (el.dataset.action === "emote") return sendEmote(el.dataset.e);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();
@@ -644,6 +757,11 @@ root.addEventListener("keydown", (e) => {
 
 (async function init() {
   initRadio();
+  try {
+    view.showTos = !localStorage.getItem(TOS_KEY);
+  } catch {
+    view.showTos = true;
+  }
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {

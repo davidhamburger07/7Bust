@@ -68,11 +68,13 @@ function shoe(s) {
   </div>`;
 }
 
+const aiTag = (p) => (p.isAI ? '<span class="ai-chip">AI</span>' : "");
+
 function seat(p, newSeat) {
   const sc = p.secondChance ? " has-sc" : "";
   return `
   <div class="seat ${p.isCurrent ? "current" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
-    <div class="seat-top"><span class="seat-name">${p.name}${dealerChip(p)}</span>${badge(p.turnState)}</div>
+    <div class="seat-top"><span class="seat-name">${p.name}${aiTag(p)}${dealerChip(p)}</span>${badge(p.turnState)}</div>
     <div class="seat-hand">${handCards(p, { mini: true, newSeat })}${p.secondChance ? '<span class="sc-dot">2nd</span>' : ""}</div>
     <div class="seat-foot"><span class="seat-hand-score num">${handScoreText(p)}</span><span class="seat-total">total ${p.totalScore}</span></div>
   </div>`;
@@ -85,7 +87,7 @@ function youSeat(p, view) {
   return `
   <div class="you-seat ${p.isCurrent ? "current" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
     <div class="you-top">
-      <span class="you-name">YOU${dealerChip(p)} ${badge(p.turnState)}</span>
+      <span class="you-name">YOU${view.snapshot && view.snapshot.yourHands > 1 ? `<span class="hand-ix">HAND ${(view.snapshot.yourSeats || []).indexOf(p.seat) + 1}/${view.snapshot.yourHands}</span>` : ""}${dealerChip(p)} ${badge(p.turnState)}</span>
       <span class="you-score num">hand <b>${handScoreText(p)}</b> · total <b>${p.totalScore}</b></span>
     </div>
     <div class="you-hand">${handCards(p, { newSeat })}${p.secondChance ? '<span class="sc-dot big">2nd chance</span>' : ""}</div>
@@ -101,6 +103,21 @@ function peekLabel(card) {
 function peekChip(s) {
   if (!s.yourPeek) return "";
   return `<div class="peek-chip">👁 NEXT UP: <b>${peekLabel(s.yourPeek)}</b></div>`;
+}
+
+function pauseBanner(view) {
+  const p = view.pause;
+  if (!p) return "";
+  if (p.until > Date.now()) {
+    const canResume = (view.online && view.online.lobby && view.online.lobby.isHost) || view.pauseUsed;
+    return `<div class="pausebar">⏸ PAUSED, back in <b class="num" data-pauseleft>2:00</b>${canResume ? ' <button class="spill on" data-action="resume">RESUME NOW</button>' : ""}</div>`;
+  }
+  if (p.vote) {
+    return `<div class="pausebar vote">🗳 <b>${p.vote.name}</b> asks for a 2-min pause (${p.vote.yes}/${p.vote.needed} yes)
+      <button class="spill on" data-action="pvote-yes">YES</button>
+      <button class="spill spill--off" data-action="pvote-no">NO</button></div>`;
+  }
+  return "";
 }
 
 function dock(view) {
@@ -134,7 +151,7 @@ function leaderPanel(s) {
       return `
       <div class="lb-row ${st.seat === s.you ? "you" : ""}">
         <span class="lb-rank ${medal} num">${i + 1}</span>
-        <span class="lb-name">${st.seat === s.you ? "You" : st.name}${i === 0 && st.totalScore > 0 ? " 👑" : ""}</span>
+        <span class="lb-name">${st.seat === s.you ? "You" : st.name}${aiTag(p)}${i === 0 && st.totalScore > 0 ? " 👑" : ""}</span>
         <span class="lb-state${p.turnState === "busted" ? " bust" : ""}">${p.turnState === "busted" ? "✕" : p.roundDelta > 0 ? `+${p.roundDelta}` : ""}</span>
         <span class="lb-score num">${st.totalScore}</span>
       </div>`;
@@ -156,15 +173,19 @@ function logPanel(s) {
   </div>`;
 }
 
-function chatPanel(view) {
-  const lines = (view.chat || [])
+export function chatLines(list) {
+  const lines = (list || [])
     .map((c) => `<div class="chatline${c.ai ? " ai" : ""}"><b>${c.name}</b> ${c.text}</div>`)
     .join("");
+  return lines || '<div class="chatline muted-chat">Say hi to the table…</div>';
+}
+
+function chatPanel(view) {
   const emotes = PLAYER_EMOTES.map((e) => `<button class="emote-btn" data-action="emote" data-e="${e}" aria-label="Send ${e}">${e}</button>`).join("");
   return `
-  <div class="chatpanel">
+  <div class="chatpanel" id="chatpanel">
     <div class="logpanel-title">All chat</div>
-    <div class="chatlist" id="chatlist">${lines || '<div class="chatline muted-chat">Say hi to the table…</div>'}</div>
+    <div class="chatlist" id="chatlist">${chatLines(view.chat)}</div>
     <div class="emotestrip">${emotes}</div>
     <div class="chatrow">
       <input id="chat-in" class="chat-in" maxlength="140" placeholder="Message the table…" value="${escAttr(view.chatDraft || "")}" autocomplete="off" />
@@ -215,7 +236,8 @@ export function renderLobby(view) {
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
         <a class="link" href="#" data-action="history">Match history</a><span>·</span>
         <a class="link" href="#" data-action="reset-balance">Reset chips</a><span>·</span>
-        <a class="link" href="#" data-action="verify">Verify fair</a>
+        <a class="link" href="#" data-action="verify">Verify fair</a><span>·</span>
+        <a class="link" href="#" data-action="tos">Terms</a>
       </div>
     </div>
   </div>`;
@@ -233,8 +255,10 @@ export function renderMatch(view) {
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
-        ${s.wallet ? `<span class="balance-chip">${chipStack(s.wallet.balance)}</span>` : online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
-        <span class="clock">◔ <span class="num" data-clock>${fmtTime(s.session.elapsedMs)}</span></span>
+        <span class="balance-chip">${chipStack(s.wallet ? s.wallet.balance : view.soloBalance || 0)}</span>
+        ${online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
+        <span class="clock">◔ <span class="num" data-clock>${view.clockText || "00:00"}</span></span>
+        ${view.mode === "online" && !view.pauseUsed ? `<button class="icon-btn" data-action="pause" aria-label="Ask for a pause" title="Ask for a 2-minute pause">⏸</button>` : ""}
         <button class="icon-btn" data-action="rules" aria-label="How to play">?</button>
         <button class="exit-btn" data-action="exit" aria-label="Exit to the main menu">EXIT</button>
       </span>
@@ -245,7 +269,8 @@ export function renderMatch(view) {
     <div class="felt">
       <div class="felt-spot"></div>
       ${arc()}
-      <div class="dealer-zone">${shoe(s)}</div>
+      ${pauseBanner(view)}
+      <div class="dealer-zone">${shoe(s)}${s.tournament ? `<div class="pot-chip">POT <b class="num">${s.tournament.pot}</b> · pays <b class="num">${s.tournament.prizePool}</b></div>` : ""}</div>
       <div class="opponents">${opps}</div>
       ${youSeat(me, view)}
     </div>
@@ -389,19 +414,54 @@ export function renderHistory(view) {
   </div>`;
 }
 
+// Small example cards for the rules screen
+const rc = (v, dup = false) => `<div class="card card--mini rules-card${dup ? " card--dup" : ""}"><span class="face">${v}</span></div>`;
+const rmod = (t) => `<div class="modcard modcard--mini">${t}</div>`;
+const ract = (t, cls) => `<div class="rules-act ract--${cls}">${t}</div>`;
+
 export function renderRules() {
   return `
   <div class="screen screen--rules">
     <div class="rules-top"><button class="icon-btn" data-action="rules-back" aria-label="Back">←</button><span class="rules-title">How to play</span></div>
     <div class="rules-scroll">
-      <section class="rule-card"><h3>Goal</h3><p>Highest chips-score after <b>9 rounds</b> wins the pot. You play against Nova, Rook and Pip, taking turns clockwise.</p></section>
-      <section class="rule-card"><h3>Your turn</h3><p><b>Hit</b> as many times as you want. When you're done, <b>Stop</b> to end the turn and keep your hand.</p></section>
-      <section class="rule-card rule-card--accent"><h3>Banking</h3><p>Bank with <b>Bank</b> as your turn's <b>first action</b>, before you draw, and never on an empty hand. Once you draw you can't bank until a later turn.</p></section>
-      <section class="rule-card"><h3>Bust &amp; Clean 7</h3><p>Repeat a number and you <b>bust</b> (0 that round, both copies shown). Get <b>7 unique numbers</b> for a <b>Clean 7</b>: the round ends, everyone still in banks, and you get <b>+15</b>.</p></section>
-      <section class="rule-card"><h3>Action cards</h3><ul class="rule-list"><li><b>Freeze</b>: pick a player; they bank now and are out.</li><li><b>Flip Three</b>: pick a player; they flip three cards.</li><li><b>Second Chance</b>: eats one duplicate and saves you.</li><li><b>See the Future</b>: privately peek at the shoe's next card. The fortune expires as soon as anyone draws.</li></ul></section>
-      <section class="rule-card"><h3>The shoe</h3><p>One <b>97-card</b> shoe for the whole match. It shrinks as cards are played and only reshuffles when it runs out, so counting cards pays off. Online hosts pick the match length (1-9 rounds) and the buy-in.</p></section>
+      <section class="rule-card"><h3>Goal</h3>
+        <div class="rules-demo">${rc(3)}${rc(7)}${rc(12)}${rmod("+4")}<span class="rules-eq num">= 26</span></div>
+        <p>Draw number cards to build a hand, its score is the sum plus any modifiers. Highest total after all rounds wins the pot. Turns go clockwise.</p></section>
+      <section class="rule-card"><h3>Your turn</h3><p><b>HIT</b> as many times as you want. When you're done, <b>STOP</b> to end the turn and keep your hand for later.</p></section>
+      <section class="rule-card rule-card--accent"><h3>Banking</h3><p>Bank with <b>BANK</b> as your turn's <b>first action</b>, before you draw, and never on an empty hand. Once you draw you can't bank until a later turn, the hand stays exposed on the felt.</p></section>
+      <section class="rule-card"><h3>Bust</h3>
+        <div class="rules-demo">${rc(4)}${rc(9)}${rc(8)}${rc(8, true)}<span class="rules-eq bust-eq">BUST!</span></div>
+        <p>Repeat a number and you <b>bust</b>: the whole hand scores 0 this round.</p></section>
+      <section class="rule-card"><h3>Clean 7</h3>
+        <div class="rules-demo">${rc(1)}${rc(3)}${rc(5)}${rc(7)}${rc(9)}${rc(11)}${rc(12)}<span class="rules-eq gold-eq">+15</span></div>
+        <p><b>7 unique numbers</b> ends the whole round: everyone still in banks, and you pocket a <b>+15</b> bonus.</p></section>
+      <section class="rule-card"><h3>Action cards</h3>
+        <div class="rules-demo">${ract("FRZ", "freeze")}${ract("+3", "flip3")}${ract("2ND", "second")}${ract("👁", "future")}</div>
+        <ul class="rule-list"><li><b>Freeze</b>: pick a player; they bank now and are out of the round.</li><li><b>Flip Three</b>: pick a player; they must flip three cards.</li><li><b>Second Chance</b>: eats one duplicate and saves you from a bust.</li><li><b>See the Future</b>: privately peek at the shoe's next card. The fortune expires as soon as anyone draws.</li></ul></section>
+      <section class="rule-card"><h3>Modifiers</h3>
+        <div class="rules-demo">${rmod("+2")}${rmod("+4")}${rmod("+6")}${rmod("+8")}${rmod("+10")}${rmod("×2")}</div>
+        <p>Bonus cards that boost a banked hand: <b>+X</b> adds points, <b>×2</b> doubles your number sum. They can't bust you.</p></section>
+      <section class="rule-card"><h3>The shoe</h3><p>One <b>97-card</b> shoe for the whole match. It shrinks as cards are played and only reshuffles when it runs out, counting cards pays off. Online hosts pick the match length (1-9 rounds), the buy-in, multi-hand play and the disconnect rule.</p></section>
     </div>
     <button class="btn btn--play" data-action="rules-back">GOT IT</button>
+  </div>`;
+}
+
+export function renderTos() {
+  return `
+  <div class="screen screen--rules tos">
+    <div class="rules-top"><span class="rules-title">Terms of Service</span></div>
+    <div class="rules-scroll hist-scroll tos-scroll">
+      <section class="rule-card"><h3>1. What 7Bust is</h3><p>7Bust is a free entertainment product. All chips, buy-ins, pots and payouts are <b>simulated play money</b> with no cash value. Nothing here is gambling, and nothing you win or lose can be exchanged for anything, anywhere, ever.</p></section>
+      <section class="rule-card"><h3>2. Your connection is your job</h3><p><b>You are responsible for your own internet connection and device.</b> If you disconnect, lag, close the tab, run out of battery or lose signal, the game continues under the table rules: after one minute offline your seat is taken over by the house AI or retired, as configured by the host, and any simulated buy-in stays in the pot. That is not a bug, a theft or grounds for complaint. It is the rule you are agreeing to right now.</p></section>
+      <section class="rule-card"><h3>3. Fair play</h3><p>The shuffle is provably fair (a committed seed you can verify after each match). Do not exploit bugs, automate play, harass players in chat, or impersonate others. We may remove any room or player to keep tables pleasant.</p></section>
+      <section class="rule-card"><h3>4. Chat and conduct</h3><p>You are responsible for what you type. Chat is visible to everyone at the table and is not moderated in real time. Be a decent human. The block on rude words is your own upbringing.</p></section>
+      <section class="rule-card"><h3>5. No warranty</h3><p>7Bust is provided <b>"as is"</b> with no warranty of any kind. We do not promise the service will be available, uninterrupted, bug-free, or that your chips, match history or rooms will persist. Servers restart, rooms expire, and saves may be reset by updates.</p></section>
+      <section class="rule-card"><h3>6. Limitation of liability</h3><p>To the fullest extent allowed by law, the makers of 7Bust are not liable for any damages arising from your use of the game, including lost simulated chips, lost matches, disconnections, hurt feelings from an AI trash-talking you, or anything else. Your only remedy is to stop playing.</p></section>
+      <section class="rule-card"><h3>7. Changes</h3><p>These terms can change with any update. Continuing to play after a change means you accept the new terms.</p></section>
+      <section class="rule-card rule-card--accent"><h3>8. Acceptance</h3><p>By pressing ACCEPT you confirm you have read these terms, you agree to them, and you are old enough to make that call wherever you live.</p></section>
+    </div>
+    <button class="btn btn--play" data-action="tos-accept">ACCEPT &amp; PLAY</button>
   </div>`;
 }
 
@@ -508,7 +568,13 @@ function renderOnlineWaiting(o, view) {
         .join("")}</span></div>
       <div class="mp-sizerow"><span class="mp-label">Rounds</span><span class="slot-pills">${[1, 2, 3, 4, 5, 6, 7, 8, 9]
         .map((r) => `<button class="spill ${r === rounds ? "on" : ""}" data-action="mp-rounds" data-r="${r}">${r}</button>`)
-        .join("")}</span></div>`
+        .join("")}</span></div>
+      <div class="mp-sizerow"><span class="mp-label">Multi-hand <small class="mp-hint">players may buy several hands</small></span><span class="slot-pills">
+        <button class="spill ${!L.multiHand ? "on" : ""}" data-action="mp-multi" data-on="0">OFF</button>
+        <button class="spill ${L.multiHand ? "on" : ""}" data-action="mp-multi" data-on="1">ON</button></span></div>
+      <div class="mp-sizerow"><span class="mp-label">If someone disconnects 1 min <small class="mp-hint">their buy-in stays in the pot</small></span><span class="slot-pills">
+        <button class="spill ${(L.dropRule || "ai") === "ai" ? "on" : ""}" data-action="mp-drop" data-rule="ai" title="The house AI plays their hand on">AI PLAYS ON</button>
+        <button class="spill spill--off ${L.dropRule === "kick" ? "on" : ""}" data-action="mp-drop" data-rule="kick" title="Their seat banks and sits out; they can't rejoin">SEAT IS OUT</button></span></div>`
     : "";
   const stakes =
     entry > 0
@@ -539,6 +605,38 @@ function renderOnlineWaiting(o, view) {
   </div>`;
 }
 
+// After the host starts a multi hand game, everyone picks how many hands to play
+function renderOnlineBuyin(o, view) {
+  const b = o.buyin || { fee: 0, picks: [] };
+  const max = Math.max(1, o.maxHands || 1);
+  const mine = o.myHands;
+  const fee = b.fee || 0;
+  const pills = Array.from({ length: max }, (_, i) => i + 1)
+    .map((n) => `<button class="spill ${mine === n ? "on" : ""}" data-action="mp-hands" data-n="${n}">${n}</button>`)
+    .join("");
+  const picks = (b.picks || [])
+    .map(
+      (p) => `<div class="mp-seat"><span class="mp-seat-name">${p.name}</span>
+        <span class="${p.hands != null ? "pick-done" : "muted-name"}">${p.hands != null ? `${p.hands} hand${p.hands === 1 ? "" : "s"}` : "choosing…"}</span></div>`
+    )
+    .join("");
+  const isHost = o.lobby && o.lobby.isHost;
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card">
+      <div class="wordmark wordmark--sm">BUY IN</div>
+      <p class="tagline">How many hands will you play? Each hand is its own seat${fee > 0 ? ` and its own <b>${fee}-chip</b> buy-in` : ""}.</p>
+      <div class="mp-sizerow"><span class="mp-label">Your hands</span><span class="slot-pills">${pills}</span></div>
+      ${fee > 0 && mine ? `<div class="mp-stakes">Total buy-in: <b class="num">${fee * mine}</b> chips · you have <b class="num">${(view.soloBalance || 0).toLocaleString()}</b></div>` : ""}
+      <div class="mp-seats">
+        <div class="mp-label">The table</div>
+        ${picks}
+      </div>
+      ${isHost ? `<button class="btn btn--online" data-action="mp-dealnow">DEAL NOW<span class="sub">anyone undecided plays 1 hand</span></button>` : `<div class="wait-host">Dealing as soon as everyone picks…</div>`}
+    </div>
+  </div>`;
+}
+
 function renderOnlineDealing() {
   return `
   <div class="screen screen--online">
@@ -553,11 +651,13 @@ export function renderOnline(view) {
   const o = view.online;
   if (o.screen === "join") return renderOnlineJoin(o);
   if (o.screen === "connecting") return renderOnlineConnecting(o);
+  if (o.screen === "buyin") return renderOnlineBuyin(o, view);
   if (o.screen === "waiting" && o.lobby) return renderOnlineWaiting(o, view);
   return renderOnlineMenu(o);
 }
 
 export function renderApp(view) {
+  if (view.showTos) return `<div class="stage">${renderTos()}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
   if (view.mode === "online" && view.online) {

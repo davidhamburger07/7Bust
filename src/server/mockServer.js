@@ -264,12 +264,16 @@ export function createServer(config = {}) {
     for (const p of players) {
       shoe.discard(p.hand.cards); // Clears last round's cards, busted hands too
       p.hand = newHand();
-      p.turnState = "active";
+      p.turnState = p.retired ? "banked" : "active"; // Players who left sit out every round
       p.hitThisTurn = false;
       p.roundDelta = 0;
     }
     dealer = (roundNumber - 1) % n; // Dealer moves clockwise
     currentSeat = dealer;
+    if (players[currentSeat].turnState !== "active") {
+      const next = nextActiveSeatAfter(currentSeat);
+      if (next !== null) currentSeat = next;
+    }
     phase = PHASES.ROUND;
     pushLog(`Round ${roundNumber}: ${name(dealer)} starts`, "round");
   }
@@ -458,6 +462,27 @@ export function createServer(config = {}) {
     return { ok: true, snapshot: snapshot() };
   }
 
+  // A player who dropped out banks their hand now and sits out the rest, no bot takes over
+  async function retireSeat(seat) {
+    const p = players[seat];
+    if (!p || p.retired) return { ok: false, snapshot: snapshot() };
+    p.retired = true;
+    pushLog(`${p.name} left the table, their seat is out`, "info");
+    if (pendingChoice && pendingChoice.seat === seat) {
+      const { type, card } = pendingChoice;
+      pendingChoice = null;
+      const target = chooseActionTarget(type, seat);
+      applyAction(type, seat, target, card);
+    }
+    forcedQueue = forcedQueue.filter((s) => s !== seat);
+    if (p.turnState === "active") resolveSeat(seat, "banked");
+    if (phase === PHASES.ROUND) {
+      if (currentSeat === seat) advanceTurn();
+      else if (!anyActive()) finishRound();
+    }
+    return { ok: true, snapshot: snapshot() };
+  }
+
   // A player left an online game, so a bot plays their seat and the table doesn't stall
   async function convertToAI(seat, ai = null) {
     const p = players[seat];
@@ -508,6 +533,7 @@ export function createServer(config = {}) {
         hitThisTurn: p.hitThisTurn,
         lastGain: p.lastGain,
         roundDelta: p.roundDelta,
+        retired: !!p.retired,
         stats: { ...p.stats },
         hand: serializeHand(p.hand),
       })),
@@ -539,6 +565,7 @@ export function createServer(config = {}) {
       p.hitThisTurn = pd.hitThisTurn;
       p.lastGain = pd.lastGain;
       p.roundDelta = pd.roundDelta;
+      p.retired = !!pd.retired;
       p.stats = pd.stats || freshStats();
       p.hand = deserializeHand(pd.hand);
     }
@@ -645,5 +672,5 @@ export function createServer(config = {}) {
   // Used by the room server to send updates and run the bots
   const snapshotFor = (seat = HUMAN_SEAT) => snapshot(seat);
 
-  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, abandonMatch, convertToAI, verify, resetBalance, adjustBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
+  return Object.freeze({ getState, snapshotFor, startMatch, nextRound, step, hit, stay, stop, resolveChoice, abandonMatch, convertToAI, retireSeat, verify, resetBalance, adjustBalance, serialize, restore, isCashless: () => cashless, playerCount: () => n });
 }

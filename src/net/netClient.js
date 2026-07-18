@@ -39,7 +39,7 @@ export function createNet(handlers = {}) {
         return;
       }
       if (msg.type === "lobby") handlers.onLobby && handlers.onLobby(msg);
-      else if (msg.type === "state") handlers.onState && handlers.onState(msg.snapshot);
+      else if (msg.type === "state") handlers.onState && handlers.onState(msg.snapshot, msg);
       else if (msg.type === "chat") handlers.onChat && handlers.onChat(msg.list);
       else if (msg.type === "emote") handlers.onEmote && handlers.onEmote(msg);
       else if (msg.type === "error") handlers.onError && handlers.onError(msg);
@@ -64,6 +64,11 @@ export function createNet(handlers = {}) {
     start: () => send({ type: "start" }),
     config: (obj) => send({ type: "config", ...obj }),
     intent: (obj) => send({ type: "intent", ...obj }),
+    hands: (count) => send({ type: "hands", count }),
+    dealnow: () => send({ type: "dealnow" }),
+    pause: () => send({ type: "pause" }),
+    pvote: (agree) => send({ type: "pvote", agree }),
+    resume: () => send({ type: "resume" }),
     chat: (text) => send({ type: "chat", text }),
     emote: (emoji) => send({ type: "emote", emoji }),
     leave: () => send({ type: "leave" }),
