@@ -1650,6 +1650,65 @@
   font-size: 16px;
 }
 
+/* Host only button to kick a player from the waiting room */
+.kick-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex: none;
+  border: 2px solid rgba(255, 77, 77, 0.55);
+  background: rgba(96, 16, 16, 0.5);
+  color: #ffbcbc;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 0.1s var(--ease-pop);
+}
+.kick-btn:hover {
+  transform: scale(1.12);
+  border-color: rgba(255, 77, 77, 0.95);
+  color: #ffdede;
+}
+.kick-btn:active {
+  transform: scale(0.94);
+}
+.kick-btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.lobby-gear {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 16px;
+  z-index: 3;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+.set-input {
+  max-width: 200px;
+  font-size: 16px;
+  padding: 8px 12px;
+}
+.set-vol {
+  width: 170px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+.set-links {
+  display: flex;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
 @media (max-width: 899px) {
   /* On phones the radio is one button in the top right, clear of every control */
   /* In a match it drops just below the match bar */

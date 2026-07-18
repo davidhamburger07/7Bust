@@ -99,3 +99,16 @@ export function startRadio() {
   started = true;
   if (!muted) tryPlay();
 }
+
+// For the settings menu, it moves the radio's own controls so everything goes the same way
+export function setRadioVolume(pct) {
+  const vol = document.querySelector("#radio .radio-vol");
+  if (vol) {
+    vol.value = Math.max(0, Math.min(100, Math.round(pct)));
+    vol.dispatchEvent(new Event("input"));
+  }
+}
+export function getRadioVolume() {
+  const vol = document.querySelector("#radio .radio-vol");
+  return vol ? Number(vol.value) : Math.round(volume * 100);
+}

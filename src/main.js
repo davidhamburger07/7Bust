@@ -2,8 +2,8 @@
 
 import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
-import { announce, initAudio, sfx, playVoice } from "./ui/announce.js";
-import { initRadio, startRadio } from "./ui/radio.js";
+import { announce, initAudio, sfx, playVoice, setAudioPrefs } from "./ui/announce.js";
+import { initRadio, startRadio, setRadioVolume, getRadioVolume } from "./ui/radio.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
@@ -21,6 +21,43 @@ const HISTORY_KEY = "7bust:history";
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
 const TOS_KEY = "7bust:tos:v1";
+const CID_KEY = "7bust:cid"; // Same ID for this browser every visit, one seat per table
+const NAME_KEY = "7bust:name";
+const SETTINGS_KEY = "7bust:settings";
+
+function clientId() {
+  try {
+    let c = localStorage.getItem(CID_KEY);
+    if (!c) {
+      c = Math.random().toString(36).slice(2, 12);
+      localStorage.setItem(CID_KEY, c);
+    }
+    return c;
+  } catch {
+    return null;
+  }
+}
+function loadSettings() {
+  try {
+    return { sfx: true, voice: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+  } catch {
+    return { sfx: true, voice: true };
+  }
+}
+function saveSettings(s) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    // Storage isn't available, the game still works without it
+  }
+}
+const savedName = () => {
+  try {
+    return localStorage.getItem(NAME_KEY) || "";
+  } catch {
+    return "";
+  }
+};
 const view = {
   snapshot: null,
   lastEvent: null,
@@ -37,6 +74,8 @@ const view = {
   pause: null,
   pauseUsed: false,
   showTos: false,
+  showSettings: false,
+  settings: { sfx: true, voice: true },
 };
 let net = null;
 let aiTimer = null;
@@ -68,6 +107,8 @@ function render() {
   const matchVisible =
     !view.showRules &&
     !view.showHistory &&
+    !view.showSettings &&
+    !view.showTos &&
     !!view.snapshot &&
     (view.mode === "online"
       ? !!(view.online && view.online.screen === "playing" && view.snapshot.cashless)
@@ -418,11 +459,18 @@ function ensureNet() {
         toast(err);
         return;
       }
+      const kicked = err === "You were kicked by the host";
       const fatal = ["Room not found", "That game already started", "Room is full", "Seat not found"];
-      if (fatal.includes(err)) {
+      if (kicked || fatal.includes(err)) {
         clearNet();
         view.online.lobby = null;
-        if (view.online.screen === "connecting" || view.online.screen === "playing") view.online.screen = view.online.hadRoom ? "menu" : "join";
+        if (kicked && net) {
+          net.close();
+          net = null;
+        }
+        if (["connecting", "playing", "waiting", "buyin"].includes(view.online.screen)) {
+          view.online.screen = kicked || view.online.hadRoom ? "menu" : "join";
+        }
       }
       view.online.error = err;
       render();
@@ -445,14 +493,19 @@ function ensureNet() {
 
 const readName = () => {
   const el = document.getElementById("mp-name");
-  const n = ((el ? el.value : view.online && view.online.name) || "").trim();
-  return n || "Player";
+  const n = ((el ? el.value : view.online && view.online.name) || "").trim() || "Player";
+  try {
+    localStorage.setItem(NAME_KEY, n); // Used as the default name in settings and on the next visit
+  } catch {
+    // Analytics failing never affects the game
+  }
+  return n;
 };
 
 function openOnline() {
   const saved = loadNet();
   view.mode = "online";
-  view.online = { screen: "menu", name: (saved && saved.name) || "", error: null, lobby: null };
+  view.online = { screen: "menu", name: (saved && saved.name) || savedName() || "", error: null, lobby: null };
   render();
 }
 function onlineMenu() {
@@ -468,7 +521,7 @@ function mpCreate() {
   view.online.screen = "connecting";
   view.online.error = null;
   render();
-  net.create(view.online.name);
+  net.create(view.online.name, clientId());
 }
 function joinScreen() {
   view.online.screen = "join";
@@ -490,7 +543,7 @@ function mpJoin() {
   view.online.screen = "connecting";
   view.online.error = null;
   render();
-  net.join(code, view.online.name);
+  net.join(code, view.online.name, clientId());
 }
 function mpStart() {
   sfx("ding");
@@ -545,6 +598,28 @@ function resumeGame() {
   sfx("ding");
   net && net.resume();
 }
+function openSettings() {
+  view.showSettings = true;
+  view.settingsName = savedName();
+  view.settingsVol = getRadioVolume();
+  render();
+}
+function closeSettings() {
+  view.showSettings = false;
+  render();
+}
+function setPref(key, val) {
+  sfx("click");
+  view.settings = { ...view.settings, [key]: val };
+  saveSettings(view.settings);
+  setAudioPrefs(view.settings);
+  render();
+}
+function mpKick(slot) {
+  sfx("click");
+  net && net.kick(slot);
+}
+
 function acceptTos() {
   try {
     localStorage.setItem(TOS_KEY, String(Date.now()));
@@ -570,6 +645,7 @@ function sendEmote(e) {
 
 function openHistory() {
   view.showHistory = true;
+  view.showSettings = false;
   view.history = loadHistory();
   render();
 }
@@ -647,6 +723,7 @@ async function confirmExitYes() {
 
 const showRules = () => {
   view.showRules = true;
+  view.showSettings = false;
   render();
 };
 const hideRules = () => {
@@ -674,8 +751,11 @@ const ACTIONS = {
   "tos-accept": acceptTos,
   tos: () => {
     view.showTos = true;
+    view.showSettings = false;
     render();
   },
+  settings: openSettings,
+  "settings-back": closeSettings,
   pause: askPause,
   "pvote-yes": () => votePause(true),
   "pvote-no": () => votePause(false),
@@ -711,6 +791,8 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "mp-multi") return mpMulti(el.dataset.on === "1");
   if (el.dataset.action === "mp-drop") return mpDrop(el.dataset.rule);
   if (el.dataset.action === "mp-hands") return mpHands(Number(el.dataset.n));
+  if (el.dataset.action === "mp-kick") return mpKick(Number(el.dataset.index));
+  if (el.dataset.action === "set-pref") return setPref(el.dataset.k, el.dataset.v === "1");
   if (el.dataset.action === "emote") return sendEmote(el.dataset.e);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();
@@ -720,6 +802,20 @@ root.addEventListener("click", (e) => {
 root.addEventListener("input", (e) => {
   if (e.target.id === "chat-in") {
     view.chatDraft = e.target.value;
+    return;
+  }
+  if (e.target.id === "set-name") {
+    view.settingsName = e.target.value;
+    try {
+      localStorage.setItem(NAME_KEY, e.target.value.trim().slice(0, 12));
+    } catch {
+      // Analytics failing never affects the game
+    }
+    return;
+  }
+  if (e.target.id === "set-vol") {
+    view.settingsVol = Number(e.target.value);
+    setRadioVolume(view.settingsVol);
     return;
   }
   if (!view.online) return;
@@ -762,6 +858,8 @@ root.addEventListener("keydown", (e) => {
   } catch {
     view.showTos = true;
   }
+  view.settings = loadSettings();
+  setAudioPrefs(view.settings);
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {

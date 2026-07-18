@@ -220,6 +220,7 @@ export function renderLobby(view) {
     .join("");
   return `
   <div class="screen screen--lobby">
+    <button class="icon-btn lobby-gear" data-action="settings" aria-label="Settings" title="Settings">⚙</button>
     <div class="lobby">
       <div class="wordmark">7<span>BUST</span></div>
       <p class="tagline">Take a seat. Flip for the pot, bank before you bust.</p>
@@ -237,7 +238,7 @@ export function renderLobby(view) {
         <a class="link" href="#" data-action="history">Match history</a><span>·</span>
         <a class="link" href="#" data-action="reset-balance">Reset chips</a><span>·</span>
         <a class="link" href="#" data-action="verify">Verify fair</a><span>·</span>
-        <a class="link" href="#" data-action="tos">Terms</a>
+        <a class="link" href="#" data-action="settings">Settings</a>
       </div>
     </div>
   </div>`;
@@ -447,6 +448,45 @@ export function renderRules() {
   </div>`;
 }
 
+const prefPills = (k, on) => `
+  <span class="slot-pills">
+    <button class="spill ${on ? "on" : ""}" data-action="set-pref" data-k="${k}" data-v="1">ON</button>
+    <button class="spill spill--off ${on ? "" : "on"}" data-action="set-pref" data-k="${k}" data-v="0">OFF</button>
+  </span>`;
+
+export function renderSettings(view) {
+  const s = view.settings || { sfx: true, voice: true };
+  return `
+  <div class="screen screen--rules">
+    <div class="rules-top"><button class="icon-btn" data-action="settings-back" aria-label="Back">←</button><span class="rules-title">Settings</span></div>
+    <div class="rules-scroll hist-scroll">
+      <section class="rule-card"><h3>Player</h3>
+        <div class="set-row"><span class="mp-label">Display name <small class="mp-hint">used when you create or join a room</small></span>
+          <input class="mp-input set-input" id="set-name" maxlength="12" placeholder="Player" value="${escAttr(view.settingsName || "")}" autocomplete="off" /></div>
+      </section>
+      <section class="rule-card"><h3>Sound</h3>
+        <div class="set-row"><span class="mp-label">Sound effects</span>${prefPills("sfx", s.sfx)}</div>
+        <div class="set-row"><span class="mp-label">Announcer voice</span>${prefPills("voice", s.voice)}</div>
+        <div class="set-row"><span class="mp-label">Music volume <small class="mp-hint">7BUST FM</small></span>
+          <input class="set-vol" id="set-vol" type="range" min="0" max="100" value="${Number(view.settingsVol ?? 35)}" aria-label="Music volume" /></div>
+      </section>
+      <section class="rule-card"><h3>Chips</h3>
+        <div class="set-row"><span class="mp-label">Broke? Top the wallet back up to 1,000</span>
+          <button class="spill" data-action="reset-balance">RESET CHIPS</button></div>
+      </section>
+      <section class="rule-card"><h3>More</h3>
+        <div class="set-links">
+          <a class="link" href="#" data-action="rules">How to play</a>
+          <a class="link" href="#" data-action="history">Match history</a>
+          <a class="link" href="#" data-action="tos">Terms of Service</a>
+          <a class="link" href="#" data-action="verify">Verify fairness</a>
+        </div>
+      </section>
+    </div>
+    <button class="btn btn--play" data-action="settings-back">DONE</button>
+  </div>`;
+}
+
 export function renderTos() {
   return `
   <div class="screen screen--rules tos">
@@ -525,11 +565,13 @@ const AI_PILLS = [
 function slotRow(s, L) {
   const isYou = s.index === L.you;
   if (s.type === "human") {
+    const kick = L.isHost && !s.isHost ? `<button class="kick-btn" data-action="mp-kick" data-index="${s.index}" title="Kick ${s.name} from the room" aria-label="Kick ${s.name}">✕</button>` : "";
     return `
     <div class="mp-seat ${isYou ? "me" : ""} ${s.connected ? "" : "gone"}">
       <span class="mp-seat-badge num">${s.index + 1}</span>
       <span class="mp-seat-name">${s.name}${s.isHost ? '<span class="mp-host">HOST</span>' : ""}${isYou ? '<span class="mp-you">YOU</span>' : ""}</span>
       <span class="mp-seat-dot ${s.connected ? "on" : ""}"></span>
+      ${kick}
     </div>`;
   }
   const label =
@@ -658,6 +700,7 @@ export function renderOnline(view) {
 
 export function renderApp(view) {
   if (view.showTos) return `<div class="stage">${renderTos()}</div>`;
+  if (view.showSettings) return `<div class="stage">${renderSettings(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
   if (view.mode === "online" && view.online) {

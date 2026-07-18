@@ -209,6 +209,14 @@ function deliver(code, payload) {
     for (const ws of set) send(ws, { type: "emote", seat: payload.seat, emoji: payload.emoji });
     return;
   }
+  // Only the kicked player's sockets get this
+  if (payload.kind === "kicked") {
+    for (const ws of set) {
+      const reg = local.get(ws);
+      if (reg && reg.playerId === payload.playerId) send(ws, { type: "error", error: "You were kicked by the host" });
+    }
+    return;
+  }
   for (const ws of set) {
     const reg = local.get(ws);
     if (!reg) continue;
@@ -367,6 +375,8 @@ function ensureTicker(code) {
         }
         for (const p of [...room.players]) {
           if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt > DROP_AFTER_MS) {
+            room.banned = room.banned || [];
+            if (p.cid && !room.banned.includes(p.cid)) room.banned.push(p.cid); // Dropped players can't come back
             pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `${p.name} was dropped after a minute offline.`, ai: true });
             const gone = await removePlayer(room, p.id, { viaRule: true });
             if (gone && !(await store.get(code))) return; // The room was deleted
@@ -439,7 +449,8 @@ async function handle(ws, msg) {
         dropRule: "ai", // After a minute offline, "ai" lets a bot play on and "kick" retires the seat
         // Seat 0 is the host's, the rest start open for friends and the host can change them
         slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
-        players: [{ id: pid, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null }],
+        players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null }],
+        banned: [], // Players kicked or dropped from this room can't come back
         chat: [],
         roster: null,
         game: null,
@@ -460,6 +471,9 @@ async function handle(ws, msg) {
         const room = await store.get(code);
         if (!room) return send(ws, { type: "error", error: "Room not found" });
         if (room.status !== "lobby") return send(ws, { type: "error", error: "That game already started" });
+        // One browser, one seat. Can't join the same table twice or come back after a kick
+        if (msg.cid && (room.banned || []).includes(msg.cid)) return send(ws, { type: "error", error: "You can't rejoin this room." });
+        if (msg.cid && room.players.some((x) => x.cid === msg.cid)) return send(ws, { type: "error", error: "You're already at this table in another tab." });
         // Take the lowest open seat nobody is sitting in
         let slot = -1;
         for (let i = 0; i < room.size; i++) {
@@ -470,7 +484,7 @@ async function handle(ws, msg) {
         }
         if (slot < 0) return send(ws, { type: "error", error: "Room is full" });
         const pid = newId();
-        room.players.push({ id: pid, slot, seat: slot, seats: [slot], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null });
+        room.players.push({ id: pid, cid: msg.cid || null, slot, seat: slot, seats: [slot], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null });
         await store.set(code, room);
         await attachLocal(ws, code, pid);
         await store.publish(code, await payloadFor(room));
@@ -687,6 +701,21 @@ async function handle(ws, msg) {
       if (!p) return;
       const acting = room.game ? seatsOf(p)[0] : p.seat;
       await store.publish(code, { kind: "emote", seat: acting, emoji: msg.emoji });
+      break;
+    }
+    case "kick": {
+      // Host kicks a player from the waiting room or buy-in screen, they can't come back
+      await withRoom(ws, async (room) => {
+        if (ws.playerId !== room.hostId || room.status === "playing") return;
+        const slot = Math.round(Number(msg.slot));
+        const p = room.players.find((x) => x.slot === slot);
+        if (!p || p.id === room.hostId) return;
+        room.banned = room.banned || [];
+        if (p.cid && !room.banned.includes(p.cid)) room.banned.push(p.cid);
+        pushChat(room, { name: "Table", seat: -1, at: Date.now(), text: `${p.name} was kicked by the host.`, ai: true });
+        await store.publish(room.code, { kind: "kicked", playerId: p.id });
+        await removePlayer(room, p.id, { viaRule: false });
+      });
       break;
     }
     case "leave": {
