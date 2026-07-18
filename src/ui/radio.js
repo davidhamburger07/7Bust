@@ -1,7 +1,7 @@
 // Background music radio, it lives outside the app so music keeps playing through redraws
 // Volume is saved but mute isn't, a saved mute made the game seem broken
 
-const MUSIC = "audio/5-hour-casino-music.mp4";
+const MUSIC = "audio/Casino-1.mp3";
 const KEY = "7bust:radio";
 const DEFAULT_VOL = 0.35;
 
