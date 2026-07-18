@@ -336,10 +336,12 @@
   outline-offset: 2px;
 }
 
+/* Gently rounded, not an oval, a deep oval rail cut through the corners of the seats and panels */
+/* Fixed radii keep the curve out of the way and it still looks like a card table */
 .felt {
   grid-area: felt;
   position: relative;
-  border-radius: 44% 44% 38% 38% / 20% 20% 30% 30%;
+  border-radius: 88px 88px 110px 110px;
   background: radial-gradient(72% 82% at 50% 26%, var(--felt-hi), var(--felt) 46%, var(--felt-lo) 100%);
   border: 12px solid var(--rail);
   box-shadow: 0 0 0 3px var(--gold-lo), inset 0 0 0 2px rgba(255, 210, 74, 0.22),
@@ -348,8 +350,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--s3);
-  /* Extra bottom padding so the curved rail never cuts into your cards or progress pips */
-  padding: var(--s4) var(--s4) var(--s6);
+  padding: var(--s5) var(--s5) var(--s6);
   overflow: hidden;
   min-height: 0;
 }
@@ -1878,8 +1879,15 @@
   }
   .room-chip,
   .balance-chip {
-    padding: 3px 8px;
+    padding: 3px 7px;
+    font-size: 11px;
     white-space: nowrap;
+  }
+  .exit-btn {
+    padding: 0 8px;
+  }
+  .matchbar {
+    padding-right: 4px;
   }
   .chip {
     width: 16px;
@@ -1906,7 +1914,8 @@
   }
   .felt {
     border-width: 8px;
-    padding: var(--s2);
+    border-radius: 44px 44px 56px 56px;
+    padding: var(--s2) var(--s2) var(--s4);
     gap: var(--s2);
   }
   .shoe-pile {

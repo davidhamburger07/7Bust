@@ -102,7 +102,8 @@ function fitStage() {
     document.documentElement.style.removeProperty("--stage-scale");
     return;
   }
-  const s = Math.min(window.innerWidth / CANVAS_W, (window.innerHeight * 0.98) / CANVAS_H);
+  // Small margin so the game's rounded corners never touch the window edge
+  const s = Math.min((window.innerWidth * 0.99) / CANVAS_W, (window.innerHeight * 0.96) / CANVAS_H);
   document.documentElement.style.setProperty("--stage-scale", s.toFixed(4));
 }
 window.addEventListener("resize", fitStage);
