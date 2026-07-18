@@ -1,9 +1,10 @@
-// Online room server, runs the same game as single player without chips
-// Players send moves, the server checks the seat, runs the game and sends each seat what it can see
+// Online room server. Rooms are kept in the store, not here, since players land on different servers
+// Each change loads the room, rebuilds the game, saves it and sends every player what they can see
 
 import { WebSocketServer } from "ws";
 import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
+import { createStore } from "./store.mjs";
 
 const AI_DELAY = 850;
 const MIN_SIZE = 3;
@@ -18,19 +19,75 @@ const AI_NAMES = {
   holder: ["Pip", "Perch", "Pebble", "Moss", "Tuck", "Nest", "Drift", "Sloth"],
 };
 
-const rooms = new Map();
+let store = null;
 
-const newCode = () => {
-  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let c = "";
-  for (let i = 0; i < 4; i++) c += A[(Math.random() * A.length) | 0];
-  return c;
-};
+// Sockets on this server only
+const local = new Map(); // Socket to its room code and player
+const roomSockets = new Map();
+const tickers = new Map();
+
 const newId = () => Math.random().toString(36).slice(2, 10);
 const cleanName = (n) => String(n || "Player").replace(/[<>]/g, "").trim().slice(0, 12) || "Player";
 
 function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+async function newCode() {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (;;) {
+    let c = "";
+    for (let i = 0; i < 4; i++) c += A[(Math.random() * A.length) | 0];
+    if (!(await store.get(c))) return c;
+  }
+}
+
+async function attachLocal(ws, code, playerId) {
+  ws.roomCode = code;
+  ws.playerId = playerId;
+  local.set(ws, { code, playerId });
+  let set = roomSockets.get(code);
+  if (!set) {
+    set = new Set();
+    roomSockets.set(code, set);
+    await store.subscribe(code, (payload) => deliver(code, payload));
+    ensureTicker(code);
+  }
+  set.add(ws);
+}
+
+async function detachLocal(ws) {
+  const reg = local.get(ws);
+  if (!reg) return null;
+  local.delete(ws);
+  ws.roomCode = null;
+  ws.playerId = null;
+  const set = roomSockets.get(reg.code);
+  if (set) {
+    set.delete(ws);
+    if (set.size === 0) {
+      roomSockets.delete(reg.code);
+      await store.unsubscribe(reg.code);
+      stopTicker(reg.code);
+    }
+  }
+  return reg;
+}
+
+function rosterToPlayers(roster) {
+  return roster.map((r) => ({ name: r.name, isAI: r.isAI, ai: r.isAI ? PERSONALITIES[r.aiKey] : null }));
+}
+async function gameFor(room) {
+  const g = createGame({ cashless: true, players: rosterToPlayers(room.roster) });
+  await g.restore(room.game);
+  return g;
+}
+// Save the game back onto the room, plus a few things the ticker checks quickly
+function syncGame(room, g) {
+  room.game = g.serialize();
+  const s = g.snapshotFor(0);
+  room.phase = s.phase;
+  room.auto = s.autoStep;
 }
 
 // The waiting room, one entry per seat in order
@@ -51,205 +108,287 @@ function lobbyView(room) {
   const filled = slots.filter((s) => s.type === "human" || s.type === "ai").length;
   return { code: room.code, status: room.status, size: room.size, slots, filled };
 }
-function broadcastLobby(room) {
-  const view = lobbyView(room);
-  room.players.forEach((p) => send(p.ws, { type: "lobby", you: p.slot, self: p.id, isHost: p.id === room.hostId, ...view }));
-}
-function broadcastState(room) {
-  if (!room.game) return;
-  room.players.forEach((p) => send(p.ws, { type: "state", snapshot: room.game.snapshotFor(p.seat) }));
+
+// Everything a server needs to update its sockets, built once by the server that made the change
+async function payloadFor(room, { withLobby = false, game = null } = {}) {
+  const payload = {
+    status: room.status,
+    hostId: room.hostId,
+    players: room.players.map((x) => ({ id: x.id, slot: x.slot, seat: x.seat })),
+    lobby: lobbyView(room),
+    withLobby,
+    snaps: null,
+  };
+  if (room.status === "playing" && room.game) {
+    const g = game || (await gameFor(room));
+    payload.snaps = {};
+    for (const pl of room.players) payload.snaps[pl.seat] = g.snapshotFor(pl.seat);
+  }
+  return payload;
 }
 
-function stopAiLoop(room) {
-  if (room.aiTimer) {
-    if (process.env.DEBUG_AI) console.log(`[ai ${room.code}] loop stopped`);
-    clearInterval(room.aiTimer);
-    room.aiTimer = null;
+function deliver(code, payload) {
+  const set = roomSockets.get(code);
+  if (!set) return;
+  for (const ws of set) {
+    const reg = local.get(ws);
+    if (!reg) continue;
+    const me = payload.players.find((p) => p.id === reg.playerId);
+    if (!me) continue;
+    if (payload.status === "lobby" || payload.withLobby) {
+      send(ws, { type: "lobby", you: me.slot, self: me.id, isHost: me.id === payload.hostId, ...payload.lobby });
+    }
+    if (payload.status === "playing" && payload.snaps && payload.snaps[me.seat] != null) {
+      send(ws, { type: "state", snapshot: payload.snaps[me.seat] });
+    }
   }
 }
-function startAiLoop(room) {
-  stopAiLoop(room);
-  room.aiTimer = setInterval(async () => {
-    if (!room.game) return;
+
+async function saveAndPublish(room, opts = {}) {
+  await store.set(room.code, room);
+  await store.publish(room.code, await payloadFor(room, opts));
+}
+
+// Bot pacing. Every server with players in the room ticks
+// The lock and the shared last step time make the table move once per beat
+function ensureTicker(code) {
+  if (tickers.has(code)) return;
+  const t = { busy: false, timer: null };
+  t.timer = setInterval(async () => {
+    if (t.busy) return;
+    t.busy = true;
     try {
-      if (room.game.snapshotFor(0).autoStep) {
-        await room.game.step();
-        broadcastState(room);
+      const peek = await store.get(code);
+      if (!peek) return stopTicker(code);
+      if (peek.status !== "playing" || !peek.auto) return;
+      if (Date.now() - (peek.lastStepAt || 0) < AI_DELAY - 80) return;
+      const token = await store.lock(code, { retries: 0 });
+      if (!token) return;
+      try {
+        const room = await store.get(code);
+        if (!room || room.status !== "playing" || !room.auto) return;
+        if (Date.now() - (room.lastStepAt || 0) < AI_DELAY - 80) return;
+        const g = await gameFor(room);
+        await g.step();
+        syncGame(room, g);
+        room.lastStepAt = Date.now();
+        await store.set(code, room);
+        await store.publish(code, await payloadFor(room, { game: g }));
+      } finally {
+        await store.unlock(code, token);
       }
     } catch (e) {
-      console.error("ai loop", e);
+      console.error("ai tick", e);
+    } finally {
+      t.busy = false;
     }
   }, AI_DELAY);
+  tickers.set(code, t);
+}
+function stopTicker(code) {
+  const t = tickers.get(code);
+  if (t) {
+    clearInterval(t.timer);
+    tickers.delete(code);
+  }
 }
 
-// Deal what the host set up, off seats and open seats nobody took are skipped
-// The game numbers seats with no gaps, so each player's seat is worked out again here
-async function startGame(room) {
-  const roster = [];
-  const used = { reckless: 0, cautious: 0, holder: 0 };
-  for (let i = 0; i < room.size; i++) {
-    const p = room.players.find((x) => x.slot === i);
-    if (p) {
-      p.seat = roster.length;
-      roster.push({ name: p.name, isAI: false });
-    } else {
-      const s = room.slots[i];
-      if (s.type === "ai") {
-        const pool = AI_NAMES[s.ai];
-        roster.push({ name: pool[used[s.ai]++ % pool.length], isAI: true, ai: PERSONALITIES[s.ai] });
-      }
-    }
+async function withRoom(ws, fn, { lock = true } = {}) {
+  const code = ws.roomCode;
+  if (!code) return;
+  const token = lock ? await store.lock(code) : null;
+  if (lock && !token) return; // Someone else has the lock, the next update will refresh this player
+  try {
+    const room = await store.get(code);
+    if (!room) return;
+    await fn(room);
+  } finally {
+    if (token) await store.unlock(code, token);
   }
-  if (roster.length < 2) {
-    const host = room.players.find((x) => x.id === room.hostId);
-    if (host) send(host.ws, { type: "error", error: "Fill at least one more seat (a player or an AI) to deal.", soft: true });
-    return;
-  }
-  room.game = createGame({ cashless: true, players: roster });
-  await room.game.startMatch();
-  room.status = "playing";
-  broadcastLobby(room);
-  broadcastState(room);
-  startAiLoop(room);
 }
 
 async function handle(ws, msg) {
   switch (msg.type) {
     case "create": {
-      let code;
-      do {
-        code = newCode();
-      } while (rooms.has(code));
+      const code = await newCode();
       const pid = newId();
       const room = {
         code,
         hostId: pid,
-        players: [],
+        status: "lobby",
+        phase: "lobby",
         size: DEFAULT_SIZE,
         // Seat 0 is the host's, the rest start open for friends and the host can change them
         slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
+        players: [{ id: pid, slot: 0, seat: 0, name: cleanName(msg.name), connected: true }],
+        roster: null,
         game: null,
-        status: "lobby",
-        aiTimer: null,
+        auto: false,
+        lastStepAt: 0,
       };
-      room.players.push({ id: pid, slot: 0, seat: 0, name: cleanName(msg.name), ws, connected: true });
-      rooms.set(code, room);
-      ws.roomCode = code;
-      ws.playerId = pid;
-      broadcastLobby(room);
+      await store.set(code, room);
+      await attachLocal(ws, code, pid);
+      await store.publish(code, await payloadFor(room));
       break;
     }
     case "join": {
-      const room = rooms.get(String(msg.code || "").toUpperCase());
-      if (!room) return send(ws, { type: "error", error: "Room not found" });
-      if (room.status !== "lobby") return send(ws, { type: "error", error: "That game already started" });
-      // Take the lowest open seat nobody is sitting in
-      let slot = -1;
-      for (let i = 0; i < room.size; i++) {
-        if (room.slots[i].type === "open" && !room.players.some((x) => x.slot === i)) {
-          slot = i;
-          break;
+      const code = String(msg.code || "").toUpperCase();
+      const token = await store.lock(code);
+      try {
+        const room = await store.get(code);
+        if (!room) return send(ws, { type: "error", error: "Room not found" });
+        if (room.status !== "lobby") return send(ws, { type: "error", error: "That game already started" });
+        // Take the lowest open seat nobody is sitting in
+        let slot = -1;
+        for (let i = 0; i < room.size; i++) {
+          if (room.slots[i].type === "open" && !room.players.some((x) => x.slot === i)) {
+            slot = i;
+            break;
+          }
         }
+        if (slot < 0) return send(ws, { type: "error", error: "Room is full" });
+        const pid = newId();
+        room.players.push({ id: pid, slot, seat: slot, name: cleanName(msg.name), connected: true });
+        await store.set(code, room);
+        await attachLocal(ws, code, pid);
+        await store.publish(code, await payloadFor(room));
+      } finally {
+        if (token) await store.unlock(code, token);
       }
-      if (slot < 0) return send(ws, { type: "error", error: "Room is full" });
-      const pid = newId();
-      room.players.push({ id: pid, slot, seat: slot, name: cleanName(msg.name), ws, connected: true });
-      ws.roomCode = room.code;
-      ws.playerId = pid;
-      broadcastLobby(room);
+      break;
+    }
+    case "rejoin": {
+      const code = String(msg.code || "").toUpperCase();
+      const token = await store.lock(code);
+      try {
+        const room = await store.get(code);
+        if (!room) return send(ws, { type: "error", error: "Room not found" });
+        const p = room.players.find((x) => x.id === msg.id);
+        if (!p) return send(ws, { type: "error", error: "Seat not found" });
+        p.connected = true;
+        await store.set(code, room);
+        await attachLocal(ws, code, p.id);
+        await store.publish(code, await payloadFor(room, { withLobby: true }));
+      } finally {
+        if (token) await store.unlock(code, token);
+      }
       break;
     }
     case "config": {
       // Table setup, only the host and only in the waiting room
-      const room = rooms.get(ws.roomCode);
-      if (!room || ws.playerId !== room.hostId || room.status !== "lobby") return;
-      if (msg.size != null) {
-        const n = Math.round(Number(msg.size));
-        if (!(n >= MIN_SIZE && n <= MAX_SIZE)) return;
-        const highest = Math.max(...room.players.map((x) => x.slot));
-        if (n <= highest) return send(ws, { type: "error", error: "Someone is sitting in one of those chairs.", soft: true });
-        room.size = n;
-      }
-      if (msg.slot) {
-        const i = Math.round(Number(msg.slot.index));
-        const t = msg.slot.type;
-        if (!(i >= 1 && i < room.size)) return;
-        if (room.players.some((x) => x.slot === i)) return send(ws, { type: "error", error: "That chair is taken.", soft: true });
-        if (t === "ai") {
-          if (!AI_NAMES[msg.slot.ai]) return;
-          room.slots[i] = { type: "ai", ai: msg.slot.ai };
-        } else if (t === "open" || t === "empty") {
-          room.slots[i] = { type: t, ai: null };
-        } else return;
-      }
-      broadcastLobby(room);
-      break;
-    }
-    case "rejoin": {
-      const room = rooms.get(String(msg.code || "").toUpperCase());
-      if (!room) return send(ws, { type: "error", error: "Room not found" });
-      const p = room.players.find((x) => x.id === msg.id);
-      if (!p) return send(ws, { type: "error", error: "Seat not found" });
-      p.ws = ws;
-      p.connected = true;
-      ws.roomCode = room.code;
-      ws.playerId = p.id;
-      broadcastLobby(room);
-      if (room.game) send(ws, { type: "state", snapshot: room.game.snapshotFor(p.seat) });
-      // The bot loop stops when the last player disconnects, so start it again when they come back
-      if (room.status === "playing" && !room.aiTimer) startAiLoop(room);
+      await withRoom(ws, async (room) => {
+        if (ws.playerId !== room.hostId || room.status !== "lobby") return;
+        if (msg.size != null) {
+          const n = Math.round(Number(msg.size));
+          if (!(n >= MIN_SIZE && n <= MAX_SIZE)) return;
+          const highest = Math.max(...room.players.map((x) => x.slot));
+          if (n <= highest) return send(ws, { type: "error", error: "Someone is sitting in one of those chairs.", soft: true });
+          room.size = n;
+        }
+        if (msg.slot) {
+          const i = Math.round(Number(msg.slot.index));
+          const t = msg.slot.type;
+          if (!(i >= 1 && i < room.size)) return;
+          if (room.players.some((x) => x.slot === i)) return send(ws, { type: "error", error: "That chair is taken.", soft: true });
+          if (t === "ai") {
+            if (!AI_NAMES[msg.slot.ai]) return;
+            room.slots[i] = { type: "ai", ai: msg.slot.ai };
+          } else if (t === "open" || t === "empty") {
+            room.slots[i] = { type: t, ai: null };
+          } else return;
+        }
+        await saveAndPublish(room);
+      });
       break;
     }
     case "start": {
-      const room = rooms.get(ws.roomCode);
-      if (!room || ws.playerId !== room.hostId) return;
-      // Start from the waiting room, or deal a new match once the last one is over
-      const canStart = room.status === "lobby" || (room.game && room.game.snapshotFor(0).phase === "match_end");
-      if (!canStart) return;
-      await startGame(room);
+      await withRoom(ws, async (room) => {
+        if (ws.playerId !== room.hostId) return;
+        // Start from the waiting room, or deal a new match once the last one is over
+        if (!(room.status === "lobby" || room.phase === "match_end")) return;
+        // Deal what the host set up, players in their seats and bots with their names
+        // Off seats and open seats nobody took are skipped
+        const roster = [];
+        const used = { reckless: 0, cautious: 0, holder: 0 };
+        for (let i = 0; i < room.size; i++) {
+          const p = room.players.find((x) => x.slot === i);
+          if (p) {
+            p.seat = roster.length;
+            roster.push({ name: p.name, isAI: false, aiKey: null });
+          } else {
+            const s = room.slots[i];
+            if (s.type === "ai") {
+              const pool = AI_NAMES[s.ai];
+              roster.push({ name: pool[used[s.ai]++ % pool.length], isAI: true, aiKey: s.ai });
+            }
+          }
+        }
+        if (roster.length < 2) {
+          return send(ws, { type: "error", error: "Fill at least one more seat (a player or an AI) to deal.", soft: true });
+        }
+        room.roster = roster;
+        const g = createGame({ cashless: true, players: rosterToPlayers(roster) });
+        await g.startMatch();
+        syncGame(room, g);
+        room.status = "playing";
+        room.lastStepAt = Date.now();
+        await saveAndPublish(room, { withLobby: true, game: g });
+      });
+      break;
+    }
+    case "intent": {
+      await withRoom(ws, async (room) => {
+        if (room.status !== "playing" || !room.game) return;
+        const p = room.players.find((x) => x.id === ws.playerId);
+        if (!p) return;
+        const g = await gameFor(room);
+        try {
+          if (msg.intent === "hit") await g.hit(p.seat);
+          else if (msg.intent === "stay") await g.stay(p.seat);
+          else if (msg.intent === "stop") await g.stop(p.seat);
+          else if (msg.intent === "resolveChoice") await g.resolveChoice({ targetSeat: msg.targetSeat, actor: p.seat });
+          else if (msg.intent === "next") {
+            if (g.snapshotFor(0).phase === "round_end") await g.nextRound();
+          }
+        } catch (e) {
+          // Not allowed, ignore it and send the state again
+        }
+        syncGame(room, g);
+        await saveAndPublish(room, { game: g });
+      });
       break;
     }
     case "leave": {
       // The player chose to leave, not a dropped connection, so free the seat for good
-      const room = rooms.get(ws.roomCode);
-      if (!room) return;
-      const idx = room.players.findIndex((x) => x.id === ws.playerId);
-      if (idx < 0) return;
-      const p = room.players.splice(idx, 1)[0];
-      ws.roomCode = null;
-      ws.playerId = null;
-      if (room.players.length === 0) {
-        stopAiLoop(room);
-        rooms.delete(room.code);
-        return;
-      }
-      if (room.hostId === p.id) room.hostId = room.players[0].id; // Pass host on to the next player
-      if (room.status !== "lobby" && room.game) {
-        await room.game.convertToAI(p.seat); // A bot plays their hand from here
-        broadcastState(room);
-      }
-      // In the lobby their seat just opens up for the next player
-      broadcastLobby(room);
-      break;
-    }
-    case "intent": {
-      const room = rooms.get(ws.roomCode);
-      if (!room || !room.game) return;
-      const p = room.players.find((x) => x.id === ws.playerId);
-      if (!p) return;
-      const g = room.game;
+      const code = ws.roomCode;
+      if (!code) return;
+      const token = await store.lock(code);
       try {
-        if (msg.intent === "hit") await g.hit(p.seat);
-        else if (msg.intent === "stay") await g.stay(p.seat);
-        else if (msg.intent === "stop") await g.stop(p.seat);
-        else if (msg.intent === "resolveChoice") await g.resolveChoice({ targetSeat: msg.targetSeat, actor: p.seat });
-        else if (msg.intent === "next") {
-          if (g.snapshotFor(0).phase === "round_end") await g.nextRound();
+        const room = await store.get(code);
+        const reg = await detachLocal(ws);
+        if (!room || !reg) return;
+        const idx = room.players.findIndex((x) => x.id === reg.playerId);
+        if (idx < 0) return;
+        const p = room.players.splice(idx, 1)[0];
+        if (room.players.length === 0) {
+          await store.del(code);
+          return;
         }
-      } catch (e) {
-        // Not allowed, ignore it and send the state again
+        if (room.hostId === p.id) room.hostId = room.players[0].id; // Pass host on to the next player
+        if (room.status === "playing" && room.game) {
+          const g = await gameFor(room);
+          await g.convertToAI(p.seat); // A bot plays their hand from here
+          room.roster[p.seat] = { name: p.name, isAI: true, aiKey: "cautious" }; // Saved in the roster so it lasts after a rebuild
+          syncGame(room, g);
+          await store.set(code, room);
+          await store.publish(code, await payloadFor(room, { withLobby: true, game: g }));
+        } else {
+          // In the lobby their seat just opens up for the next player
+          await saveAndPublish(room, { withLobby: true });
+        }
+      } finally {
+        if (token) await store.unlock(code, token);
       }
-      broadcastState(room);
       break;
     }
     default:
@@ -257,28 +396,26 @@ async function handle(ws, msg) {
   }
 }
 
-function onClose(ws) {
-  const room = rooms.get(ws.roomCode);
-  if (!room) return;
-  const p = room.players.find((x) => x.id === ws.playerId);
-  if (p) {
+async function onSocketClose(ws) {
+  const reg = await detachLocal(ws);
+  if (!reg) return;
+  const token = await store.lock(reg.code);
+  try {
+    const room = await store.get(reg.code);
+    if (!room) return;
+    const p = room.players.find((x) => x.id === reg.playerId);
+    if (!p) return;
     p.connected = false;
-    p.ws = null;
-  }
-  if (room.players.every((x) => !x.connected)) {
-    stopAiLoop(room);
-    setTimeout(() => {
-      const r = rooms.get(room.code);
-      if (r && r.players.every((x) => !x.connected)) rooms.delete(room.code);
-    }, 60000);
-  } else {
-    broadcastLobby(room);
+    await saveAndPublish(room, { withLobby: room.status === "lobby" });
+  } finally {
+    if (token) await store.unlock(reg.code, token);
   }
 }
 
 // Pass a path to only take upgrades there, like the local server does
 // Null takes any path, Vercel only sends /api/ws traffic here anyway
 export function attachRoomServer(httpServer, { path = "/api/ws" } = {}) {
+  if (!store) store = createStore();
   const wss = path ? new WebSocketServer({ server: httpServer, path }) : new WebSocketServer({ server: httpServer });
   wss.on("connection", (ws) => {
     ws.roomCode = null;
@@ -294,11 +431,12 @@ export function attachRoomServer(httpServer, { path = "/api/ws" } = {}) {
     });
     ws.on("close", (code, reason) => {
       if (process.env.DEBUG_AI) console.log(`[ws close] code=${code} reason=${reason || "(none)"} room=${ws.roomCode}`);
-      onClose(ws);
+      onSocketClose(ws).catch((e) => console.error("close", e));
     });
     ws.on("error", (e) => {
       if (process.env.DEBUG_AI) console.log(`[ws error] ${e.message}`);
     });
   });
   console.log(`Room server (WebSocket) attached at ${path || "(any path)"}`);
+  return { store: () => store.kind };
 }
