@@ -15,11 +15,7 @@
     box-shadow: 0 40px 120px -30px #000, inset 0 0 0 2px rgba(255, 210, 74, 0.12);
   }
 }
-@media (min-width: 1400px) {
-  .screen--match {
-    grid-template-columns: 256px 1fr 360px !important;
-  }
-}
+/* Wider side panels on big screens are set near the end of this file */
 .screen {
   position: absolute;
   inset: 0;
@@ -2702,5 +2698,180 @@
   }
   80% {
     transform: translate(4px, -2px);
+  }
+}
+
+/* Bigger screens first get wider side panels, then bigger cards, seats and text */
+/* The biggest ones scale the whole game up to fill a 4K screen */
+@media (min-width: 1400px) {
+  .screen--match {
+    grid-template-columns: 264px 1fr 372px;
+  }
+}
+@media (min-width: 1500px) {
+  .stage {
+    max-height: min(1220px, 98dvh);
+  }
+  .screen--match {
+    grid-template-columns: 280px 1fr 396px;
+    gap: var(--s5);
+  }
+  .matchbar {
+    font-size: 14px;
+  }
+  .felt {
+    border-width: 14px;
+    gap: var(--s4);
+    /* Bigger seats need more room above the rail's bottom curve */
+    padding-bottom: 56px;
+  }
+  .arc-t {
+    font-size: 24px;
+  }
+  .shoe-pile {
+    width: 76px;
+    height: 106px;
+  }
+  .shoe-labels {
+    font-size: 14px;
+  }
+  .pot-chip {
+    font-size: 14px;
+    padding: 7px 18px;
+  }
+  .pot-chip b {
+    font-size: 17px;
+  }
+  .seat {
+    min-width: 178px;
+    max-width: 220px;
+    padding: var(--s3) var(--s4) var(--s4);
+  }
+  .seat-name {
+    font-size: 16px;
+  }
+  .badge {
+    font-size: 11px;
+  }
+  .card.card--mini {
+    width: 34px;
+    height: 48px;
+    border-radius: 6px;
+  }
+  .card.card--mini .face {
+    font-size: 18px;
+  }
+  .modcard.modcard--mini {
+    height: 48px;
+    min-width: 28px;
+    font-size: 14px;
+  }
+  .seat-hand {
+    min-height: 50px;
+  }
+  .seat-hand-score {
+    font-size: 21px;
+  }
+  .seat-total {
+    font-size: 12px;
+  }
+  .sc-dot {
+    font-size: 11px;
+  }
+  .you-seat {
+    max-width: 740px;
+    padding: var(--s4) var(--s5);
+  }
+  .you-name {
+    font-size: 24px;
+  }
+  .you-hand .card {
+    width: 64px;
+    height: 90px;
+  }
+  .you-hand .card .face {
+    font-size: 34px;
+  }
+  .you-hand {
+    min-height: 92px;
+  }
+  .modcard {
+    height: 90px;
+    min-width: 42px;
+    font-size: 19px;
+  }
+  .you-score {
+    font-size: 15px;
+  }
+  .you-score b {
+    font-size: 19px;
+  }
+  .pip {
+    height: 10px;
+  }
+  .count {
+    font-size: 17px;
+  }
+  .dock {
+    max-width: 640px;
+    gap: var(--s4);
+  }
+  .btn {
+    font-size: 25px;
+  }
+  .btn .sub {
+    font-size: 13px;
+  }
+  .btn--target {
+    font-size: 19px;
+  }
+  .peek-chip {
+    font-size: 14px;
+  }
+  .dock-wait {
+    font-size: 17px;
+  }
+  .logline,
+  .chatline {
+    font-size: 13.5px;
+  }
+  .logpanel-title {
+    font-size: 12px;
+  }
+  .lb-row {
+    font-size: 15px;
+    grid-template-columns: 30px 1fr auto auto;
+  }
+  .lb-rank {
+    width: 27px;
+    height: 27px;
+    font-size: 13px;
+  }
+  .lb-score {
+    font-size: 18px;
+  }
+  .emote-btn {
+    font-size: 20px;
+    padding: 5px 8px;
+  }
+  .chat-in {
+    font-size: 14px;
+  }
+  .pausebar {
+    font-size: 15px;
+  }
+  .round-pill {
+    font-size: 14px;
+  }
+  .lobby {
+    max-width: 520px;
+  }
+}
+@media (min-width: 2000px) {
+  .stage {
+    /* Zoom also scales the screen height, so divide it back out or the dock goes off the bottom */
+    zoom: 1.25;
+    height: calc(96dvh / 1.25);
+    max-height: calc(1220px / 1.25);
   }
 }
