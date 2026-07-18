@@ -85,6 +85,14 @@ button {
   background: none;
 }
 
+/* Snappy taps on touch screens, no double tap zoom and no grey flash */
+button,
+input,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;

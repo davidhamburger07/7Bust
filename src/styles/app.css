@@ -1498,17 +1498,295 @@
   opacity: 0.75;
   white-space: nowrap;
 }
-@media (max-width: 560px) {
+@media (max-width: 899px) {
+  /* On phones the radio is one button in the top right, clear of every control */
+  /* In a match it drops just below the match bar */
   .radio {
-    left: 8px;
-    bottom: 8px;
-    padding: 5px 9px 5px 6px;
+    top: 10px;
+    right: 10px;
+    left: auto;
+    bottom: auto;
+    padding: 4px;
+    gap: 0;
   }
+  .radio-vol,
   .radio-label {
     display: none;
   }
-  .radio-vol {
-    width: 60px;
+  body.scr-match .radio {
+    top: 52px;
+    right: 6px;
+  }
+
+  /* Match bar stays on one tight line and can't widen the page */
+  .screen--match {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .matchbar {
+    font-size: 11px;
+    gap: 4px;
+    padding: 0 2px;
+    min-width: 0;
+  }
+  .matchbar .clock {
+    display: none; /* Least useful on a phone, the bar has to fit on one line */
+  }
+  .dealer-note {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .round-pill {
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+  .dealer-note {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 74px;
+  }
+  .bar-right {
+    gap: 4px;
+  }
+  .room-chip,
+  .balance-chip {
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+  .chip {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+  }
+  .chip-amount {
+    font-size: 13px;
+    margin-left: 4px;
+  }
+  .icon-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .exit-btn {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .screen--match {
+    padding: var(--s2);
+    gap: var(--s2);
+  }
+  .felt {
+    border-width: 8px;
+    padding: var(--s2);
+    gap: var(--s2);
+  }
+  .shoe-pile {
+    width: 40px;
+    height: 56px;
+  }
+  .shoe-labels {
+    font-size: 10px;
+  }
+  .arc-t {
+    font-size: 15px;
+  }
+
+  /* One small strip of opponents to swipe through, instead of big stacked seats */
+  .opponents {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .opponents::-webkit-scrollbar {
+    display: none;
+  }
+  .seat {
+    flex: 0 0 auto;
+    min-width: 106px;
+    max-width: 120px;
+    padding: 5px 8px 7px;
+    gap: 4px;
+    border-radius: 11px;
+  }
+  .seat-name {
+    font-size: 12px;
+  }
+  .badge {
+    font-size: 8.5px;
+    padding: 1px 5px;
+  }
+  .seat-hand {
+    min-height: 30px;
+    gap: 2px;
+  }
+  .card.card--mini {
+    width: 22px;
+    height: 31px;
+    border-radius: 4px;
+  }
+  .card.card--mini .face {
+    font-size: 12px;
+  }
+  .modcard.modcard--mini {
+    height: 31px;
+    min-width: 20px;
+    font-size: 10px;
+  }
+  .sc-dot {
+    font-size: 8.5px;
+    padding: 1px 4px;
+  }
+  .seat-hand-score {
+    font-size: 14px;
+  }
+  .seat-total {
+    font-size: 9px;
+  }
+  .deal-chip {
+    width: 13px;
+    height: 13px;
+    font-size: 8px;
+  }
+  .seat.frozen::before {
+    font-size: 15px;
+    top: -7px;
+    right: -4px;
+  }
+
+  /* Smaller cards so a big hand still fits */
+  .you-seat {
+    padding: var(--s2) var(--s3);
+    gap: 6px;
+  }
+  .you-name {
+    font-size: 16px;
+  }
+  .you-hand {
+    min-height: 54px;
+    gap: 5px;
+  }
+  .card {
+    width: 38px;
+    height: 54px;
+  }
+  .card .face {
+    font-size: 19px;
+  }
+  .card .corner {
+    font-size: 8px;
+    top: 2px;
+    left: 3px;
+  }
+  .modcard {
+    height: 54px;
+    min-width: 28px;
+    font-size: 13px;
+  }
+  .pip {
+    height: 6px;
+  }
+  .count {
+    font-size: 12px;
+  }
+
+  /* Log and chat only take the height they need, the table gets the rest */
+  .screen--match {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+  .rightcol {
+    flex: none;
+  }
+  .logpanel,
+  .chatpanel {
+    flex: 0 0 auto;
+  }
+  .log {
+    max-height: 74px;
+  }
+  .logline {
+    font-size: 11.5px;
+  }
+  .logpanel-title {
+    font-size: 10px;
+    padding: 4px var(--s3);
+  }
+  .chatlist {
+    max-height: 60px;
+    min-height: 40px;
+  }
+  .chatline {
+    font-size: 11.5px;
+  }
+  .chat-in {
+    font-size: 16px; /* Smaller text makes iOS zoom in when the input is tapped */
+    padding: 6px 10px;
+  }
+  .emote-btn {
+    font-size: 18px;
+    padding: 4px 7px;
+  }
+
+  .action-area {
+    padding: 2px var(--s2) max(var(--s3), env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+  .dock {
+    gap: var(--s2);
+    max-width: 100%;
+  }
+  .btn {
+    font-size: 18px;
+    padding: 10px var(--s4);
+  }
+  .btn .sub {
+    font-size: 10px;
+  }
+  .peek-chip {
+    font-size: 11px;
+    padding: 4px 12px;
+  }
+  .flycard {
+    width: 62px;
+    height: 82px;
+  }
+  .flycard-icon {
+    font-size: 22px;
+  }
+  .flycard-txt {
+    font-size: 10px;
+  }
+  .speech-pop {
+    max-width: 150px;
+    font-size: 11px;
+  }
+  .emote-pop {
+    font-size: 27px;
+  }
+
+  /* Waiting room */
+  .mp-card {
+    padding: var(--s5) var(--s3) var(--s4);
+  }
+  .mp-sizerow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .mp-sizerow .slot-pills {
+    justify-content: flex-start;
+  }
+  .mp-seat.cfg {
+    flex-wrap: wrap;
+  }
+  .mp-seat.cfg .slot-pills {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-top: 2px;
   }
 }
 

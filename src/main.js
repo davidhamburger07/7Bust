@@ -47,6 +47,15 @@ function render() {
     prevTop = oldLog.scrollTop;
     atBottom = oldLog.scrollHeight - oldLog.scrollTop - oldLog.clientHeight < 28;
   }
+  // Tells the CSS when the table is on screen, phones move the radio for it
+  const matchVisible =
+    !view.showRules &&
+    !view.showHistory &&
+    !!view.snapshot &&
+    (view.mode === "online"
+      ? !!(view.online && view.online.screen === "playing" && view.snapshot.cashless)
+      : view.snapshot.phase !== "lobby");
+  document.body.classList.toggle("scr-match", matchVisible);
   root.innerHTML = renderApp(view);
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
