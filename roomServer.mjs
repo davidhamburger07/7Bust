@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
 import { aiReactions, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
+import { trackMultiplayerGame } from "./src/engine/analytics.js";
 import { createStore } from "./store.mjs";
 
 const AI_DELAY = 850;
@@ -20,10 +21,13 @@ const PAUSE_VOTE_MS = 25000;
 // Each bot type has its own names, used in order
 // The first Rook type bot is "Rook", the second is "Knight"
 const AI_NAMES = {
-  reckless: ["Rook", "Knight", "Blitz", "Gambit", "Torch", "Rocket", "Viper", "Dash"],
-  cautious: ["Nova", "Sage", "Vega", "Orbit", "Quill", "Tally", "Prism", "Astra"],
-  holder: ["Pip", "Perch", "Pebble", "Moss", "Tuck", "Nest", "Drift", "Sloth"],
+  rook: ["Rook", "Knight", "Blitz", "Gambit", "Torch", "Rocket", "Viper", "Dash"],
+  nova: ["Nova", "Sage", "Vega", "Orbit", "Quill", "Tally", "Prism", "Astra"],
+  pip: ["Pip", "Perch", "Pebble", "Moss", "Tuck", "Nest", "Drift", "Sloth"],
 };
+// Rooms saved before the bots were renamed may still use the old keys
+const AI_KEY_ALIASES = { reckless: "rook", cautious: "nova", holder: "pip" };
+const aiKeyNorm = (k) => (AI_NAMES[k] ? k : AI_KEY_ALIASES[k] || null);
 
 let store = null;
 
@@ -81,7 +85,7 @@ async function detachLocal(ws) {
 }
 
 function rosterToPlayers(roster) {
-  return roster.map((r) => ({ name: r.name, isAI: r.isAI, ai: r.isAI ? PERSONALITIES[r.aiKey] : null }));
+  return roster.map((r) => ({ name: r.name, isAI: r.isAI, ai: r.isAI ? PERSONALITIES[aiKeyNorm(r.aiKey)] || PERSONALITIES.nova : null }));
 }
 function gameConfig(room) {
   return { cashless: true, entryFee: room.entry || 0, rounds: room.rounds || 9 };
@@ -94,11 +98,26 @@ async function gameFor(room) {
   return g;
 }
 // Save the game back onto the room, plus a few things the ticker checks quickly
+// Every phase change goes through here, so the match end stats fire once per match
 function syncGame(room, g) {
   room.game = g.serialize();
   const s = g.snapshotFor(0);
   room.phase = s.phase;
   room.auto = s.autoStep;
+  if (s.phase === "match_end" && !room.mpTracked) {
+    room.mpTracked = true;
+    trackMultiplayerGame({
+      phase: "finish",
+      room: room.code,
+      pot: s.tournament ? s.tournament.pot : 0,
+      prizePool: s.tournament ? s.tournament.prizePool : 0,
+      entryFee: room.entry || 0,
+      tableSize: s.players.length,
+      humans: room.players.length,
+      rounds: s.round.total,
+      winner: s.players[s.winner] ? s.players[s.winner].name : null,
+    });
+  }
 }
 
 const seatsOf = (p) => p.seats || [p.seat];
@@ -108,7 +127,7 @@ const handsOf = (p) => (p.hands == null ? 1 : p.hands);
 // The waiting room, one entry per seat in order
 // Bot seats show the name they'll get when the cards are dealt
 function lobbyView(room) {
-  const used = { reckless: 0, cautious: 0, holder: 0 };
+  const used = { rook: 0, nova: 0, pip: 0 };
   const slots = [];
   for (let i = 0; i < room.size; i++) {
     const p = room.players.find((x) => x.slot === i);
@@ -271,7 +290,7 @@ async function emitAiChatter(room, g) {
 // Off seats and open seats nobody took don't play
 async function deal(room, hostWs) {
   const roster = [];
-  const used = { reckless: 0, cautious: 0, holder: 0 };
+  const used = { rook: 0, nova: 0, pip: 0 };
   for (const p of [...room.players].sort((a, b) => a.slot - b.slot)) {
     const hands = room.multiHand ? handsOf(p) : 1;
     p.seats = [];
@@ -296,6 +315,18 @@ async function deal(room, hostWs) {
   room.roster = roster;
   const g = createGame({ ...gameConfig(room), players: rosterToPlayers(roster) });
   await g.startMatch();
+  room.mpTracked = false; // New match, so the finish event can fire again
+  trackMultiplayerGame({
+    phase: "deal",
+    room: room.code,
+    pot: (room.entry || 0) * roster.length,
+    entryFee: room.entry || 0,
+    tableSize: roster.length,
+    humans: roster.filter((r) => !r.isAI).length,
+    ais: roster.filter((r) => r.isAI).length,
+    rounds: room.rounds || 9,
+    multiHand: !!room.multiHand,
+  });
   syncGame(room, g);
   room.status = "playing";
   room.reactSig = "";
@@ -322,7 +353,7 @@ async function removePlayer(room, playerId, { viaRule = false } = {}) {
     for (const seat of seatsOf(p)) {
       if (useAI) {
         await g.convertToAI(seat); // A bot plays their hand from here
-        room.roster[seat] = { name: room.roster[seat].name, isAI: true, aiKey: "cautious" };
+        room.roster[seat] = { name: room.roster[seat].name, isAI: true, aiKey: "nova" };
       } else {
         await g.retireSeat(seat); // The seat banks and sits out the rest of the match
       }
@@ -528,8 +559,9 @@ async function handle(ws, msg) {
           if (!(i >= 1 && i < room.size)) return;
           if (room.players.some((x) => x.slot === i)) return send(ws, { type: "error", error: "That chair is taken.", soft: true });
           if (t === "ai") {
-            if (!AI_NAMES[msg.slot.ai]) return;
-            room.slots[i] = { type: "ai", ai: msg.slot.ai };
+            const k = aiKeyNorm(msg.slot.ai);
+            if (!k) return;
+            room.slots[i] = { type: "ai", ai: k };
           } else if (t === "open" || t === "empty") {
             room.slots[i] = { type: t, ai: null };
           } else return;

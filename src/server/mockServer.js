@@ -8,6 +8,7 @@ import { PHASES, assertPhase } from "../engine/stateMachine.js";
 import { newHand, applyNumber, applyModifier, scoreHand, uniqueCount, bustRisk, serializeHand, deserializeHand } from "../engine/round.js";
 import { createPlayer, createSession, sessionElapsedMs, needsRealityCheck } from "../engine/player.js";
 import { PERSONALITIES, aiBankAtStart, aiStop } from "../engine/ai.js";
+import { trackAIAction, trackRoundEnd, trackMatchEnd } from "../engine/analytics.js";
 import { ENTRY_TIERS, DEFAULT_ENTRY, HOUSE_RAKE, STARTING_BALANCE, buildPot, payoutPerWinner } from "../engine/tournament.js";
 
 const HUMAN_SEAT = 0;
@@ -22,9 +23,9 @@ export function createServer(config = {}) {
   const session = createSession();
   const roster = config.players || [
     { name: "You", isAI: false },
-    { name: "Nova", isAI: true, ai: PERSONALITIES.cautious },
-    { name: "Rook", isAI: true, ai: PERSONALITIES.reckless },
-    { name: "Pip", isAI: true, ai: PERSONALITIES.holder },
+    { name: "Nova", isAI: true, ai: PERSONALITIES.nova },
+    { name: "Rook", isAI: true, ai: PERSONALITIES.rook },
+    { name: "Pip", isAI: true, ai: PERSONALITIES.pip },
   ];
   const players = roster.map((p, seat) => createPlayer({ seat, name: p.name, isAI: p.isAI, ai: p.ai || null }));
   const n = players.length;
@@ -42,6 +43,7 @@ export function createServer(config = {}) {
   let matchWinner = null;
   let log = [];
 
+  let matchStartedAt = 0;
   let serverSeed = null;
   let serverSeedHash = null;
   let clientSeed = "";
@@ -50,7 +52,7 @@ export function createServer(config = {}) {
   let tournament = null;
 
   const name = (seat) => players[seat].name;
-  const aiKeyOf = (p) => (p.isAI && p.ai ? Object.keys(PERSONALITIES).find((k) => PERSONALITIES[k] === p.ai) || null : null);
+  const aiKeyOf = (p) => (p.isAI && p.ai ? p.ai.key || null : null);
   const poss = (seat) => (players[seat].name === "You" ? "Your" : `${players[seat].name}'s`);
   const anyActive = () => players.some((p) => p.turnState === "active");
   const inPlayCount = () => players.reduce((s, p) => s + p.hand.cards.length, 0) + (pendingChoice ? 1 : 0);
@@ -236,6 +238,13 @@ export function createServer(config = {}) {
   }
 
   function finishRound() {
+    trackRoundEnd({
+      round: roundNumber,
+      totalRounds,
+      tableSize: n,
+      cashless,
+      scores: players.map((p) => ({ name: p.name, personality: aiKeyOf(p), totalScore: p.totalScore, roundDelta: p.roundDelta, state: p.turnState })),
+    });
     if (roundNumber >= totalRounds) {
       // Ranks the players and pays out the pot, top scorers split it and the house keeps its rake
       // Solo pays the wallet here, online each player settles their own
@@ -251,6 +260,29 @@ export function createServer(config = {}) {
       }
       lastReveal = { serverSeed, clientSeed, serverSeedHash };
       phase = PHASES.MATCH_END;
+      const paidTo = (seat) => (tournament && tournament.winnerSeats.includes(seat) ? tournament.payout : 0);
+      trackMatchEnd({
+        rounds: totalRounds,
+        tableSize: n,
+        cashless,
+        durationMs: matchStartedAt ? Date.now() - matchStartedAt : null,
+        winner: { name: name(matchWinner), personality: aiKeyOf(players[matchWinner]) },
+        standings: [...players]
+          .sort((a, b) => b.totalScore - a.totalScore)
+          .map((p, i) => ({ place: i + 1, name: p.name, personality: aiKeyOf(p), totalScore: p.totalScore })),
+        // How each bot personality did against the players this match
+        aiProfitability: players
+          .filter((p) => p.isAI)
+          .map((p) => ({
+            name: p.name,
+            personality: aiKeyOf(p),
+            totalScore: p.totalScore,
+            won: winnerSeats.includes(p.seat),
+            entryFee: tournament ? tournament.entryFee : 0,
+            payout: paidTo(p.seat),
+            net: tournament ? paidTo(p.seat) - tournament.entryFee : 0,
+          })),
+      });
     } else {
       phase = PHASES.ROUND_END;
     }
@@ -281,6 +313,20 @@ export function createServer(config = {}) {
   async function aiAct(seat) {
     const p = players[seat];
     const risk = bustRiskFor(seat);
+    const decision = (action, via = "policy") =>
+      trackAIAction({
+        name: p.name,
+        personality: aiKeyOf(p),
+        action,
+        via,
+        round: roundNumber,
+        handCards: p.hand.cards.length,
+        handScore: scoreHand(p.hand),
+        totalScore: p.totalScore,
+        risk: Number(risk.toFixed(4)),
+        continuing: p.hitThisTurn, // Mid turn, or the first move of the turn
+        secondChance: !!p.hand.secondChance, // "Second Chance" makes the bot less careful
+      });
     // Knowing the next card from "See the Future" beats guessing
     // stop if it busts and draw if it's safe
     const known = peeks[seat];
@@ -288,11 +334,13 @@ export function createServer(config = {}) {
     const knownSafe = known && !(known.kind === "number" && p.hand.numbers.includes(known.value));
     if (knownBust) {
       if (!p.hitThisTurn && p.hand.cards.length > 0) {
+        decision("bank", "peek");
         pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`, "bank");
         endTurn(seat, "banked");
         return;
       }
       if (p.hitThisTurn) {
+        decision("stop", "peek");
         pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`, "stop");
         advanceTurn();
         return;
@@ -300,16 +348,19 @@ export function createServer(config = {}) {
       // Empty hand and has to act, so it draws
     }
     if (!knownSafe && !p.hitThisTurn && p.hand.cards.length > 0 && aiBankAtStart(p.hand, risk, p.ai)) {
+      decision("bank");
       pushLog(`${name(seat)} banked ${scoreHand(p.hand)}`, "bank");
       endTurn(seat, "banked");
       return;
     }
     // Mid turn, the bot can stop and bank next turn instead of drawing again
     if (!knownSafe && p.hitThisTurn && aiStop(p.hand, risk, p.ai)) {
+      decision("stop");
       pushLog(`${name(seat)} stops on ${scoreHand(p.hand)} (banks next turn)`, "stop");
       advanceTurn();
       return;
     }
+    decision("hit", knownSafe ? "peek" : "policy");
     p.hitThisTurn = true;
     const r = await drawInto(seat);
     if (r.bust) endTurn(seat, "busted");
@@ -350,6 +401,7 @@ export function createServer(config = {}) {
     lastReveal = null;
     log = [];
     roundNumber = 1;
+    matchStartedAt = Date.now();
     session.matchesPlayed += 1;
     startNextRound();
     return { ok: true, snapshot: snapshot() };
@@ -511,6 +563,7 @@ export function createServer(config = {}) {
     return {
       v: 3, // Save version, bumped for "See the Future" and player stats
       phase,
+      matchStartedAt,
       roundNumber,
       currentSeat,
       dealer,
@@ -543,6 +596,7 @@ export function createServer(config = {}) {
   async function restore(blob) {
     if (!blob || blob.v !== 3) return { ok: false, snapshot: snapshot() };
     phase = blob.phase;
+    matchStartedAt = blob.matchStartedAt || 0;
     roundNumber = blob.roundNumber;
     currentSeat = blob.currentSeat;
     dealer = blob.dealer;

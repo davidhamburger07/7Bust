@@ -578,9 +578,9 @@ function renderOnlineConnecting(o) {
 // The three AI types you can seat
 // The pill shows the type's name, the seat shows the table name, a second Rook is "Knight"
 const AI_PILLS = [
-  { ai: "reckless", label: "Rook" },
-  { ai: "cautious", label: "Nova" },
-  { ai: "holder", label: "Pip" },
+  { ai: "rook", label: "Rook" },
+  { ai: "nova", label: "Nova" },
+  { ai: "pip", label: "Pip" },
 ];
 
 function slotRow(s, L) {

@@ -4,7 +4,7 @@
 export const PLAYER_EMOTES = ["😂", "😡", "😱", "🔥", "😎", "💀", "👏", "🍀"];
 
 const LINES = {
-  reckless: {
+  rook: {
     freezeActor: ["Sit down and STAY down.", "Ice cold, baby.", "Nothing personal."],
     frozenTarget: ["You'll regret that.", "Cheap shot!", "Oh it's WAR now."],
     bustSelf: ["That shoe is rigged.", "Whatever. Fold-ers never win either.", "Rather bust than bank small."],
@@ -14,7 +14,7 @@ const LINES = {
     seeFuture: ["I know something you don't.", "The future looks... profitable."],
     scGet: ["Safety net? Didn't need it.", "Mine now."],
   },
-  cautious: {
+  nova: {
     freezeActor: ["The odds favored it.", "Simply optimal play.", "Nothing reckless about that."],
     frozenTarget: ["Noted.", "Statistically unfortunate.", "An acceptable outcome."],
     bustSelf: ["Variance.", "The math was sound. The card was not.", "Recalculating."],
@@ -24,7 +24,7 @@ const LINES = {
     seeFuture: ["Information is edge.", "Interesting. Very interesting."],
     scGet: ["A sensible hedge.", "Insurance acquired."],
   },
-  holder: {
+  pip: {
     freezeActor: ["s-sorry!!", "please don't be mad.", "it was the card's idea."],
     frozenTarget: ["oh no.", "that's ok... i guess.", "cold. so cold."],
     bustSelf: ["oops.", "i KNEW i should've stopped.", "my whole life flashed by."],
@@ -42,7 +42,7 @@ const chance = (p) => Math.random() < p;
 function say(seat, kind, emoji, textChance, players) {
   const p = players[seat];
   if (!p || !p.isAI || !p.aiType) return null;
-  const pack = LINES[p.aiType] || LINES.cautious;
+  const pack = LINES[p.aiType] || LINES.nova;
   const r = { seat };
   if (emoji) r.emoji = emoji;
   if (pack[kind] && chance(textChance)) r.text = pick(pack[kind]);
