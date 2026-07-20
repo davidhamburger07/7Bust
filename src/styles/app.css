@@ -3287,3 +3287,15 @@
 @media (prefers-reduced-motion: reduce) {
   .icon-btn.pulse::after { animation: none; opacity: 0.9; }
 }
+
+/* Read only account name note under the online name field */
+.mp-hint--block {
+  display: block;
+  margin: calc(var(--s1) * -1) 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mp-input[readonly] {
+  opacity: 0.85;
+  cursor: default;
+}

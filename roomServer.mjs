@@ -54,6 +54,11 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 // Names are checked here, not in the browser, so a changed game can't seat a slur
 const cleanName = (n) => cleanDisplayName(String(n || "").replace(/[<>]/g, "").trim().slice(0, 12), "Player");
 
+// CrazyGames wants their username shown so friends can spot each other
+// It comes from the token so it can't be faked, and skips the word filter since they check names
+const displayName = (identity, typed) =>
+  identity && identity.name ? String(identity.name).replace(/[<>]/g, "").trim().slice(0, 16) || "Player" : cleanName(typed);
+
 function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
@@ -618,7 +623,7 @@ async function handle(ws, msg) {
         listedAt: 0,
         // Seat 0 is the host's, the rest start open for friends and the host can change them
         slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
-        players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null }],
+        players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: displayName(me, msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null }],
         charged: null, // Buy-ins taken for the current match
         settled: false,
         banned: [], // Players kicked or dropped from this room can't come back
@@ -674,7 +679,7 @@ async function handle(ws, msg) {
         const me = await walletIdentity(msg);
         if (room.entry > 0 && !me) return send(ws, { type: "error", error: NEEDS_ACCOUNT });
         const pid = newId();
-        room.players.push({ id: pid, cid: msg.cid || null, slot, seat: slot, seats: [slot], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null });
+        room.players.push({ id: pid, cid: msg.cid || null, slot, seat: slot, seats: [slot], hands: null, name: displayName(me, msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null });
         await store.set(code, room);
         await attachLocal(ws, code, pid);
         await store.publish(code, await payloadFor(room));

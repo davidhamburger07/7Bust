@@ -286,6 +286,21 @@ export function renderWheel(view) {
   </div>`;
 }
 
+// CrazyGames needs the platform username shown in game, so signed in players can't pick a name
+// The room server uses the account name anyway
+function nameField(view, o) {
+  const account = view.wallet && view.wallet.mode === "server" ? view.wallet.user : null;
+  if (account) {
+    return `
+      <label class="mp-label" for="mp-name">Your name</label>
+      <input class="mp-input" id="mp-name" maxlength="16" value="${escAttr(account)}" readonly aria-readonly="true" />
+      <p class="mp-hint mp-hint--block">Your CrazyGames name, so friends can spot you.</p>`;
+  }
+  return `
+      <label class="mp-label" for="mp-name">Your name</label>
+      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${escAttr(o.name || "")}" autocomplete="off" />`;
+}
+
 export function renderLobby(view) {
   return `
   <div class="screen screen--lobby">
@@ -574,15 +589,14 @@ function onlineError(o) {
   return o.error ? `<div class="mp-error">${o.error}</div>` : "";
 }
 
-function renderOnlineMenu(o) {
+function renderOnlineMenu(o, view) {
   return `
   <div class="screen screen--online">
     <div class="mp-card">
       <button class="icon-btn mp-close" data-action="mp-leave" aria-label="Back to solo">←</button>
       <div class="wordmark wordmark--sm">7<span>BUST</span></div>
       <p class="tagline">Spin up a private table and share the code. Empty seats fill with the house AI.</p>
-      <label class="mp-label" for="mp-name">Your name</label>
-      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${o.name || ""}" autocomplete="off" />
+      ${nameField(view, o)}
       ${onlineError(o)}
       <button class="btn btn--play" data-action="mp-create">CREATE A ROOM</button>
       <button class="btn btn--online" data-action="mp-browse">FIND A MATCH<span class="sub">browse public tables</span></button>
@@ -591,15 +605,14 @@ function renderOnlineMenu(o) {
   </div>`;
 }
 
-function renderOnlineJoin(o) {
+function renderOnlineJoin(o, view) {
   return `
   <div class="screen screen--online">
     <div class="mp-card">
       <button class="icon-btn mp-close" data-action="mp-menu" aria-label="Back">←</button>
       <div class="wordmark wordmark--sm">JOIN</div>
       <p class="tagline">Enter the four-letter code your host shared with you.</p>
-      <label class="mp-label" for="mp-name">Your name</label>
-      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${o.name || ""}" autocomplete="off" />
+      ${nameField(view, o)}
       <label class="mp-label" for="mp-code">Room code</label>
       <input class="mp-input mp-input--code" id="mp-code" maxlength="4" placeholder="ABCD" value="${o.codeInput || ""}" autocomplete="off" spellcheck="false" />
       ${onlineError(o)}
@@ -771,8 +784,7 @@ function renderOnlineBrowse(o, view) {
     <div class="mp-card mp-card--wide">
       <button class="icon-btn mp-close" data-action="mp-menu" aria-label="Back">←</button>
       <div class="wordmark wordmark--sm">FIND A MATCH</div>
-      <label class="mp-label" for="mp-name">Your name</label>
-      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${escAttr(o.name || "")}" autocomplete="off" />
+      ${nameField(view, o)}
       <div class="browse-filters">${filterRows}${joinableRow}</div>
       <div class="browse-head">
         <span class="mp-label">${rooms.length} table${rooms.length === 1 ? "" : "s"} open</span>
@@ -828,12 +840,12 @@ function renderOnlineDealing() {
 
 export function renderOnline(view) {
   const o = view.online;
-  if (o.screen === "join") return renderOnlineJoin(o);
+  if (o.screen === "join") return renderOnlineJoin(o, view);
   if (o.screen === "browse") return renderOnlineBrowse(o, view);
   if (o.screen === "connecting") return renderOnlineConnecting(o);
   if (o.screen === "buyin") return renderOnlineBuyin(o, view);
   if (o.screen === "waiting" && o.lobby) return renderOnlineWaiting(o, view);
-  return renderOnlineMenu(o);
+  return renderOnlineMenu(o, view);
 }
 
 export function renderApp(view) {
