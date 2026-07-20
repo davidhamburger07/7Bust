@@ -100,7 +100,7 @@ function rosterToPlayers(roster) {
   return roster.map((r) => ({ name: r.name, isAI: r.isAI, ai: r.isAI ? PERSONALITIES[aiKeyNorm(r.aiKey)] || PERSONALITIES.nova : null }));
 }
 function gameConfig(room) {
-  return { cashless: true, entryFee: room.entry || 0, rounds: room.rounds || 9 };
+  return { cashless: true, online: true, entryFee: room.entry || 0, rounds: room.rounds || 9 };
 }
 async function gameFor(room) {
   // Rebuild with the table settings too, rounds and buy-in aren't in the saved state

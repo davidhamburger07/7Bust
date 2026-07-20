@@ -10,6 +10,7 @@ const STARTING_BALANCE = 1000;
 let mode = "local"; // Local for guests, server for signed in players
 let balance = STARTING_BALANCE;
 let username = null;
+let dailyClaimed = null; // Whether today's bonus is taken, from the server. Null for guests
 
 const readLocal = () => {
   try {
@@ -43,9 +44,25 @@ async function post(action, extra = {}) {
   }
 }
 
+// Moves chips from old saves made before accounts
+// Only fills an empty wallet so it can't pay out twice
+export function seedLocalIfUnset(amount) {
+  if (!Number.isFinite(amount) || amount < 0) return false;
+  try {
+    if (localStorage.getItem(LOCAL_KEY) != null) return false;
+  } catch {
+    return false;
+  }
+  writeLocal(amount);
+  balance = readLocal();
+  return true;
+}
+
 export const walletMode = () => mode;
 export const walletUser = () => username;
 export const getBalance = () => balance;
+// Null means no answer from the server, the caller uses its own local copy
+export const dailyClaimedToday = () => (mode === "server" ? dailyClaimed : null);
 
 // Connects to the player's account if there is one, guests keep the local wallet
 export async function initWallet() {
@@ -57,6 +74,7 @@ export async function initWallet() {
   mode = "server";
   balance = res.balance;
   username = res.username || null;
+  dailyClaimed = !!res.dailyClaimed;
   // First time this account has played, move the guest's chips over
   if (res.newWallet && local > STARTING_BALANCE) {
     const m = await post("migrate", { amount: local });
@@ -71,6 +89,7 @@ export async function claimDailyBonus(localFallback) {
     const res = await post("daily");
     if (res) {
       balance = res.balance;
+      dailyClaimed = true; // Given or already taken, either way it's gone for today
       return { granted: res.granted, balance, reason: res.reason };
     }
   }
@@ -108,6 +127,9 @@ export async function refreshBalance() {
     return balance;
   }
   const res = await post("balance");
-  if (res) balance = res.balance;
+  if (res) {
+    balance = res.balance;
+    dailyClaimed = !!res.dailyClaimed;
+  }
   return balance;
 }

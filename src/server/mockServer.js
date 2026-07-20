@@ -14,10 +14,11 @@ import { ENTRY_TIERS, DEFAULT_ENTRY, HOUSE_RAKE, STARTING_BALANCE, buildPot, pay
 const HUMAN_SEAT = 0;
 const DEFAULT_ROUNDS = 9;
 
-// Single player is you against bots with the wallet
-// Multiplayer has no chips here, the host picks the buy-in and each player settles their own
+// Cashless means no wallet here, chips only move where a real server can check them
+// Online means it's a multiplayer room, the UI uses it to pick which screens to show
 export function createServer(config = {}) {
   const cashless = !!config.cashless;
+  const online = !!config.online;
   const totalRounds = Math.min(9, Math.max(1, Math.round(config.rounds || DEFAULT_ROUNDS)));
   const roomEntryFee = cashless && ENTRY_TIERS.includes(config.entryFee) ? config.entryFee : 0;
   const session = createSession();
@@ -680,6 +681,7 @@ export function createServer(config = {}) {
       phase,
       you: seat,
       cashless,
+      online,
       round: { number: roundNumber, total: totalRounds },
       dealer,
       shoe: shoe ? shoe.counts(inPlayCount()) : { remaining: DECK_SIZE, discard: 0, inPlay: 0, size: DECK_SIZE },

@@ -116,6 +116,23 @@
   outline: 3px solid var(--gold);
   outline-offset: 2px;
 }
+/* Where the chips are kept, and the nudge to make that permanent */
+.wallet-note {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.wallet-note.ok {
+  color: var(--gold-hi);
+}
+.wallet-note b {
+  color: var(--gold-hi);
+}
+.wallet-note .link {
+  color: var(--gold-hi);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .prize-preview {
   font-size: 14px;
   color: var(--muted);

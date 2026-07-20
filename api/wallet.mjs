@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 
     switch (body.action) {
       case "balance":
-        return res.status(200).json({ ok: true, balance: w.balance, username: user.username, newWallet: created });
+        return res.status(200).json({ ok: true, balance: w.balance, username: user.username, newWallet: created, dailyClaimed: w.daily === day });
 
       case "daily": {
         if (w.daily === day) return res.status(200).json({ ok: true, balance: w.balance, granted: 0, reason: "already-claimed" });

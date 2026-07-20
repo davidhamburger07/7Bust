@@ -7,13 +7,17 @@ import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resu
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
 import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
+import { initWallet, walletMode, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday } from "./net/walletClient.js";
+import { cgAccountsAvailable, cgSignIn, cgOnAuth } from "./net/crazygames.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
 import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
 
-const server = createServer();
+// Solo is free practice, the engine holds no money
+// Chips only move where the server can check them, so the browser can't make chips
+const server = createServer({ cashless: true });
 const root = document.getElementById("app");
 const bootAt = Date.now();
 
@@ -67,7 +71,7 @@ const view = {
   snapshot: null,
   lastEvent: null,
   toast: null,
-  entryFee: null,
+  wallet: { mode: "local", accounts: false, user: null },
   mode: "solo",
   online: null,
   chat: [],
@@ -178,7 +182,7 @@ function render() {
     !view.showTos &&
     !!view.snapshot &&
     (view.mode === "online"
-      ? !!(view.online && view.online.screen === "playing" && view.snapshot.cashless)
+      ? !!(view.online && view.online.screen === "playing" && view.snapshot.online)
       : view.snapshot.phase !== "lobby");
   document.body.classList.toggle("scr-match", matchVisible);
   // The chat panel survives redraws, it's taken out, the page swapped, then put back
@@ -251,10 +255,18 @@ function save() {
   }
 }
 
-// Online buy-ins come off the solo chip balance at the deal and the payout lands at the end
-// Each match only counts once
+// Signed in, the room server takes the buy-in and pays out, so the client only loads the balance
+// Guests have no server wallet, so their chips are tracked locally, once per match
 async function settleMpWallet(s) {
   if (view.mode !== "online" || !s || !s.tournament || !s.fair || !s.fair.serverSeedHash) return;
+  if (walletMode() === "server") {
+    // The server already moved the chips, just load the new balance
+    const before = view.soloBalance;
+    await refreshBalance();
+    syncWallet();
+    if (view.soloBalance !== before) render();
+    return;
+  }
   const key = s.fair.serverSeedHash;
   let led;
   try {
@@ -269,25 +281,24 @@ async function settleMpWallet(s) {
   if (!led.debited && s.phase !== "lobby") {
     led.debited = true;
     changed = true;
-    await server.adjustBalance(-totalFee);
+    grantLocal(-totalFee);
     toast(`Buy-in taken: −${totalFee} chips${s.yourHands > 1 ? ` (${s.yourHands} hands)` : ""}`);
   }
   if (!led.credited && s.phase === "match_end" && s.tournament.settled) {
     led.credited = true;
     changed = true;
     if (totalPayout > 0) {
-      await server.adjustBalance(totalPayout);
+      grantLocal(totalPayout);
       toast(`You collect ${totalPayout} chips!`);
     }
   }
   if (changed) {
     try {
       localStorage.setItem(LEDGER_KEY, JSON.stringify(led));
-      localStorage.setItem(SAVE_KEY, JSON.stringify(server.serialize()));
     } catch {
       // Storage isn't available, the game still works without it
     }
-    view.soloBalance = (await server.getState()).wallet.balance;
+    syncWallet();
   }
 }
 
@@ -391,7 +402,6 @@ function handleAnnouncements(s) {
 
 function apply(res) {
   if (res && res.snapshot) view.snapshot = res.snapshot;
-  if (view.snapshot && view.snapshot.wallet) view.soloBalance = view.snapshot.wallet.balance;
   render();
   handleAnnouncements(view.snapshot);
   save();
@@ -410,11 +420,11 @@ function pump() {
 async function start() {
   // A break is between matches with nobody waiting on us
   await maybeMidgameAd();
-  const res = await server.startMatch({ entryFee: view.entryFee });
+  const res = await server.startMatch();
   if (!res.ok) {
     view.snapshot = res.snapshot;
     render();
-    toast(res.reason === "insufficient-balance" ? "Not enough chips for that buy-in." : "Can't start right now.");
+    toast("Can't start right now.");
     return;
   }
   sfx("ding");
@@ -500,7 +510,7 @@ function ensureNet() {
       view.pauseUsed = !!msg.pauseUsed;
       persistNet(msg.code, msg.self, view.online.name);
       if (msg.status === "playing") {
-        if (view.online.screen !== "playing" && view.snapshot && view.snapshot.cashless) view.online.screen = "playing";
+        if (view.online.screen !== "playing" && view.snapshot && view.snapshot.online) view.online.screen = "playing";
         // Otherwise wait for the first state to switch us in
       } else if (msg.status === "buyin") {
         view.online.screen = "buyin";
@@ -826,7 +836,7 @@ async function mpLeave() {
   view.mode = "solo";
   view.online = null;
   // Back to the solo lobby, the online snapshot isn't ours any more
-  if (!view.snapshot || view.snapshot.cashless) await refreshSolo();
+  if (!view.snapshot || view.snapshot.online) await refreshSolo();
   render();
   await maybeMidgameAd(); // Back at the menu counts as a break
 }
@@ -844,11 +854,6 @@ async function refreshSolo() {
   view.snapshot = await server.getState();
   prevPhase = view.snapshot.phase;
 }
-function setEntry(fee) {
-  view.entryFee = fee;
-  render();
-}
-
 // Ads only show at a break, never during a match or while other players wait on us
 // window.__AD_INTERVAL_MS__ lets tests change how often they show
 const AD_INTERVAL_MS = Number(window.__AD_INTERVAL_MS__) || 20 * 60 * 1000;
@@ -867,7 +872,31 @@ async function maybeMidgameAd() {
   }
 }
 
+// The only chip numbers the UI reads, from the browser for guests or the server if signed in
+// The game engine never holds money
+function syncWallet() {
+  view.soloBalance = getBalance();
+  view.wallet = { mode: walletMode(), accounts: cgAccountsAvailable(), user: walletUser() };
+}
+
+// Signing in makes chips permanent and guest chips move over on the first sign in
+// The server caps how many so it can't be farmed
+async function signIn() {
+  if (!cgAccountsAvailable()) return;
+  const user = await cgSignIn();
+  if (!user) return;
+  const before = getBalance();
+  await initWallet();
+  syncWallet();
+  render();
+  toast(view.soloBalance > before ? `Signed in, your chips came with you.` : `Signed in. Your chips are saved.`);
+}
+
+// Signed in, only the server knows if today's bonus is used, so a second device can't claim it
+// Guests keep their own claim date in the browser
 function dailyState() {
+  const server = dailyClaimedToday();
+  if (server !== null) return { available: !server, last: server ? today() : "" };
   let last = "";
   try {
     last = localStorage.getItem(DAILY_KEY) || "";
@@ -876,24 +905,34 @@ function dailyState() {
   }
   return { available: last !== today(), last };
 }
-async function awardChips(amount) {
-  const res = await server.adjustBalance(amount);
-  if (res && res.snapshot) view.snapshot = res.snapshot;
-  view.soloBalance = (await server.getState()).wallet.balance;
-  save();
+// Only for guests, signed in players get their chips from the server
+function grantLocal(amount) {
+  adjustLocal(amount);
+  syncWallet();
+  return amount;
 }
 async function claimDaily() {
-  if (!dailyState().available) return;
-  try {
-    localStorage.setItem(DAILY_KEY, today());
-  } catch {
-    // Analytics failing never affects the game
+  if (!view.dailyAvailable) return;
+  const res = await claimDailyBonus(() => {
+    try {
+      localStorage.setItem(DAILY_KEY, today());
+    } catch {
+      // Analytics failing never affects the game
+    }
+    return grantLocal(DAILY_BONUS);
+  });
+  syncWallet();
+  view.dailyAvailable = dailyState().available;
+  if (!res.granted) {
+    view.dailyAvailable = false;
+    toast("Daily bonus already claimed today.");
+    render();
+    return;
   }
-  await awardChips(DAILY_BONUS);
-  trackReward({ kind: "daily", amount: DAILY_BONUS });
+  trackReward({ kind: "daily", amount: res.granted });
   sfx("chips");
   playVoice("win");
-  toast(`Daily bonus! +${DAILY_BONUS} chips`);
+  toast(`Daily bonus! +${res.granted} chips`);
   render();
 }
 // Watch a rewarded ad then spin the wheel. Only pays out if the ad plays to the end
@@ -910,14 +949,22 @@ async function watchAdForChips() {
     return;
   }
   view.adPending = false;
-  const { index, amount } = spinWheel();
+  // Signed in, the server spins and pays, we just animate to its slice
+  // Guests spin locally against their own balance
+  const res = await spinPrizeWheel(() => spinWheel());
+  if (res.limited) {
+    toast("You've claimed the maximum ad rewards for today.");
+    render();
+    return;
+  }
+  const { index, amount } = res;
   view.wheel = { phase: "spin", index, amount };
   sfx("shuffle");
   render();
   setTimeout(async () => {
     if (!view.wheel) return;
     view.wheel.phase = "done";
-    await awardChips(amount);
+    syncWallet();
     trackReward({ kind: "wheel", amount, jackpot: amount >= JACKPOT });
     if (amount >= JACKPOT) {
       sfx("jackpot");
@@ -985,6 +1032,7 @@ const ACTIONS = {
   rules: showRules,
   "rules-back": hideRules,
   daily: claimDaily,
+  "sign-in": signIn,
   "watch-ad": watchAdForChips,
   "wheel-collect": closeWheel,
   exit: askExit,
@@ -1030,7 +1078,6 @@ root.addEventListener("click", (e) => {
   e.preventDefault();
   if (el.disabled) return;
   if (el.dataset.action === "target") return target(Number(el.dataset.seat));
-  if (el.dataset.action === "entry") return setEntry(Number(el.dataset.fee));
   if (el.dataset.action === "mp-size") return mpSize(Number(el.dataset.size));
   if (el.dataset.action === "mp-slot") return mpSlot(Number(el.dataset.index), el.dataset.t);
   if (el.dataset.action === "mp-entry") return mpEntry(Number(el.dataset.fee));
@@ -1131,8 +1178,14 @@ root.addEventListener("keydown", (e) => {
   }
 
   if (!view.snapshot) view.snapshot = await server.getState();
-  view.entryFee = view.snapshot.config?.defaultEntry ?? 100;
-  view.soloBalance = view.snapshot.wallet ? view.snapshot.wallet.balance : 0;
+  // Chips used to be in the engine save, move that balance into the wallet once
+  try {
+    const old = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+    if (old && old.wallet && Number.isFinite(old.wallet.balance)) seedLocalIfUnset(old.wallet.balance);
+  } catch {
+    // No old save to carry over
+  }
+  syncWallet(); // Show the local balance now, the account check comes later
   // Don't play announcements for a loaded game
   prevPhase = view.snapshot.phase;
   prevYourTurn = view.snapshot.yourTurn;
@@ -1147,6 +1200,18 @@ root.addEventListener("keydown", (e) => {
   pump();
 
   cgLoadingStop();
+
+  // Links the wallet to a CrazyGames account after the game shows, so a slow reply never holds it up
+  // Guests can play on the local balance the whole time
+  cgOnAuth(async () => {
+    await initWallet();
+    syncWallet();
+    render();
+  });
+  initWallet().then(() => {
+    syncWallet();
+    render();
+  });
 
   const params = new URLSearchParams(location.search);
   const invited = ((await cgGetInviteRoom()) || params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);

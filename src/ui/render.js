@@ -227,6 +227,23 @@ function chipStack(amount) {
   return `<span class="chip-stack"><span class="chip chip--gold"></span><span class="chip chip--red"></span><span class="chip chip--blue"></span></span><span class="chip-amount num">${amount.toLocaleString()}</span>`;
 }
 
+// Where the player's chips are kept and how to keep them for good
+// Practice is free and chips only matter online, so this also asks the player to sign in
+function walletCard(view) {
+  const w = view.wallet || { mode: "local", accounts: false, user: null };
+  const note =
+    w.mode === "server"
+      ? `<div class="wallet-note ok">✓ Saved to your CrazyGames account${w.user ? ` · <b>${w.user}</b>` : ""}</div>`
+      : w.accounts
+        ? `<div class="wallet-note">Saved in this browser only. <a class="link" href="#" data-action="sign-in">Sign in</a> to keep your chips.</div>`
+        : `<div class="wallet-note">Saved in this browser.</div>`;
+  return `
+  <div class="buyin">
+    <div class="buyin-head"><span class="label">Your chips</span><span class="balance">${chipStack(view.soloBalance || 0)}</span></div>
+    ${note}
+  </div>`;
+}
+
 function freeChips(view) {
   const daily = view.dailyAvailable
     ? `<button class="btn btn--daily" data-action="daily">DAILY BONUS<span class="sub">+${DAILY_BONUS} free chips</span></button>`
@@ -270,17 +287,6 @@ export function renderWheel(view) {
 }
 
 export function renderLobby(view) {
-  const s = view.snapshot;
-  const cfg = s.config;
-  const fee = view.entryFee ?? cfg.defaultEntry;
-  const pot = fee * cfg.seats;
-  const rake = Math.round(pot * cfg.rakePct);
-  const prize = pot - rake;
-  const balance = s.wallet.balance;
-  const canEnter = balance >= fee;
-  const tiers = cfg.entryTiers
-    .map((t) => `<button class="tier ${t === fee ? "on" : ""}" data-action="entry" data-fee="${t}">${t}</button>`)
-    .join("");
   return `
   <div class="screen screen--lobby">
     <button class="icon-btn lobby-gear" data-action="settings" aria-label="Settings" title="Settings">⚙</button>
@@ -288,14 +294,10 @@ export function renderLobby(view) {
       <div class="wordmark">7<span>BUST</span></div>
       <p class="tagline">Take a seat. Flip for the pot, bank before you bust.</p>
 
-      <div class="buyin">
-        <div class="buyin-head"><span class="label">Your chips</span><span class="balance">${chipStack(balance)}</span></div>
-        <div class="buyin-row"><span class="label">Buy-in</span><div class="tiers">${tiers}</div></div>
-        <div class="prize-preview">Pot <b class="num">${pot}</b> · winner takes <b class="num">${prize}</b> <span class="rake">${Math.round(cfg.rakePct * 100)}% rake</span></div>
-      </div>
+      ${walletCard(view)}
 
-      <button class="btn btn--play" data-action="start" ${canEnter ? "" : "disabled"}>${canEnter ? `TAKE A SEAT · −${fee}` : "NOT ENOUGH CHIPS"}</button>
-      <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">rooms with friends</span></button>
+      <button class="btn btn--play" data-action="start">TAKE A SEAT<span class="sub">free practice · 9 rounds against the house</span></button>
+      <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">play your chips against real people</span></button>
       ${freeChips(view)}
       <div class="lobby-foot">
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
@@ -321,7 +323,7 @@ export function renderMatch(view) {
       <span id="radio-slot" class="radio-slot"></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
-        <span class="balance-chip">${chipStack(s.wallet ? s.wallet.balance : view.soloBalance || 0)}</span>
+        <span class="balance-chip">${chipStack(view.soloBalance || 0)}</span>
         ${online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
         <span class="clock">◔ <span class="num" data-clock>${view.clockText || "00:00"}</span></span>
         ${view.mode === "online" && !view.pauseUsed ? `<button class="icon-btn" data-action="pause" aria-label="Ask for a pause" title="Ask for a 2-minute pause">⏸</button>` : ""}
@@ -360,7 +362,7 @@ function scoreboard(s) {
   return `<div class="scoreboard"><div class="sb-row sb-head"><span>Player</span><span>Round</span><span>Total</span></div>${rows}</div>`;
 }
 
-function cashLedger(s) {
+function cashLedger(s, view) {
   const t = s.tournament;
   if (!t) return "";
   const won = t.youPayout > 0;
@@ -370,7 +372,7 @@ function cashLedger(s) {
     <div class="cl-row"><span>Prize pool <small>(pot ${t.pot} − ${Math.round(t.rakePct * 100)}% rake)</small></span><span class="num">${t.prizePool}</span></div>
     <div class="cl-row"><span>Your payout</span><span class="${won ? "pos" : ""}">${won ? "+" + t.youPayout : "-"}</span></div>
     <div class="cl-row total"><span>Net</span><span class="${t.youNet >= 0 ? "pos" : "neg"}">${t.youNet >= 0 ? "+" : ""}${t.youNet}</span></div>
-    ${s.wallet ? `<div class="cl-row"><span>Chips</span><span class="num">${s.wallet.balance.toLocaleString()}</span></div>` : ""}
+    <div class="cl-row"><span>Chips</span><span class="num">${(view.soloBalance || 0).toLocaleString()}</span></div>
   </div>`;
 }
 
@@ -382,7 +384,7 @@ export function renderOverlay(view) {
   if (s.phase === "match_end") {
     const winner = s.players[s.winner];
     const youWon = s.winner === s.you;
-    if (s.cashless) {
+    if (s.online) {
       const isHost = view.online && view.online.lobby && view.online.lobby.isHost;
       const again = isHost
         ? `<button class="btn btn--play" data-action="mp-again">PLAY AGAIN</button>`
@@ -392,21 +394,18 @@ export function renderOverlay(view) {
         <div class="kicker">Match over</div>
         <h2 class="${youWon ? "big-win" : ""}">${youWon ? "YOU WIN!" : winner.name.toUpperCase() + " WINS"}</h2>
         ${scoreboard(s)}
-        ${cashLedger(s)}
+        ${cashLedger(s, view)}
         ${again}
         <div><a class="ghost link" href="#" data-action="mp-leave">Leave table</a></div>
       </div></div>`;
     }
-    const fee = view.entryFee ?? s.config.defaultEntry;
-    const canAgain = s.wallet.balance >= fee;
     return `
     <div class="overlay"><div class="result result--win">
-      <div class="kicker">Tournament over</div>
+      <div class="kicker">Practice match over</div>
       <h2 class="${youWon ? "big-win" : ""}">${youWon ? "YOU WIN!" : winner.name.toUpperCase() + " WINS"}</h2>
       ${scoreboard(s)}
-      ${cashLedger(s)}
-      <button class="btn btn--play" data-action="again" ${canAgain ? "" : "disabled"}>${canAgain ? `PLAY AGAIN · −${fee}` : "OUT OF CHIPS"}</button>
-      ${canAgain ? "" : `<button class="btn btn--ad" data-action="watch-ad">FREE CHIPS<span class="sub">📺 watch an ad &amp; spin</span></button>`}
+      <button class="btn btn--play" data-action="again">PLAY AGAIN</button>
+      <button class="btn btn--online" data-action="mp-open">PLAY FOR CHIPS<span class="sub">real people, real stakes</span></button>
       <div>${view.dailyAvailable ? '<a class="ghost link" href="#" data-action="daily">Claim daily bonus</a> · ' : ""}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
     </div></div>`;
   }
@@ -843,7 +842,7 @@ export function renderApp(view) {
   if (view.mode === "online" && view.online) {
     const o = view.online;
     // The live table only shows once a real snapshot arrives
-    const playing = o.screen === "playing" && view.snapshot && view.snapshot.cashless;
+    const playing = o.screen === "playing" && view.snapshot && view.snapshot.online;
     if (!playing) {
       const scr = o.screen === "playing" ? renderOnlineDealing() : renderOnline(view);
       return `<div class="stage">${scr}${wheel}${renderToast(view)}</div>`;
