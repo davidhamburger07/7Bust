@@ -17,8 +17,8 @@
     <link rel="stylesheet" href="./src/styles/tokens.css" />
     <link rel="stylesheet" href="./src/styles/app.css" />
 
-    <!-- Online server for the CrazyGames upload only, vercel.app and localhost use their own -->
-    <!-- Points at our CrazyGames server so the zipped build can reach the rooms -->
+    <!-- Every platform build uses this same server so all players share one set of rooms -->
+    <!-- A room code from one platform works on another. vercel.app and localhost use their own -->
     <script>
       window.__WS_BACKEND__ = "wss://7-bust-cg.vercel.app/api/ws";
     </script>

@@ -556,7 +556,13 @@ function ensureNet() {
         return;
       }
       const kicked = err === "You were kicked by the host";
-      const fatal = ["Room not found", "That game already started", "Room is full", "Seat not found"];
+      const fatal = [
+        "Room not found",
+        "That game already started",
+        "Room is full",
+        "Seat not found",
+        "This version of the game is out of date, please refresh.",
+      ];
       if (kicked || fatal.includes(err)) {
         clearNet();
         view.online.lobby = null;

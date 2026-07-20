@@ -13,6 +13,8 @@ function backendUrl() {
   return override || CG_BACKEND_FALLBACK; // CrazyGames and custom domains
 }
 
+import { PROTOCOL_VERSION } from "../engine/protocol.js";
+
 export function createNet(handlers = {}) {
   const url = backendUrl();
   let ws = null;
@@ -70,9 +72,11 @@ export function createNet(handlers = {}) {
   }
 
   return {
-    create: (name, cid) => send({ type: "create", name, cid }),
-    join: (code, name, cid) => send({ type: "join", code, name, cid }),
-    rejoin: (code, id) => send({ type: "rejoin", code, id }),
+    // v is the protocol version, the server won't let in builds that don't match
+    // so an old build on another site can't break a shared room
+    create: (name, cid) => send({ type: "create", name, cid, v: PROTOCOL_VERSION }),
+    join: (code, name, cid) => send({ type: "join", code, name, cid, v: PROTOCOL_VERSION }),
+    rejoin: (code, id) => send({ type: "rejoin", code, id, v: PROTOCOL_VERSION }),
     kick: (slot) => send({ type: "kick", slot }),
     start: () => send({ type: "start" }),
     browse: () => send({ type: "browse" }),

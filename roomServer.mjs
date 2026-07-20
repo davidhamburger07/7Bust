@@ -6,7 +6,19 @@ import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
 import { aiReactions, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
 import { trackMultiplayerGame } from "./src/engine/analytics.js";
+import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
+
+// Every platform shares this server, so an older game version gets turned away
+// Games that send no version are older builds and still get let in
+const OUTDATED_MSG = "This version of the game is out of date, please refresh.";
+function versionOk(ws, msg) {
+  if (msg.v != null && msg.v !== PROTOCOL_VERSION) {
+    send(ws, { type: "error", error: OUTDATED_MSG });
+    return false;
+  }
+  return true;
+}
 
 const AI_DELAY = 850;
 const MIN_SIZE = 3;
@@ -512,6 +524,7 @@ async function handle(ws, msg) {
       break;
     }
     case "create": {
+      if (!versionOk(ws, msg)) return;
       const code = await newCode();
       const pid = newId();
       const room = {
@@ -561,6 +574,7 @@ async function handle(ws, msg) {
       break;
     }
     case "join": {
+      if (!versionOk(ws, msg)) return;
       const code = String(msg.code || "").toUpperCase();
       const token = await store.lock(code);
       try {
@@ -590,6 +604,7 @@ async function handle(ws, msg) {
       break;
     }
     case "rejoin": {
+      if (!versionOk(ws, msg)) return;
       const code = String(msg.code || "").toUpperCase();
       const token = await store.lock(code);
       try {
