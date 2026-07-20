@@ -1,9 +1,9 @@
 // Builds the CrazyGames upload zip with only the files that run in the browser
 // Checks the build before zipping, including their size and file count limits
 
-import { execFileSync } from "node:child_process";
-import { cp, mkdir, readFile, rm, stat, readdir } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { deflateRawSync } from "node:zlib";
 import { join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,83 @@ const MAX_INITIAL_MB = 50; // Ours is far under this, the audio loads when it is
 
 const mb = (bytes) => bytes / 1024 / 1024;
 const fmt = (bytes) => `${mb(bytes).toFixed(2)} MB`;
+
+// Our own zip writer, Compress-Archive uses backslashes in paths
+// Linux unzips those as odd file names and every asset breaks after upload
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+const crc32 = (buf) => {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+const ALREADY_COMPRESSED = /\.(mp3|mp4|m4a|ogg|png|jpe?g|webp|gif|woff2?|zip)$/i;
+
+async function writeZip(entries, outPath) {
+  const parts = [];
+  const central = [];
+  const now = new Date();
+  const time = ((now.getHours() & 31) << 11) | ((now.getMinutes() & 63) << 5) | ((now.getSeconds() / 2) & 31);
+  const date = (((now.getFullYear() - 1980) & 127) << 9) | (((now.getMonth() + 1) & 15) << 5) | (now.getDate() & 31);
+  let offset = 0;
+
+  for (const e of entries) {
+    const data = await readFile(e.path);
+    const crc = crc32(data);
+    const packed = ALREADY_COMPRESSED.test(e.name) ? null : deflateRawSync(data, { level: 9 });
+    const deflated = packed && packed.length < data.length;
+    const body = deflated ? packed : data;
+    const method = deflated ? 8 : 0;
+    const name = Buffer.from(e.name, "utf8"); // Always uses forward slashes
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6); // Names are unicode
+    local.writeUInt16LE(method, 8);
+    local.writeUInt16LE(time, 10);
+    local.writeUInt16LE(date, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    parts.push(local, name, body);
+
+    const cd = Buffer.alloc(46);
+    cd.writeUInt32LE(0x02014b50, 0);
+    cd.writeUInt16LE(20, 4);
+    cd.writeUInt16LE(20, 6);
+    cd.writeUInt16LE(0x0800, 8);
+    cd.writeUInt16LE(method, 10);
+    cd.writeUInt16LE(time, 12);
+    cd.writeUInt16LE(date, 14);
+    cd.writeUInt32LE(crc, 16);
+    cd.writeUInt32LE(body.length, 20);
+    cd.writeUInt32LE(data.length, 24);
+    cd.writeUInt16LE(name.length, 28);
+    cd.writeUInt32LE(0, 38); // External file attributes
+    cd.writeUInt32LE(offset, 42);
+    central.push(cd, name);
+
+    offset += local.length + name.length + body.length;
+  }
+
+  const cdBuf = Buffer.concat(central);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cdBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  await writeFile(outPath, Buffer.concat([...parts, cdBuf, eocd]));
+}
 
 async function walk(dir) {
   const out = [];
@@ -67,17 +144,11 @@ async function main() {
   if (mb(total) > MAX_TOTAL_MB) problems.push(`bundle is ${fmt(total)}, over the ${MAX_TOTAL_MB}MB limit`);
   if (files.length > MAX_FILES) problems.push(`${files.length} files, over the ${MAX_FILES}-file limit`);
 
-  try {
-    if (process.platform === "win32") {
-      execFileSync("powershell", ["-NoProfile", "-Command", `Compress-Archive -Path '${STAGE}\\*' -DestinationPath '${ZIP}' -Force`], { stdio: "pipe" });
-    } else {
-      execFileSync("zip", ["-qr", ZIP, "."], { cwd: STAGE, stdio: "pipe" });
-    }
-  } catch (e) {
-    console.error("\nCould not create the zip automatically. The staged files are ready at:");
-    console.error(`  ${STAGE}\nZip that folder's CONTENTS (index.html must be at the zip root).`);
-    process.exit(1);
-  }
+  // index.html sits at the top of the zip and paths use forward slashes
+  await writeZip(
+    files.map((f) => ({ path: f, name: relative(STAGE, f).split(/[\\/]/).join("/") })),
+    ZIP
+  );
 
   const zipSize = (await stat(ZIP)).size;
   console.log(`\n  ${files.length} files, ${fmt(total)} uncompressed`);
