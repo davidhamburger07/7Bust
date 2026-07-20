@@ -5,6 +5,11 @@ audio/*.mp4
 audio/*.m4a
 audio/*.wav
 
+# extra music library kept locally only, 149MB of tracks the game doesn't reference.
+# Shipping them would eat most of the CrazyGames 250MB total-bundle budget for no gain.
+# (The radio plays audio/Casino-1.mp3.) Remove this line if a playlist is ever wired up.
+audio/Music/
+
 # OS / editor
 .DS_Store
 Thumbs.db
