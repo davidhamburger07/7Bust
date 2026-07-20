@@ -8,6 +8,7 @@ import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
+import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom } from "./net/crazygames.js";
 
 const server = createServer();
 const root = document.getElementById("app");
@@ -170,6 +171,22 @@ function render() {
   }
   tickClock(); // Show the right time straight away, no 0:00 flicker
   dockRadio(); // Keeps the radio in the game's corner between screens
+  syncPlatform(matchVisible);
+}
+
+// Keeps the CrazyGames play state and invite button matching the screen
+// Cheap to call every render, it skips repeats and does nothing without the SDK
+function syncPlatform(matchVisible) {
+  const s = view.snapshot;
+  const paused = !!(view.pause && view.pause.until > Date.now());
+  // Playing means sat at the table in a live round, not a menu, overlay or pause
+  cgSetPlaying(!!(matchVisible && s && s.phase === "round" && !paused));
+  const o = view.online;
+  if (view.mode === "online" && o && o.lobby && (o.screen === "waiting" || o.screen === "buyin")) {
+    cgShowInvite(o.lobby.code);
+  } else {
+    cgHideInvite();
+  }
 }
 
 function tickClock() {
@@ -338,6 +355,7 @@ function handleAnnouncements(s) {
   prevYourTurn = s.yourTurn;
   if (s.phase === "match_end" && prevPhase !== "match_end") {
     announce(s.winner === s.you ? "win" : "lose");
+    if (s.winner === s.you) cgHappytime(); // Tells CrazyGames this is a happy moment
     recordHistory(s);
   }
   prevPhase = s.phase;
@@ -897,6 +915,7 @@ root.addEventListener("keydown", (e) => {
 });
 
 (async function init() {
+  cgLoadingStart();
   fitStage();
   initRadio();
   try {
@@ -937,8 +956,11 @@ root.addEventListener("keydown", (e) => {
   setInterval(tickClock, 1000);
   pump();
 
+  cgLoadingStop();
+
   const params = new URLSearchParams(location.search);
-  const roomParam = (params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  const invited = ((await cgGetInviteRoom()) || params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  const roomParam = invited;
   const saved = loadNet();
   if (roomParam.length === 4) {
     openOnline();

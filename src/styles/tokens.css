@@ -63,6 +63,21 @@ body {
   /* Warm casino room with a spotlight overhead */
   background: radial-gradient(90% 75% at 50% -12%, #6a4a1e 0%, #35200c 32%, #150c06 66%, #0a0603 100%);
   min-height: 100dvh;
+  /* CrazyGames needs accidental text selection and dragging blocked on touch screens */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Text fields still need to be selectable for chat, room code, name and settings */
+input,
+textarea {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
 #app {

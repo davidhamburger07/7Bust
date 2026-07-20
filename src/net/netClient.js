@@ -1,9 +1,22 @@
 // Online multiplayer. Uses the same moves as the solo game, so the screen draws both the same way
 // Anything sent before it connects waits in a queue
 
+// On CrazyGames the game is on their domain, so it can't reach our server by its own address
+// Local and Vercel still use their own server
+const BACKEND_WS = "wss://7-bust.vercel.app/api/ws";
+function backendUrl() {
+  const host = location.hostname;
+  if (host === "localhost" || host === "127.0.0.1" || host === "") {
+    return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws`;
+  }
+  if (/(^|\.)7-bust\.vercel\.app$/i.test(host)) {
+    return `wss://${location.host}/api/ws`;
+  }
+  return BACKEND_WS; // CrazyGames, custom domains and anywhere else
+}
+
 export function createNet(handlers = {}) {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const url = `${proto}://${location.host}/api/ws`; // Local and Vercel both serve the same path
+  const url = backendUrl();
   let ws = null;
   let queue = [];
   let closed = false;
