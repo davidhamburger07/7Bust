@@ -813,5 +813,5 @@ export function attachRoomServer(httpServer, { path = "/api/ws" } = {}) {
     });
   });
   console.log(`Room server (WebSocket) attached at ${path || "(any path)"}`);
-  return { store: () => store.kind };
+  return { store: () => store.kind, ns: () => store.ns };
 }

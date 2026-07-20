@@ -6,6 +6,11 @@ import Redis from "ioredis";
 const TTL_S = 6 * 60 * 60; // Abandoned rooms are deleted after this
 const LOCK_MS = 2500;
 
+// Sites sharing one Redis each set their own room namespace so rooms never mix
+// Empty keeps the old keys, give two sites the same one only for cross play
+const ROOM_NS = (process.env.ROOM_NS || "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
+const NS_PREFIX = ROOM_NS ? `${ROOM_NS}:` : "";
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const token = () => Math.random().toString(36).slice(2);
 
@@ -22,6 +27,7 @@ function memoryStore() {
 
   return {
     kind: "memory",
+    ns: ROOM_NS || null,
     async get(code) {
       const e = rooms.get(code);
       return e ? JSON.parse(JSON.stringify(e.obj)) : null;
@@ -66,9 +72,11 @@ function memoryStore() {
 }
 
 function redisStore(url) {
-  const KEY = (c) => `7bust:room:${c}`;
-  const LOCK = (c) => `7bust:lock:${c}`;
-  const CH = (c) => `7bust:ch:${c}`;
+  // The prefix keeps this site's keys apart when sites share one Redis
+  // The subscriber strips it using the channel prefix length, so any prefix works
+  const KEY = (c) => `${NS_PREFIX}7bust:room:${c}`;
+  const LOCK = (c) => `${NS_PREFIX}7bust:lock:${c}`;
+  const CH = (c) => `${NS_PREFIX}7bust:ch:${c}`;
   const redis = new Redis(url, { maxRetriesPerRequest: 3, enableAutoPipelining: true });
   let subConn = null; // Own connection, a Redis client that's subscribed can't run other commands
   const subs = new Map();
@@ -90,6 +98,7 @@ function redisStore(url) {
 
   return {
     kind: "redis",
+    ns: ROOM_NS || null,
     async get(code) {
       const raw = await redis.get(KEY(code));
       return raw ? JSON.parse(raw) : null;
@@ -129,10 +138,11 @@ function redisStore(url) {
 
 export function createStore() {
   const url = process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL;
+  const nsLabel = ROOM_NS ? ` (namespace "${ROOM_NS}")` : "";
   if (url) {
-    console.log("Room store: redis (shared across instances)");
+    console.log(`Room store: redis (shared across instances)${nsLabel}`);
     return redisStore(url);
   }
-  console.log("Room store: in-memory (single process)");
+  console.log(`Room store: in-memory (single process)${nsLabel}`);
   return memoryStore();
 }

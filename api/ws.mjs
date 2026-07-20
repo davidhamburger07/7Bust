@@ -9,9 +9,9 @@ const info = attachRoomServer(server, { path: null }); // Only /api/ws traffic g
 // A plain GET says which room store this runs on, and the names of any Redis settings
 // Only the names are shown, never the values
 server.on("request", (req, res) => {
-  const envNames = Object.keys(process.env).filter((k) => /REDIS|^KV_|UPSTASH/i.test(k));
+  const envNames = Object.keys(process.env).filter((k) => /REDIS|^KV_|UPSTASH|^ROOM_NS$/i.test(k));
   res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-  res.end(JSON.stringify({ ok: true, store: info.store(), env: envNames }));
+  res.end(JSON.stringify({ ok: true, store: info.store(), ns: info.ns(), env: envNames }));
 });
 
 export default server;
