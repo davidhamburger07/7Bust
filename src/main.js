@@ -7,7 +7,7 @@ import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resu
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
 import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
-import { initWallet, walletMode, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday } from "./net/walletClient.js";
+import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
 import { cgAccountsAvailable, cgSignIn, cgOnAuth } from "./net/crazygames.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
@@ -24,7 +24,6 @@ const bootAt = Date.now();
 const AI_DELAY = 850;
 const SAVE_KEY = "7bust:save:v3"; // The deck changed, older saves can't resume
 const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
-const LEDGER_KEY = "7bust:mpledger"; // Each online match's buy-in and payout only count once
 const HISTORY_KEY = "7bust:history";
 const DAILY_KEY = "7bust:daily"; // Last day the login bonus was claimed
 
@@ -255,50 +254,21 @@ function save() {
   }
 }
 
-// Signed in, the room server takes the buy-in and pays out, so the client only loads the balance
-// Guests have no server wallet, so their chips are tracked locally, once per match
+// At an online table the room server takes the buy-ins and pays the winners
+// The client only loads the new balance, it can never change it
+let mpSettleSig = "";
 async function settleMpWallet(s) {
   if (view.mode !== "online" || !s || !s.tournament || !s.fair || !s.fair.serverSeedHash) return;
-  if (walletMode() === "server") {
-    // The server already moved the chips, just load the new balance
-    const before = view.soloBalance;
-    await refreshBalance();
-    syncWallet();
-    if (view.soloBalance !== before) render();
-    return;
-  }
-  const key = s.fair.serverSeedHash;
-  let led;
-  try {
-    led = JSON.parse(localStorage.getItem(LEDGER_KEY) || "null");
-  } catch {
-    led = null;
-  }
-  if (!led || led.key !== key) led = { key, debited: false, credited: false };
-  let changed = false;
-  const totalFee = s.yourTotalFee != null ? s.yourTotalFee : s.tournament.entryFee; // Multi-hand pays a fee per hand
-  const totalPayout = s.yourTotalPayout != null ? s.yourTotalPayout : s.tournament.youPayout;
-  if (!led.debited && s.phase !== "lobby") {
-    led.debited = true;
-    changed = true;
-    grantLocal(-totalFee);
-    toast(`Buy-in taken: −${totalFee} chips${s.yourHands > 1 ? ` (${s.yourHands} hands)` : ""}`);
-  }
-  if (!led.credited && s.phase === "match_end" && s.tournament.settled) {
-    led.credited = true;
-    changed = true;
-    if (totalPayout > 0) {
-      grantLocal(totalPayout);
-      toast(`You collect ${totalPayout} chips!`);
-    }
-  }
-  if (changed) {
-    try {
-      localStorage.setItem(LEDGER_KEY, JSON.stringify(led));
-    } catch {
-      // Storage isn't available, the game still works without it
-    }
-    syncWallet();
+  const sig = `${s.fair.serverSeedHash}:${s.phase === "match_end" && s.tournament.settled ? "end" : "deal"}`;
+  if (sig === mpSettleSig) return; // Load once per money moment, not every snapshot
+  mpSettleSig = sig;
+  const before = view.soloBalance;
+  await refreshBalance();
+  syncWallet();
+  if (view.soloBalance !== before) {
+    const delta = view.soloBalance - before;
+    toast(delta > 0 ? `You collect ${delta} chips!` : `Buy-in taken: ${delta} chips`);
+    render();
   }
 }
 

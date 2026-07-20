@@ -20,6 +20,7 @@ function backendUrl() {
 }
 
 import { PROTOCOL_VERSION } from "../engine/protocol.js";
+import { cgUserToken } from "./crazygames.js";
 
 export function createNet(handlers = {}) {
   const url = backendUrl();
@@ -78,10 +79,10 @@ export function createNet(handlers = {}) {
   }
 
   return {
-    // v is the protocol version, the server won't let in builds that don't match
-    // so an old build on another site can't break a shared room
-    create: (name, cid) => send({ type: "create", name, cid, v: PROTOCOL_VERSION }),
-    join: (code, name, cid) => send({ type: "join", code, name, cid, v: PROTOCOL_VERSION }),
+    // v is the protocol version, so an old build on another site can't break a shared room
+    // token lets buy-ins come off the right account. Guests can only sit at free tables
+    create: async (name, cid) => send({ type: "create", name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
+    join: async (code, name, cid) => send({ type: "join", code, name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
     rejoin: (code, id) => send({ type: "rejoin", code, id, v: PROTOCOL_VERSION }),
     kick: (slot) => send({ type: "kick", slot }),
     start: () => send({ type: "start" }),

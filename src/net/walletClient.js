@@ -14,7 +14,9 @@ let dailyClaimed = null; // Whether today's bonus is taken, from the server. Nul
 
 const readLocal = () => {
   try {
-    const v = Number(localStorage.getItem(LOCAL_KEY));
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (raw === null) return STARTING_BALANCE; // Never played before, give them the starting chips
+    const v = Number(raw);
     return Number.isFinite(v) && v >= 0 ? v : STARTING_BALANCE;
   } catch {
     return STARTING_BALANCE;
@@ -67,6 +69,7 @@ export const dailyClaimedToday = () => (mode === "server" ? dailyClaimed : null)
 // Connects to the player's account if there is one, guests keep the local wallet
 export async function initWallet() {
   balance = readLocal();
+  writeLocal(balance); // A new browser starts with the starting chips, save them now
   if (!cgAccountsAvailable()) return { mode: (mode = "local"), balance };
   const local = balance;
   const res = await post("balance");

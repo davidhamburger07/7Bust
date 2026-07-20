@@ -97,6 +97,13 @@ function memoryStore() {
       wallets.set(key, w);
       return w.balance;
     },
+    async walletDebit(key, amount) {
+      const w = wallets.get(key);
+      const amt = Math.round(amount);
+      if (!w || w.balance < amt) return null;
+      w.balance -= amt;
+      return w.balance;
+    },
     async walletSetField(key, field, value) {
       const w = wallets.get(key) || { balance: 0, daily: "", adDay: "", adCount: 0, created: new Date().toISOString() };
       w[field] = field === "adCount" ? Number(value) : String(value);
@@ -233,6 +240,17 @@ function redisStore(url) {
     async walletAdd(key, delta) {
       const bal = await redis.hincrby(WALLET(key), "balance", Math.round(delta));
       if (bal < 0) return await redis.hincrby(WALLET(key), "balance", -bal); // Never goes below zero
+      return bal;
+    },
+    // Only takes chips that are there, a debit that lands second sees a negative balance
+    // puts its amount back and fails
+    async walletDebit(key, amount) {
+      const amt = Math.round(amount);
+      const bal = await redis.hincrby(WALLET(key), "balance", -amt);
+      if (bal < 0) {
+        await redis.hincrby(WALLET(key), "balance", amt);
+        return null;
+      }
       return bal;
     },
     async walletSetField(key, field, value) {

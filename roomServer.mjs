@@ -8,6 +8,7 @@ import { aiReactions, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
 import { trackMultiplayerGame, setAnalyticsSink, countersFor } from "./src/engine/analytics.js";
 import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
+import { verifyUserToken, walletKeyFor } from "./src/server/cgAuth.mjs";
 
 // Every platform shares this server, so an older game version gets turned away
 // Games that send no version are older builds and still get let in
@@ -336,8 +337,76 @@ async function emitAiChatter(room, g) {
   }
 }
 
-// Each player's hands go in seat order, extra hands are named like "Alice 2", then the bots
-// Off seats and open seats nobody took don't play
+// Chips only ever move here, against a wallet the server owns
+// Guests only play free tables, so real chips are never paid out of made up ones
+
+const NEEDS_ACCOUNT = "Tables that play for chips need everyone signed in to CrazyGames.";
+
+// Never throws, a missing or bad login just means a guest
+async function walletIdentity(msg) {
+  if (!msg || !msg.token) return null;
+  try {
+    const u = await verifyUserToken(msg.token);
+    return { key: walletKeyFor(u.userId), name: u.username || null };
+  } catch {
+    return null;
+  }
+}
+
+const feeFor = (room, p) => (room.entry || 0) * (room.multiHand ? handsOf(p) : 1);
+
+// Take every buy-in before a card is dealt
+// If anyone can't pay, everyone gets refunded and there's no deal, so a table never starts half paid
+async function chargeBuyIns(room, hostWs) {
+  if (!(room.entry > 0)) return true;
+  const fail = (error) => {
+    if (hostWs) send(hostWs, { type: "error", error, soft: true });
+    room.status = "lobby";
+    return false;
+  };
+  const guest = room.players.find((p) => !p.wallet);
+  if (guest) return fail(`${guest.name} isn't signed in. ${NEEDS_ACCOUNT}`);
+
+  const charged = [];
+  for (const p of room.players) {
+    const amount = feeFor(room, p);
+    if (!amount) continue;
+    const left = await store.walletDebit(p.wallet, amount);
+    if (left === null) {
+      for (const c of charged) await store.walletAdd(c.key, c.amount);
+      return fail(`${p.name} doesn't have ${amount} chips for the buy-in.`);
+    }
+    charged.push({ key: p.wallet, amount, id: p.id });
+  }
+  room.charged = charged;
+  room.settled = false;
+  return true;
+}
+
+// Pays the winners once the match ends
+// The settled flag is saved with the room, so a rejoin or another server can't pay twice
+async function settleStakes(room, g) {
+  if (room.settled || !room.charged || !room.charged.length) return;
+  const s = g.snapshotFor(0);
+  if (s.phase !== "match_end" || !s.tournament || !s.tournament.settled) return;
+  room.settled = true;
+  const winners = s.tournament.winnerSeats || [];
+  for (const p of room.players) {
+    const won = seatsOf(p).filter((seat) => winners.includes(seat)).length;
+    if (won && p.wallet) await store.walletAdd(p.wallet, s.tournament.payout * won);
+  }
+}
+
+// A player who leaves before the deal gets their buy-in back
+// Once the cards are out it stays in the pot, like the terms say
+async function refundIfUndealt(room, p) {
+  if (!p || !p.wallet || room.status === "playing") return;
+  const owed = (room.charged || []).find((c) => c.id === p.id);
+  if (!owed) return;
+  room.charged = room.charged.filter((c) => c.id !== p.id);
+  await store.walletAdd(owed.key, owed.amount);
+}
+
 async function deal(room, hostWs) {
   const roster = [];
   const used = { rook: 0, nova: 0, pip: 0 };
@@ -362,6 +431,7 @@ async function deal(room, hostWs) {
     room.status = "lobby";
     return false;
   }
+  if (!(await chargeBuyIns(room, hostWs))) return false;
   room.roster = roster;
   const g = createGame({ ...gameConfig(room), players: rosterToPlayers(roster) });
   await g.startMatch();
@@ -392,6 +462,7 @@ async function removePlayer(room, playerId, { viaRule = false } = {}) {
   const idx = room.players.findIndex((x) => x.id === playerId);
   if (idx < 0) return false;
   const p = room.players.splice(idx, 1)[0];
+  await refundIfUndealt(room, p);
   if (room.players.length === 0) {
     await store.listRemove(room.code); // Never leave an empty room in the match list
     await store.del(room.code);
@@ -410,6 +481,7 @@ async function removePlayer(room, playerId, { viaRule = false } = {}) {
       }
     }
     syncGame(room, g);
+    await settleStakes(room, g);
     await store.set(room.code, room);
     await store.publish(room.code, await payloadFor(room, { withLobby: true, game: g }));
   } else if (room.status === "buyin") {
@@ -477,6 +549,7 @@ function ensureTicker(code) {
           const g = await gameFor(room);
           await g.step();
           syncGame(room, g);
+          await settleStakes(room, g);
           await emitAiChatter(room, g);
           room.lastStepAt = Date.now();
           await store.set(code, room);
@@ -527,6 +600,7 @@ async function handle(ws, msg) {
       if (!versionOk(ws, msg)) return;
       const code = await newCode();
       const pid = newId();
+      const me = await walletIdentity(msg);
       const room = {
         code,
         hostId: pid,
@@ -542,7 +616,9 @@ async function handle(ws, msg) {
         listedAt: 0,
         // Seat 0 is the host's, the rest start open for friends and the host can change them
         slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
-        players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null }],
+        players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null }],
+        charged: null, // Buy-ins taken for the current match
+        settled: false,
         banned: [], // Players kicked or dropped from this room can't come back
         chat: [],
         roster: null,
@@ -593,8 +669,10 @@ async function handle(ws, msg) {
           }
         }
         if (slot < 0) return send(ws, { type: "error", error: "Room is full" });
+        const me = await walletIdentity(msg);
+        if (room.entry > 0 && !me) return send(ws, { type: "error", error: NEEDS_ACCOUNT });
         const pid = newId();
-        room.players.push({ id: pid, cid: msg.cid || null, slot, seat: slot, seats: [slot], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null });
+        room.players.push({ id: pid, cid: msg.cid || null, slot, seat: slot, seats: [slot], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null });
         await store.set(code, room);
         await attachLocal(ws, code, pid);
         await store.publish(code, await payloadFor(room));
@@ -649,6 +727,9 @@ async function handle(ws, msg) {
         if (msg.entry != null) {
           const fee = Math.round(Number(msg.entry));
           if (!ENTRY_OPTIONS.includes(fee)) return;
+          // Can't set a buy-in while a guest is at the table
+          const guest = fee > 0 && room.players.find((x) => !x.wallet);
+          if (guest) return send(ws, { type: "error", error: `${guest.name} isn't signed in. ${NEEDS_ACCOUNT}`, soft: true });
           room.entry = fee;
         }
         if (msg.rounds != null) {
@@ -729,6 +810,7 @@ async function handle(ws, msg) {
           // Not allowed, ignore it and send the state again
         }
         syncGame(room, g);
+        await settleStakes(room, g);
         await emitAiChatter(room, g);
         await saveAndPublish(room, { game: g });
       });

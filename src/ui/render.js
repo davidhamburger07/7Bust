@@ -666,12 +666,13 @@ function renderOnlineWaiting(o, view) {
   const entry = L.entry || 0;
   const rounds = L.rounds || 9;
   const balance = view.soloBalance || 0;
+  const signedIn = !!(view.wallet && view.wallet.mode === "server");
   const rows = L.slots.map((s) => slotRow(s, L)).join("");
   const sizes = L.isHost
     ? `<div class="mp-sizerow"><span class="mp-label">Table size</span><span class="slot-pills">${[3, 4, 5, 6, 7, 8]
         .map((n) => `<button class="spill ${n === L.size ? "on" : ""}" data-action="mp-size" data-size="${n}">${n}</button>`)
         .join("")}</span></div>
-      <div class="mp-sizerow"><span class="mp-label">Buy-in</span><span class="slot-pills">${[0, 50, 100, 250]
+      <div class="mp-sizerow"><span class="mp-label">Buy-in${signedIn ? "" : ' <small class="mp-hint">chip tables need everyone signed in</small>'}</span><span class="slot-pills">${[0, 50, 100, 250]
         .map((f) => `<button class="spill ${f === entry ? "on" : ""}" data-action="mp-entry" data-fee="${f}">${f === 0 ? "FREE" : f}</button>`)
         .join("")}</span></div>
       <div class="mp-sizerow"><span class="mp-label">Rounds</span><span class="slot-pills">${[1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -690,7 +691,9 @@ function renderOnlineWaiting(o, view) {
   const stakes =
     entry > 0
       ? `Buy-in <b class="num">${entry}</b> chips each · you have <b class="num">${balance.toLocaleString()}</b>${balance < entry ? ' <span class="mp-warn">not enough chips!</span>' : ""} · winner takes the pot · <b class="num">${rounds}</b> round${rounds === 1 ? "" : "s"}`
-      : `Friendly game, no chips at stake · <b class="num">${rounds}</b> round${rounds === 1 ? "" : "s"}`;
+      : signedIn || !view.wallet || !view.wallet.accounts
+        ? `Friendly game, no chips at stake · <b class="num">${rounds}</b> round${rounds === 1 ? "" : "s"}`
+        : `Friendly game, no chips at stake · <a class="link" href="#" data-action="sign-in">sign in</a> to play for chips · <b class="num">${rounds}</b> round${rounds === 1 ? "" : "s"}`;
   const canDeal = L.filled >= 2;
   const startBtn = L.isHost
     ? `<button class="btn btn--play" data-action="mp-start" ${canDeal ? "" : "disabled"}>START GAME<span class="sub">${L.filled} of ${L.size} seats playing${canDeal ? "" : ", seat a friend or an AI"}</span></button>`
