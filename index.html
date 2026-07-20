@@ -18,9 +18,9 @@
     <link rel="stylesheet" href="./src/styles/app.css" />
 
     <!-- Online server for the CrazyGames upload only, vercel.app and localhost use their own -->
-    <!-- Set this to the CrazyGames server before zipping -->
+    <!-- Points at our CrazyGames server so the zipped build can reach the rooms -->
     <script>
-      window.__WS_BACKEND__ = "";
+      window.__WS_BACKEND__ = "wss://7-bust-cg.vercel.app/api/ws";
     </script>
 
     <!-- CrazyGames SDK, loaded before the game so it's there at boot -->
