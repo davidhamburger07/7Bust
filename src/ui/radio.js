@@ -100,6 +100,22 @@ export function startRadio() {
   if (!muted) tryPlay();
 }
 
+// CrazyGames needs game sound off during ads, so pause the music and resume it after
+// The player's own mute and volume aren't touched
+let pausedForAd = false;
+export function pauseForAd() {
+  if (audio && !audio.paused) {
+    pausedForAd = true;
+    audio.pause();
+  }
+}
+export function resumeAfterAd() {
+  if (pausedForAd) {
+    pausedForAd = false;
+    tryPlay();
+  }
+}
+
 // For the settings menu, it moves the radio's own controls so everything goes the same way
 export function setRadioVolume(pct) {
   const vol = document.querySelector("#radio .radio-vol");

@@ -3,12 +3,13 @@
 import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs } from "./ui/announce.js";
-import { initRadio, startRadio, setRadioVolume, getRadioVolume } from "./ui/radio.js";
+import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd } from "./ui/radio.js";
+import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom } from "./net/crazygames.js";
+import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom, cgRewardedAd } from "./net/crazygames.js";
 
 const server = createServer();
 const root = document.getElementById("app");
@@ -19,6 +20,7 @@ const SAVE_KEY = "7bust:save:v3"; // The deck changed, older saves can't resume
 const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
 const LEDGER_KEY = "7bust:mpledger"; // Each online match's buy-in and payout only count once
 const HISTORY_KEY = "7bust:history";
+const DAILY_KEY = "7bust:daily"; // Last day the login bonus was claimed
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
 const TOS_KEY = "7bust:tos:v1";
@@ -77,6 +79,9 @@ const view = {
   showTos: false,
   showSettings: false,
   settings: { sfx: true, voice: true },
+  wheel: null,
+  adPending: false,
+  dailyAvailable: false,
 };
 let net = null;
 let aiTimer = null;
@@ -137,6 +142,7 @@ function dockRadio() {
 
 function render() {
   view.lastEvent = view.snapshot ? view.snapshot.lastEvent : null;
+  view.dailyAvailable = dailyState().available;
   // Keep the log's scroll, follow the bottom unless the player scrolled up
   const oldLog = document.getElementById("log");
   let atBottom = true;
@@ -744,12 +750,72 @@ async function refreshSolo() {
   view.snapshot = await server.getState();
   prevPhase = view.snapshot.phase;
 }
-const resetBalance = async () => {
-  apply(await server.resetBalance());
-  toast("Chips reset to 1,000.");
-};
 function setEntry(fee) {
   view.entryFee = fee;
+  render();
+}
+
+function dailyState() {
+  let last = "";
+  try {
+    last = localStorage.getItem(DAILY_KEY) || "";
+  } catch {
+    // Analytics failing never affects the game
+  }
+  return { available: last !== today(), last };
+}
+async function awardChips(amount) {
+  const res = await server.adjustBalance(amount);
+  if (res && res.snapshot) view.snapshot = res.snapshot;
+  view.soloBalance = (await server.getState()).wallet.balance;
+  save();
+}
+async function claimDaily() {
+  if (!dailyState().available) return;
+  try {
+    localStorage.setItem(DAILY_KEY, today());
+  } catch {
+    // Analytics failing never affects the game
+  }
+  await awardChips(DAILY_BONUS);
+  sfx("chips");
+  playVoice("win");
+  toast(`Daily bonus! +${DAILY_BONUS} chips`);
+  render();
+}
+// Watch a rewarded ad then spin the wheel. Only pays out if the ad plays to the end
+async function watchAdForChips() {
+  if (view.wheel) return;
+  view.adPending = true;
+  render();
+  try {
+    await cgRewardedAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
+  } catch (e) {
+    view.adPending = false;
+    render();
+    toast("No ad available right now, try again soon.");
+    return;
+  }
+  view.adPending = false;
+  const { index, amount } = spinWheel();
+  view.wheel = { phase: "spin", index, amount };
+  sfx("shuffle");
+  render();
+  setTimeout(async () => {
+    if (!view.wheel) return;
+    view.wheel.phase = "done";
+    await awardChips(amount);
+    if (amount >= JACKPOT) {
+      sfx("jackpot");
+      cgHappytime(); // Tells CrazyGames this is a happy moment
+    } else {
+      sfx("ding");
+    }
+    render();
+  }, 4300);
+}
+function closeWheel() {
+  view.wheel = null;
   render();
 }
 
@@ -804,7 +870,9 @@ const ACTIONS = {
   verify: verifyFair,
   rules: showRules,
   "rules-back": hideRules,
-  "reset-balance": resetBalance,
+  daily: claimDaily,
+  "watch-ad": watchAdForChips,
+  "wheel-collect": closeWheel,
   exit: askExit,
   "exit-no": cancelExit,
   "exit-yes": confirmExitYes,

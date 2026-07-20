@@ -42,3 +42,31 @@ export function cgHideInvite() {
 }
 // Room code the player was invited to, or null
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
+
+// Only resolves when the player watched to the end, so a skipped or missing ad never pays
+// Sound is muted while it plays
+export function cgRewardedAd({ onStart, onEnd } = {}) {
+  const s = sdk();
+  if (!s || !s.ad) return Promise.reject(new Error("no-ad"));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      if (onEnd) onEnd();
+      fn(arg);
+    };
+    try {
+      s.ad.requestAd("rewarded", {
+        adStarted: () => onStart && onStart(),
+        adFinished: () => done(resolve),
+        adError: (e) => done(reject, e || new Error("ad-error")),
+      });
+    } catch (e) {
+      if (onEnd) onEnd();
+      reject(e); // Blocked domains throw straight away
+    }
+    // Give up if the SDK never calls back
+    setTimeout(() => done(reject, new Error("ad-timeout")), 45000);
+  });
+}

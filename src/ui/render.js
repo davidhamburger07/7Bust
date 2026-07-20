@@ -2,6 +2,7 @@
 
 import { heatTriple } from "./heat.js";
 import { PLAYER_EMOTES } from "../engine/aiChatter.js";
+import { WHEEL, DAILY_BONUS } from "../engine/rewards.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
@@ -226,6 +227,48 @@ function chipStack(amount) {
   return `<span class="chip-stack"><span class="chip chip--gold"></span><span class="chip chip--red"></span><span class="chip chip--blue"></span></span><span class="chip-amount num">${amount.toLocaleString()}</span>`;
 }
 
+function freeChips(view) {
+  const daily = view.dailyAvailable
+    ? `<button class="btn btn--daily" data-action="daily">DAILY BONUS<span class="sub">+${DAILY_BONUS} free chips</span></button>`
+    : `<div class="daily-done">✓ Daily bonus claimed, come back tomorrow</div>`;
+  const ad = view.adPending
+    ? `<button class="btn btn--ad" disabled>LOADING AD…<span class="sub">hang tight</span></button>`
+    : `<button class="btn btn--ad" data-action="watch-ad">FREE CHIPS<span class="sub">📺 watch an ad &amp; spin the wheel</span></button>`;
+  return `<div class="freechips">${daily}${ad}</div>`;
+}
+
+// Prize wheel with weighted slices, spins to the winner then shows the prize
+export function renderWheel(view) {
+  const w = view.wheel;
+  if (!w) return "";
+  const n = WHEEL.length;
+  const slice = 360 / n;
+  // Lands the winning slice under the pointer after a few full spins
+  const target = 360 * 5 - (w.index * slice + slice / 2);
+  const labels = WHEEL.map((seg, i) => {
+    const jackpot = seg.amount === Math.max(...WHEEL.map((x) => x.amount));
+    return `<div class="wheel-label${jackpot ? " jackpot" : ""}" style="transform:rotate(${i * slice + slice / 2}deg)"><span>${seg.amount}</span></div>`;
+  }).join("");
+  const spinning = w.phase === "spin";
+  // Spinning uses a keyframe since the wheel is rebuilt each render
+  // Once done it's drawn at the landed angle so it doesn't jump
+  const wheelEl = spinning
+    ? `<div class="wheel spinning" style="--spin:${target}deg"><div class="wheel-face">${labels}</div></div>`
+    : `<div class="wheel" style="transform:rotate(${target}deg)"><div class="wheel-face">${labels}</div></div>`;
+  return `
+  <div class="overlay wheel-overlay">
+    <div class="wheel-box">
+      <div class="wheel-title">${w.phase === "done" ? (w.amount >= 2500 ? "JACKPOT!" : "YOU WON!") : "SPIN THE WHEEL"}</div>
+      <div class="wheel-wrap">
+        <div class="wheel-pointer"></div>
+        ${wheelEl}
+        <div class="wheel-hub"></div>
+      </div>
+      ${w.phase === "done" ? `<div class="wheel-result">+<b class="num">${w.amount}</b> chips</div><button class="btn btn--play" data-action="wheel-collect">COLLECT</button>` : `<div class="wheel-spinmsg">Good luck…</div>`}
+    </div>
+  </div>`;
+}
+
 export function renderLobby(view) {
   const s = view.snapshot;
   const cfg = s.config;
@@ -253,10 +296,10 @@ export function renderLobby(view) {
 
       <button class="btn btn--play" data-action="start" ${canEnter ? "" : "disabled"}>${canEnter ? `TAKE A SEAT · −${fee}` : "NOT ENOUGH CHIPS"}</button>
       <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">rooms with friends</span></button>
+      ${freeChips(view)}
       <div class="lobby-foot">
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
         <a class="link" href="#" data-action="history">Match history</a><span>·</span>
-        <a class="link" href="#" data-action="reset-balance">Reset chips</a><span>·</span>
         <a class="link" href="#" data-action="verify">Verify fair</a><span>·</span>
         <a class="link" href="#" data-action="settings">Settings</a>
       </div>
@@ -362,7 +405,8 @@ export function renderOverlay(view) {
       ${scoreboard(s)}
       ${cashLedger(s)}
       <button class="btn btn--play" data-action="again" ${canAgain ? "" : "disabled"}>${canAgain ? `PLAY AGAIN · −${fee}` : "OUT OF CHIPS"}</button>
-      <div>${canAgain ? "" : '<a class="ghost link" href="#" data-action="reset-balance">Reset chips</a> · '}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
+      ${canAgain ? "" : `<button class="btn btn--ad" data-action="watch-ad">FREE CHIPS<span class="sub">📺 watch an ad &amp; spin</span></button>`}
+      <div>${view.dailyAvailable ? '<a class="ghost link" href="#" data-action="daily">Claim daily bonus</a> · ' : ""}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
     </div></div>`;
   }
   return "";
@@ -492,8 +536,8 @@ export function renderSettings(view) {
           <input class="set-vol" id="set-vol" type="range" min="0" max="100" value="${Number(view.settingsVol ?? 35)}" aria-label="Music volume" /></div>
       </section>
       <section class="rule-card"><h3>Chips</h3>
-        <div class="set-row"><span class="mp-label">Broke? Top the wallet back up to 1,000</span>
-          <button class="spill" data-action="reset-balance">RESET CHIPS</button></div>
+        <div class="set-row"><span class="mp-label">Your balance</span><span class="balance">${chipStack(view.soloBalance || 0)}</span></div>
+        <div class="set-row"><span class="mp-label">Low on chips? Claim your daily bonus or watch an ad on the menu for more.</span></div>
       </section>
       <section class="rule-card"><h3>More</h3>
         <div class="set-links">
@@ -721,23 +765,24 @@ export function renderOnline(view) {
 
 export function renderApp(view) {
   if (view.showTos) return `<div class="stage">${renderTos()}</div>`;
-  if (view.showSettings) return `<div class="stage">${renderSettings(view)}</div>`;
+  if (view.showSettings) return `<div class="stage">${renderSettings(view)}${renderWheel(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
+  const wheel = renderWheel(view); // The prize wheel shows over any screen
   if (view.mode === "online" && view.online) {
     const o = view.online;
     // The live table only shows once a real snapshot arrives
     const playing = o.screen === "playing" && view.snapshot && view.snapshot.cashless;
     if (!playing) {
       const scr = o.screen === "playing" ? renderOnlineDealing() : renderOnline(view);
-      return `<div class="stage">${scr}${renderToast(view)}</div>`;
+      return `<div class="stage">${scr}${wheel}${renderToast(view)}</div>`;
     }
     const confirm = view.confirmExit ? renderExitConfirm(view) : "";
-    return `<div class="stage">${renderMatch(view)}${renderOverlay(view)}${confirm}${renderToast(view)}</div>`;
+    return `<div class="stage">${renderMatch(view)}${renderOverlay(view)}${confirm}${wheel}${renderToast(view)}</div>`;
   }
   const inMatch = view.snapshot.phase !== "lobby";
   const screen = inMatch ? renderMatch(view) : renderLobby(view);
   const overlay = inMatch ? renderOverlay(view) : "";
   const confirm = inMatch && view.confirmExit ? renderExitConfirm(view) : "";
-  return `<div class="stage">${screen}${overlay}${confirm}${renderToast(view)}</div>`;
+  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${renderToast(view)}</div>`;
 }

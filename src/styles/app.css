@@ -2787,6 +2787,156 @@
   font-style: italic;
 }
 
+/* Free chips from the daily bonus and the ad wheel */
+.freechips {
+  display: flex;
+  gap: var(--s2);
+  width: 100%;
+  max-width: 440px;
+}
+.freechips .btn {
+  flex: 1;
+  font-size: 15px;
+  padding: var(--s2) var(--s3);
+}
+.btn--daily {
+  background: linear-gradient(180deg, #86f4a8, #21c25c);
+  color: #06331a;
+}
+.btn--ad {
+  background: linear-gradient(180deg, #cdb4ff, #8a5cf0);
+  color: #1b0a45;
+}
+.daily-done {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--faint);
+  border: 2px dashed rgba(255, 210, 74, 0.2);
+  border-radius: 999px;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.wheel-overlay {
+  z-index: 60;
+}
+.wheel-box {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s5);
+  animation: pop 0.4s var(--ease-pop) both;
+}
+.wheel-title {
+  font-family: var(--font-display);
+  font-size: 40px;
+  color: var(--gold);
+  text-shadow: 0 0 24px rgba(255, 210, 74, 0.5), 4px 4px 0 #6e4d12;
+}
+.wheel-wrap {
+  position: relative;
+  width: min(78vw, 340px);
+  height: min(78vw, 340px);
+}
+.wheel-pointer {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 16px solid transparent;
+  border-right: 16px solid transparent;
+  border-top: 26px solid var(--gold);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+  z-index: 3;
+}
+.wheel {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 8px solid var(--rail);
+  box-shadow: 0 0 0 4px var(--gold), 0 0 40px -6px rgba(255, 210, 74, 0.6), var(--shadow-big);
+  background: conic-gradient(
+    from 0deg,
+    #12864a 0 45deg,
+    #0b5c33 45deg 90deg,
+    #12864a 90deg 135deg,
+    #0b5c33 135deg 180deg,
+    #e0b022 180deg 225deg,
+    #0b5c33 225deg 270deg,
+    #12864a 270deg 315deg,
+    #0b5c33 315deg 360deg
+  );
+}
+.wheel.spinning {
+  animation: wheelspin 4.1s cubic-bezier(0.16, 0.84, 0.22, 1) forwards;
+}
+@keyframes wheelspin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(var(--spin));
+  }
+}
+.wheel-face {
+  position: absolute;
+  inset: 0;
+}
+.wheel-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  transform-origin: center;
+  pointer-events: none;
+}
+.wheel-label span {
+  margin-top: 16px;
+  font-family: var(--font-num);
+  font-size: clamp(14px, 4.4vw, 19px);
+  color: var(--cream);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.wheel-label.jackpot span {
+  color: #3d2a05;
+  font-size: clamp(15px, 4.8vw, 21px);
+}
+.wheel-hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #ffe89a, #b8860b);
+  border: 4px solid var(--rail);
+  box-shadow: var(--shadow-card);
+  z-index: 2;
+}
+.wheel-result {
+  font-family: var(--font-num);
+  font-size: 22px;
+  color: var(--cream);
+}
+.wheel-result b {
+  color: var(--gold-hi);
+  font-size: 30px;
+}
+.wheel-spinmsg {
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 15px;
+}
+
 .stage.shake {
   animation: stageshake 0.45s ease;
 }
