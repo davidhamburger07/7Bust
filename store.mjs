@@ -15,6 +15,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const token = () => Math.random().toString(36).slice(2);
 
 function memoryStore() {
+  const stats = new Map(); // Counts per field for each day
+  const events = []; // Raw records, newest first
   const rooms = new Map(); // Room code to the room and when it was saved
   const locks = new Map();
   const subs = new Map();
@@ -78,6 +80,19 @@ function memoryStore() {
     async unsubscribe(code) {
       subs.delete(code);
     },
+    // Same shape as the Redis store so local testing works the same
+    async bumpStats(day, fields, records = []) {
+      for (const bucket of [day, "all"]) {
+        if (!stats.has(bucket)) stats.set(bucket, {});
+        const h = stats.get(bucket);
+        for (const [f, v] of Object.entries(fields)) if (v) h[f] = (h[f] || 0) + Math.round(v);
+      }
+      events.unshift(...records);
+      events.length = Math.min(events.length, 500);
+    },
+    async readStats(day) {
+      return { day: stats.get(day) || {}, all: stats.get("all") || {}, recent: events.slice(0, 50) };
+    },
   };
 }
 
@@ -88,6 +103,8 @@ function redisStore(url) {
   const LOCK = (c) => `${NS_PREFIX}7bust:lock:${c}`;
   const CH = (c) => `${NS_PREFIX}7bust:ch:${c}`;
   const LIST = `${NS_PREFIX}7bust:public`; // Room code to its summary
+  const STATS = (day) => `${NS_PREFIX}7bust:stats:${day}`;
+  const EVENTS = `${NS_PREFIX}7bust:events`; // Latest raw records, capped
   const redis = new Redis(url, { maxRetriesPerRequest: 3, enableAutoPipelining: true });
   let subConn = null; // Own connection, a Redis client that's subscribed can't run other commands
   const subs = new Map();
@@ -154,6 +171,30 @@ function redisStore(url) {
     async publish(code, payload) {
       await redis.publish(CH(code), JSON.stringify(payload));
     },
+    // Counters instead of raw events, one batched trip per call
+    // keeps us well inside Upstash's limits however busy the game gets
+    async bumpStats(day, fields, records = []) {
+      const p = redis.pipeline();
+      for (const [f, v] of Object.entries(fields)) {
+        if (!v) continue;
+        p.hincrby(STATS(day), f, Math.round(v));
+        p.hincrby(STATS("all"), f, Math.round(v));
+      }
+      p.expire(STATS(day), 60 * 60 * 24 * 120); // Daily buckets are kept for about four months
+      if (records.length) {
+        p.lpush(EVENTS, ...records.map((r) => JSON.stringify(r)));
+        p.ltrim(EVENTS, 0, 499); // Only the latest ones, for checking by eye
+      }
+      await p.exec();
+    },
+    async readStats(day) {
+      const [today, all, recent] = await Promise.all([
+        redis.hgetall(STATS(day)),
+        redis.hgetall(STATS("all")),
+        redis.lrange(EVENTS, 0, 49),
+      ]);
+      return { day: today || {}, all: all || {}, recent: (recent || []).map((r) => JSON.parse(r)) };
+    },
     async subscribe(code, fn) {
       subs.set(code, fn);
       await subscriber().subscribe(CH(code));
@@ -165,13 +206,19 @@ function redisStore(url) {
   };
 }
 
+// One store per process, everything that uses it must share the same data
+// A second memory store would hide data and a second Redis link wastes a connection
+let instance = null;
 export function createStore() {
+  if (instance) return instance;
   const url = process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL;
   const nsLabel = ROOM_NS ? ` (namespace "${ROOM_NS}")` : "";
   if (url) {
     console.log(`Room store: redis (shared across instances)${nsLabel}`);
-    return redisStore(url);
+    instance = redisStore(url);
+  } else {
+    console.log(`Room store: in-memory (single process)${nsLabel}`);
+    instance = memoryStore();
   }
-  console.log(`Room store: in-memory (single process)${nsLabel}`);
-  return memoryStore();
+  return instance;
 }

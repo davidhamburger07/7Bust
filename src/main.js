@@ -5,6 +5,8 @@ import { renderApp, chatLines } from "./ui/render.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd } from "./ui/radio.js";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
+import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
+import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
@@ -863,6 +865,7 @@ async function claimDaily() {
     // Analytics failing never affects the game
   }
   await awardChips(DAILY_BONUS);
+  trackReward({ kind: "daily", amount: DAILY_BONUS });
   sfx("chips");
   playVoice("win");
   toast(`Daily bonus! +${DAILY_BONUS} chips`);
@@ -890,6 +893,7 @@ async function watchAdForChips() {
     if (!view.wheel) return;
     view.wheel.phase = "done";
     await awardChips(amount);
+    trackReward({ kind: "wheel", amount, jackpot: amount >= JACKPOT });
     if (amount >= JACKPOT) {
       sfx("jackpot");
       cgHappytime(); // Tells CrazyGames this is a happy moment
@@ -1075,6 +1079,9 @@ root.addEventListener("keydown", (e) => {
 (async function init() {
   cgLoadingStart();
   fitStage();
+  // Solo runs the engine in the page, so its analytics needs a way to the backend
+  setAnalyticsSink(analyticsSink);
+  installAnalyticsFlush();
   initRadio();
   try {
     view.showTos = !localStorage.getItem(TOS_KEY);

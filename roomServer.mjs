@@ -5,7 +5,7 @@ import { WebSocketServer } from "ws";
 import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
 import { aiReactions, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
-import { trackMultiplayerGame } from "./src/engine/analytics.js";
+import { trackMultiplayerGame, setAnalyticsSink, countersFor } from "./src/engine/analytics.js";
 import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
 
@@ -872,6 +872,14 @@ async function onSocketClose(ws) {
 // Null takes any path, Vercel only sends /api/ws traffic here anyway
 export function attachRoomServer(httpServer, { path = "/api/ws" } = {}) {
   if (!store) store = createStore();
+  // Online games run the engine here, so their stats go straight to the store
+  // Counted the same way as the browser's batches
+  setAnalyticsSink((rec) => {
+    const fields = countersFor(rec);
+    if (!Object.keys(fields).length) return;
+    const day = new Date().toISOString().slice(0, 10);
+    store.bumpStats(day, fields, rec.event === "round_end" ? [] : [rec]).catch(() => {});
+  });
   const wss = path ? new WebSocketServer({ server: httpServer, path }) : new WebSocketServer({ server: httpServer });
   wss.on("connection", (ws) => {
     ws.roomCode = null;

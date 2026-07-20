@@ -38,6 +38,26 @@ const server = http.createServer(async (req, res) => {
     let pathname = decodeURIComponent(url.pathname);
     if (pathname === "/") pathname = "/index.html";
 
+    // Runs the Vercel functions locally so stats work the same
+    if (pathname === "/api/track" || pathname === "/api/stats") {
+      const mod = await import(pathname === "/api/track" ? "./api/track.mjs" : "./api/stats.mjs");
+      const shim = {
+        setHeader: (k, v) => res.setHeader(k, v),
+        status(code) {
+          res.statusCode = code;
+          return shim;
+        },
+        json(obj) {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(obj));
+          return shim;
+        },
+        end: () => res.end(),
+      };
+      await mod.default(req, shim);
+      return;
+    }
+
     // Stop paths from reaching outside the project folder
     const filePath = normalize(join(ROOT, pathname));
     if (!filePath.startsWith(ROOT)) {
