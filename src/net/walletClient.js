@@ -70,7 +70,7 @@ export const dailyClaimedToday = () => (mode === "server" ? dailyClaimed : null)
 export async function initWallet() {
   balance = readLocal();
   writeLocal(balance); // A new browser starts with the starting chips, save them now
-  if (!cgAccountsAvailable()) return { mode: (mode = "local"), balance };
+  if (!(await cgAccountsAvailable())) return { mode: (mode = "local"), balance };
   const local = balance;
   const res = await post("balance");
   if (!res) return { mode: (mode = "local"), balance };

@@ -75,7 +75,23 @@ export const cgRewardedAd = (opts) => requestAd("rewarded", opts);
 export const cgMidgameAd = (opts) => requestAd("midgame", opts);
 
 // Accounts only exist on CrazyGames itself, everywhere else players use the guest wallet
-export const cgAccountsAvailable = () => !!safe((s) => s.user.isUserAccountAvailable);
+// In SDK v2 isUserAccountAvailable is an async function, not a true or false, both are handled
+let accountsCached = null;
+export async function cgAccountsAvailable() {
+  if (accountsCached !== null) return accountsCached;
+  const s = sdk();
+  if (!s || !s.user) return (accountsCached = false);
+  try {
+    const v = s.user.isUserAccountAvailable;
+    accountsCached = !!(typeof v === "function" ? await v.call(s.user) : v);
+  } catch {
+    accountsCached = false; // Off the platform the SDK throws instead of answering
+  }
+  return accountsCached;
+}
+// Last known answer for code that can't wait
+// False until checked, so we never offer a sign in that can't work
+export const cgAccountsKnown = () => accountsCached === true;
 export const cgGetUser = () => safe((s) => s.user.getUser());
 
 // Signed token our backend checks, guests don't have one

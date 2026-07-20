@@ -8,7 +8,7 @@ import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
 import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
-import { cgAccountsAvailable, cgSignIn, cgOnAuth } from "./net/crazygames.js";
+import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth } from "./net/crazygames.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
@@ -849,13 +849,13 @@ async function maybeMidgameAd() {
 // The game engine never holds money
 function syncWallet() {
   view.soloBalance = getBalance();
-  view.wallet = { mode: walletMode(), accounts: cgAccountsAvailable(), user: walletUser() };
+  view.wallet = { mode: walletMode(), accounts: cgAccountsKnown(), user: walletUser() };
 }
 
 // Signing in makes chips permanent and guest chips move over on the first sign in
 // The server caps how many so it can't be farmed
 async function signIn() {
-  if (!cgAccountsAvailable()) return;
+  if (!(await cgAccountsAvailable())) return;
   const user = await cgSignIn();
   if (!user) return;
   const before = getBalance();
