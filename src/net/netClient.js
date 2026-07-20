@@ -3,7 +3,7 @@
 
 // Local and Vercel hosts use their own backend on the same address
 // CrazyGames and other domains use the backend set on the page, or the fallback
-const CG_BACKEND_FALLBACK = "wss://7-bust.vercel.app/api/ws";
+const CG_BACKEND_FALLBACK = "wss://7-bust-cg.vercel.app/api/ws";
 
 // The same backend over HTTP, used to send tracking events
 export function backendHttpOrigin() {
