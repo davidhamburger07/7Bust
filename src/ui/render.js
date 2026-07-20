@@ -585,6 +585,7 @@ function renderOnlineMenu(o) {
       <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${o.name || ""}" autocomplete="off" />
       ${onlineError(o)}
       <button class="btn btn--play" data-action="mp-create">CREATE A ROOM</button>
+      <button class="btn btn--online" data-action="mp-browse">FIND A MATCH<span class="sub">browse public tables</span></button>
       <button class="btn btn--online" data-action="mp-join-screen">JOIN WITH A CODE</button>
     </div>
   </div>`;
@@ -676,6 +677,9 @@ function renderOnlineWaiting(o, view) {
       <div class="mp-sizerow"><span class="mp-label">Rounds</span><span class="slot-pills">${[1, 2, 3, 4, 5, 6, 7, 8, 9]
         .map((r) => `<button class="spill ${r === rounds ? "on" : ""}" data-action="mp-rounds" data-r="${r}">${r}</button>`)
         .join("")}</span></div>
+      <div class="mp-sizerow"><span class="mp-label">Visibility <small class="mp-hint">public tables show in Find a Match</small></span><span class="slot-pills">
+        <button class="spill ${!L.isPublic ? "on" : ""}" data-action="mp-public" data-on="0">PRIVATE</button>
+        <button class="spill ${L.isPublic ? "on" : ""}" data-action="mp-public" data-on="1">PUBLIC</button></span></div>
       <div class="mp-sizerow"><span class="mp-label">Multi-hand <small class="mp-hint">players may buy several hands</small></span><span class="slot-pills">
         <button class="spill ${!L.multiHand ? "on" : ""}" data-action="mp-multi" data-on="0">OFF</button>
         <button class="spill ${L.multiHand ? "on" : ""}" data-action="mp-multi" data-on="1">ON</button></span></div>
@@ -708,6 +712,71 @@ function renderOnlineWaiting(o, view) {
       </div>
       ${onlineError(o)}
       ${startBtn}
+    </div>
+  </div>`;
+}
+
+const BROWSE_FILTERS = [
+  { key: "seats", label: "Seats", opts: [["any", "ANY"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6"], ["7", "7"], ["8", "8"]] },
+  { key: "entry", label: "Buy-in", opts: [["any", "ANY"], ["0", "FREE"], ["50", "50"], ["100", "100"], ["250", "250"]] },
+  { key: "rounds", label: "Rounds", opts: [["any", "ANY"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6"], ["7", "7"], ["8", "8"], ["9", "9"]] },
+  { key: "multi", label: "Multi-hand", opts: [["any", "ANY"], ["off", "OFF"], ["on", "ON"]] },
+];
+
+export function filterRooms(list, f) {
+  return (list || []).filter((r) => {
+    if (f.seats !== "any" && r.size !== Number(f.seats)) return false;
+    if (f.entry !== "any" && (r.entry || 0) !== Number(f.entry)) return false;
+    if (f.rounds !== "any" && r.rounds !== Number(f.rounds)) return false;
+    if (f.multi !== "any" && !!r.multiHand !== (f.multi === "on")) return false;
+    if (f.joinable && r.openSeats <= 0) return false;
+    return true;
+  });
+}
+
+function renderOnlineBrowse(o, view) {
+  const b = view.browse || { list: [], filters: { seats: "any", entry: "any", rounds: "any", multi: "any", joinable: true } };
+  const f = b.filters;
+  const filterRows = BROWSE_FILTERS.map(
+    (row) => `<div class="mp-sizerow"><span class="mp-label">${row.label}</span><span class="slot-pills">${row.opts
+      .map(([v, lab]) => `<button class="spill ${String(f[row.key]) === v ? "on" : ""}" data-action="browse-filter" data-k="${row.key}" data-v="${v}">${lab}</button>`)
+      .join("")}</span></div>`
+  ).join("");
+  const joinableRow = `<div class="mp-sizerow"><span class="mp-label">Show full tables</span><span class="slot-pills">
+      <button class="spill ${f.joinable ? "on" : ""}" data-action="browse-filter" data-k="joinable" data-v="1">HIDE</button>
+      <button class="spill ${f.joinable ? "" : "on"}" data-action="browse-filter" data-k="joinable" data-v="0">SHOW</button></span></div>`;
+  const rooms = filterRooms(b.list, f);
+  const rows = rooms
+    .map((r) => {
+      const full = r.openSeats <= 0;
+      return `
+      <div class="browse-row${full ? " full" : ""}">
+        <span class="browse-host">${r.host}<span class="browse-code num">${r.code}</span></span>
+        <span class="browse-tags">
+          <span class="btag">${r.filled}/${r.size} seats</span>
+          <span class="btag">${r.rounds} rd${r.rounds === 1 ? "" : "s"}</span>
+          <span class="btag ${r.entry > 0 ? "paid" : ""}">${r.entry > 0 ? `${r.entry} buy-in` : "FREE"}</span>
+          ${r.multiHand ? '<span class="btag multi">MULTI-HAND</span>' : ""}
+        </span>
+        ${full ? '<span class="browse-full">FULL</span>' : `<button class="spill on browse-join" data-action="mp-join-listed" data-code="${r.code}">JOIN</button>`}
+      </div>`;
+    })
+    .join("");
+  const empty = b.loading && !b.list.length ? `<div class="browse-empty"><span class="spinner"></span> Looking for tables…</div>` : `<div class="browse-empty">No public matches match your filters.<br /><small>Host one and flip it to PUBLIC so others can join.</small></div>`;
+  return `
+  <div class="screen screen--online">
+    <div class="mp-card mp-card--wide">
+      <button class="icon-btn mp-close" data-action="mp-menu" aria-label="Back">←</button>
+      <div class="wordmark wordmark--sm">FIND A MATCH</div>
+      <label class="mp-label" for="mp-name">Your name</label>
+      <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${escAttr(o.name || "")}" autocomplete="off" />
+      <div class="browse-filters">${filterRows}${joinableRow}</div>
+      <div class="browse-head">
+        <span class="mp-label">${rooms.length} table${rooms.length === 1 ? "" : "s"} open</span>
+        <button class="link" data-action="mp-browse-refresh">${b.loading ? "Refreshing…" : "Refresh"}</button>
+      </div>
+      <div class="browse-list">${rows || empty}</div>
+      ${onlineError(o)}
     </div>
   </div>`;
 }
@@ -757,6 +826,7 @@ function renderOnlineDealing() {
 export function renderOnline(view) {
   const o = view.online;
   if (o.screen === "join") return renderOnlineJoin(o);
+  if (o.screen === "browse") return renderOnlineBrowse(o, view);
   if (o.screen === "connecting") return renderOnlineConnecting(o);
   if (o.screen === "buyin") return renderOnlineBuyin(o, view);
   if (o.screen === "waiting" && o.lobby) return renderOnlineWaiting(o, view);

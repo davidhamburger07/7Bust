@@ -18,6 +18,7 @@ function memoryStore() {
   const rooms = new Map(); // Room code to the room and when it was saved
   const locks = new Map();
   const subs = new Map();
+  const listings = new Map();
 
   // Clears old rooms so a long running dev server doesn't pile them up
   setInterval(() => {
@@ -55,6 +56,15 @@ function memoryStore() {
     async unlock(code, t) {
       if (locks.get(code) === t) locks.delete(code);
     },
+    async listAdd(code, summary) {
+      listings.set(code, JSON.parse(JSON.stringify(summary)));
+    },
+    async listRemove(code) {
+      listings.delete(code);
+    },
+    async listAll() {
+      return [...listings.values()].map((s) => JSON.parse(JSON.stringify(s)));
+    },
     async publish(code, payload) {
       const fns = subs.get(code);
       if (!fns) return;
@@ -77,6 +87,7 @@ function redisStore(url) {
   const KEY = (c) => `${NS_PREFIX}7bust:room:${c}`;
   const LOCK = (c) => `${NS_PREFIX}7bust:lock:${c}`;
   const CH = (c) => `${NS_PREFIX}7bust:ch:${c}`;
+  const LIST = `${NS_PREFIX}7bust:public`; // Room code to its summary
   const redis = new Redis(url, { maxRetriesPerRequest: 3, enableAutoPipelining: true });
   let subConn = null; // Own connection, a Redis client that's subscribed can't run other commands
   const subs = new Map();
@@ -121,6 +132,24 @@ function redisStore(url) {
     async unlock(code, t) {
       // Only release our own lock
       await redis.eval(`if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`, 1, LOCK(code), t);
+    },
+    async listAdd(code, summary) {
+      await redis.hset(LIST, code, JSON.stringify(summary));
+    },
+    async listRemove(code) {
+      await redis.hdel(LIST, code);
+    },
+    async listAll() {
+      const all = await redis.hgetall(LIST);
+      const out = [];
+      for (const raw of Object.values(all || {})) {
+        try {
+          out.push(JSON.parse(raw));
+        } catch {
+          // Skip a broken entry
+        }
+      }
+      return out;
     },
     async publish(code, payload) {
       await redis.publish(CH(code), JSON.stringify(payload));

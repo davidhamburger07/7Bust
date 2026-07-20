@@ -79,6 +79,7 @@ const view = {
   showTos: false,
   showSettings: false,
   settings: { sfx: true, voice: true },
+  browse: null,
   wheel: null,
   adPending: false,
   dailyAvailable: false,
@@ -467,6 +468,7 @@ function ensureNet() {
         rounds: msg.rounds || 9,
         multiHand: !!msg.multiHand,
         dropRule: msg.dropRule || "ai",
+        isPublic: !!msg.isPublic,
         you: msg.you,
         self: msg.self,
         isHost: msg.isHost,
@@ -501,6 +503,12 @@ function ensureNet() {
       render();
       handleAnnouncements(snapshot);
       settleMpWallet(snapshot);
+    },
+    onBrowse(list) {
+      if (!view.browse) return;
+      view.browse.list = list;
+      view.browse.loading = false;
+      if (view.online && view.online.screen === "browse") render();
     },
     onChat(list) {
       // Each new chat line pops as a bubble over that player's seat
@@ -581,6 +589,7 @@ function onlineMenu() {
   if (!view.online) return openOnline();
   view.online.screen = "menu";
   view.online.error = null;
+  stopBrowsePoll();
   render();
 }
 function mpCreate() {
@@ -595,7 +604,57 @@ function mpCreate() {
 function joinScreen() {
   view.online.screen = "join";
   view.online.error = null;
+  stopBrowsePoll();
   render();
+}
+
+let browseTimer = null;
+function stopBrowsePoll() {
+  if (browseTimer) {
+    clearInterval(browseTimer);
+    browseTimer = null;
+  }
+}
+function openBrowse() {
+  ensureNet();
+  if (!view.online) openOnline();
+  view.online.screen = "browse";
+  view.online.error = null;
+  view.browse = view.browse || { list: [], loading: true, filters: { seats: "any", entry: "any", rounds: "any", multi: "any", joinable: true } };
+  view.browse.loading = true;
+  net.browse();
+  stopBrowsePoll();
+  browseTimer = setInterval(() => {
+    if (view.online && view.online.screen === "browse" && net) net.browse();
+    else stopBrowsePoll();
+  }, 4000);
+  render();
+}
+function refreshBrowse() {
+  if (!net) return;
+  view.browse.loading = true;
+  net.browse();
+  render();
+}
+function setBrowseFilter(key, val) {
+  sfx("click");
+  view.browse.filters[key] = key === "joinable" ? val === "1" : val;
+  render();
+}
+function joinListed(code) {
+  ensureNet();
+  view.online.name = readName();
+  view.online.codeInput = code;
+  view.online.hadRoom = false;
+  view.online.screen = "connecting";
+  view.online.error = null;
+  stopBrowsePoll();
+  render();
+  net.join(code, view.online.name, clientId());
+}
+function mpPublic(on) {
+  sfx("click");
+  net && net.config({ isPublic: !!on });
 }
 function mpJoin() {
   const codeEl = document.getElementById("mp-code");
@@ -723,6 +782,7 @@ function closeHistory() {
   render();
 }
 async function mpLeave() {
+  stopBrowsePoll();
   if (net) {
     net.leave(); // Free the seat, mid-game a bot takes it over
     net.close();
@@ -894,6 +954,8 @@ const ACTIONS = {
   "mp-dealnow": mpDealNow,
   "mp-open": openOnline,
   "mp-menu": onlineMenu,
+  "mp-browse": openBrowse,
+  "mp-browse-refresh": refreshBrowse,
   "mp-create": mpCreate,
   "mp-join-screen": joinScreen,
   "mp-join": mpJoin,
@@ -920,7 +982,10 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "mp-entry") return mpEntry(Number(el.dataset.fee));
   if (el.dataset.action === "mp-rounds") return mpRounds(Number(el.dataset.r));
   if (el.dataset.action === "mp-multi") return mpMulti(el.dataset.on === "1");
+  if (el.dataset.action === "mp-public") return mpPublic(el.dataset.on === "1");
   if (el.dataset.action === "mp-drop") return mpDrop(el.dataset.rule);
+  if (el.dataset.action === "mp-join-listed") return joinListed(el.dataset.code);
+  if (el.dataset.action === "browse-filter") return setBrowseFilter(el.dataset.k, el.dataset.v);
   if (el.dataset.action === "mp-hands") return mpHands(Number(el.dataset.n));
   if (el.dataset.action === "mp-kick") return mpKick(Number(el.dataset.index));
   if (el.dataset.action === "set-pref") return setPref(el.dataset.k, el.dataset.v === "1");

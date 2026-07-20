@@ -2787,6 +2787,100 @@
   font-style: italic;
 }
 
+/* "Find a Match" list of public rooms */
+.browse-filters {
+  display: grid;
+  gap: 4px;
+  padding: var(--s2) 0;
+  border-top: 1px solid rgba(255, 210, 74, 0.15);
+  border-bottom: 1px solid rgba(255, 210, 74, 0.15);
+}
+.browse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding-top: 2px;
+}
+.browse-list {
+  display: grid;
+  gap: var(--s2);
+  max-height: 42vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-lo) transparent;
+}
+.browse-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  padding: var(--s2) var(--s3);
+  border-radius: 12px;
+  background: rgba(6, 40, 22, 0.6);
+  border: 2px solid rgba(255, 210, 74, 0.18);
+}
+.browse-row.full {
+  opacity: 0.55;
+}
+.browse-host {
+  flex: 1 1 130px;
+  min-width: 0;
+  font-weight: 900;
+  color: var(--cream);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+.browse-code {
+  font-size: 12px;
+  color: var(--gold-hi);
+  letter-spacing: 0.14em;
+}
+.browse-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.btag {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.btag.paid {
+  background: rgba(255, 210, 74, 0.16);
+  color: var(--gold-hi);
+}
+.btag.multi {
+  background: rgba(201, 139, 255, 0.18);
+  color: var(--violet);
+}
+.browse-join {
+  flex: none;
+}
+.browse-full {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--bust);
+  letter-spacing: 0.08em;
+}
+.browse-empty {
+  text-align: center;
+  color: var(--faint);
+  font-size: 13px;
+  padding: var(--s5) var(--s3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+}
+
 /* Free chips from the daily bonus and the ad wheel */
 .freechips {
   display: flex;

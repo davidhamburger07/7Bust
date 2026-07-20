@@ -150,6 +150,7 @@ function lobbyView(room) {
     rounds: room.rounds || 9,
     multiHand: !!room.multiHand,
     dropRule: room.dropRule || "ai",
+    isPublic: !!room.isPublic,
   };
 }
 
@@ -261,7 +262,44 @@ function deliver(code, payload) {
   }
 }
 
+const LISTING_HEARTBEAT_MS = 60000;
+const LISTING_STALE_MS = 180000; // Entries not refreshed in this time count as gone
+
+function publicSummary(room) {
+  const host = room.players.find((p) => p.id === room.hostId);
+  let open = 0;
+  for (let i = 0; i < room.size; i++) {
+    if (room.slots[i].type === "open" && !room.players.some((x) => x.slot === i)) open++;
+  }
+  return {
+    code: room.code,
+    host: host ? host.name : "?",
+    humans: room.players.length,
+    size: room.size,
+    filled: room.players.length + aiSlotCount(room),
+    openSeats: open,
+    rounds: room.rounds || 9,
+    entry: room.entry || 0,
+    multiHand: !!room.multiHand,
+    listedAt: Date.now(),
+  };
+}
+
+// A room shows in the match list only while it's public and still in the lobby
+async function syncListing(room) {
+  const shouldList = !!room.isPublic && room.status === "lobby";
+  if (shouldList) {
+    room.listed = true;
+    room.listedAt = Date.now();
+    await store.listAdd(room.code, publicSummary(room));
+  } else if (room.listed) {
+    room.listed = false;
+    await store.listRemove(room.code);
+  }
+}
+
 async function saveAndPublish(room, opts = {}) {
+  await syncListing(room);
   await store.set(room.code, room);
   await store.publish(room.code, await payloadFor(room, opts));
 }
@@ -343,6 +381,7 @@ async function removePlayer(room, playerId, { viaRule = false } = {}) {
   if (idx < 0) return false;
   const p = room.players.splice(idx, 1)[0];
   if (room.players.length === 0) {
+    await store.listRemove(room.code); // Never leave an empty room in the match list
     await store.del(room.code);
     return true;
   }
@@ -392,6 +431,13 @@ function ensureTicker(code) {
       const voteExpired = peek.pauseVote && peek.pauseVote.expiresAt < now;
       const dropDue = peek.players.some((p) => !p.connected && p.disconnectedAt && now - p.disconnectedAt > DROP_AFTER_MS);
       const stepDue = peek.status === "playing" && peek.auto && !paused && now - (peek.lastStepAt || 0) >= AI_DELAY - 80;
+      // Keep a quiet public lobby in the match list, entries go stale without this
+      if (peek.isPublic && peek.status === "lobby" && now - (peek.listedAt || 0) > LISTING_HEARTBEAT_MS) {
+        peek.listed = true;
+        peek.listedAt = now;
+        await store.listAdd(code, publicSummary(peek));
+        await store.set(code, peek);
+      }
       if (!voteExpired && !dropDue && !stepDue) return;
       const token = await store.lock(code, { retries: 0 });
       if (!token) return;
@@ -478,6 +524,9 @@ async function handle(ws, msg) {
         rounds: 9, // Match length, the host sets it
         multiHand: false, // Host setting, players can buy more than one hand
         dropRule: "ai", // After a minute offline, "ai" lets a bot play on and "kick" retires the seat
+        isPublic: false, // Shows in Find a Match for anyone to join
+        listed: false,
+        listedAt: 0,
         // Seat 0 is the host's, the rest start open for friends and the host can change them
         slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
         players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: cleanName(msg.name), connected: true, pauseUsed: false, disconnectedAt: null }],
@@ -493,6 +542,22 @@ async function handle(ws, msg) {
       await store.set(code, room);
       await attachLocal(ws, code, pid);
       await store.publish(code, await payloadFor(room));
+      break;
+    }
+    case "browse": {
+      // The public match list, only live ones, newest first, with a cap
+      const now = Date.now();
+      const all = await store.listAll();
+      const live = [];
+      for (const r of all) {
+        if (now - (r.listedAt || 0) > LISTING_STALE_MS) {
+          await store.listRemove(r.code); // The room went away without cleaning up
+          continue;
+        }
+        live.push(r);
+      }
+      live.sort((a, b) => b.listedAt - a.listedAt);
+      send(ws, { type: "browse", list: live.slice(0, 60) });
       break;
     }
     case "join": {
@@ -578,6 +643,7 @@ async function handle(ws, msg) {
         }
         if (msg.multiHand != null) room.multiHand = !!msg.multiHand;
         if (msg.dropRule === "ai" || msg.dropRule === "kick") room.dropRule = msg.dropRule;
+        if (msg.isPublic != null) room.isPublic = !!msg.isPublic;
         await saveAndPublish(room);
       });
       break;
