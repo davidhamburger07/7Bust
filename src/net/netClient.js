@@ -1,18 +1,16 @@
 // Online multiplayer. Uses the same moves as the solo game, so the screen draws both the same way
 // Anything sent before it connects waits in a queue
 
-// On CrazyGames the game is on their domain, so it can't reach our server by its own address
-// Local and Vercel still use their own server
-const BACKEND_WS = "wss://7-bust.vercel.app/api/ws";
+// Local and Vercel hosts use their own backend on the same address
+// CrazyGames and other domains use the backend set on the page, or the fallback
+const CG_BACKEND_FALLBACK = "wss://7-bust.vercel.app/api/ws";
 function backendUrl() {
   const host = location.hostname;
-  if (host === "localhost" || host === "127.0.0.1" || host === "") {
-    return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws`;
-  }
-  if (/(^|\.)7-bust\.vercel\.app$/i.test(host)) {
-    return `wss://${location.host}/api/ws`;
-  }
-  return BACKEND_WS; // CrazyGames, custom domains and anywhere else
+  const wss = location.protocol === "https:" ? "wss" : "ws";
+  if (host === "localhost" || host === "127.0.0.1" || host === "") return `${wss}://${location.host}/api/ws`;
+  if (/\.vercel\.app$/i.test(host) || host === "vercel.app") return `wss://${location.host}/api/ws`;
+  const override = typeof window !== "undefined" && window.__WS_BACKEND__;
+  return override || CG_BACKEND_FALLBACK; // CrazyGames and custom domains
 }
 
 export function createNet(handlers = {}) {
