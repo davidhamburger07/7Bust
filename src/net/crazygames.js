@@ -73,3 +73,35 @@ function requestAd(type, { onStart, onEnd } = {}) {
 
 export const cgRewardedAd = (opts) => requestAd("rewarded", opts);
 export const cgMidgameAd = (opts) => requestAd("midgame", opts);
+
+// Accounts only exist on CrazyGames itself, everywhere else players use the guest wallet
+export const cgAccountsAvailable = () => !!safe((s) => s.user.isUserAccountAvailable);
+export const cgGetUser = () => safe((s) => s.user.getUser());
+
+// Signed token our backend checks, guests don't have one
+// The SDK refreshes it, so just ask for a new one each time
+export async function cgUserToken() {
+  const s = sdk();
+  if (!s || !s.user) return null;
+  try {
+    return (await s.user.getUserToken()) || null;
+  } catch {
+    return null; // Not signed in
+  }
+}
+
+// CrazyGames sign in box, gives the user or null if they close it
+export async function cgSignIn() {
+  const s = sdk();
+  if (!s || !s.user) return null;
+  try {
+    return (await s.user.showAuthPrompt()) || null;
+  } catch {
+    return null;
+  }
+}
+
+// Lets the wallet switch over straight away when a player signs in mid-game
+export function cgOnAuth(fn) {
+  safe((s) => s.user.addAuthListener(fn));
+}

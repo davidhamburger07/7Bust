@@ -15,6 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const token = () => Math.random().toString(36).slice(2);
 
 function memoryStore() {
+  const wallets = new Map();
   const stats = new Map(); // Counts per field for each day
   const events = []; // Raw records, newest first
   const rooms = new Map(); // Room code to the room and when it was saved
@@ -81,6 +82,27 @@ function memoryStore() {
       subs.delete(code);
     },
     // Same shape as the Redis store so local testing works the same
+    async walletGet(key) {
+      const w = wallets.get(key);
+      return w ? { ...w } : { balance: 0, daily: "", adDay: "", adCount: 0, created: "" };
+    },
+    async walletInit(key, balance) {
+      if (wallets.has(key)) return false;
+      wallets.set(key, { balance: Math.round(balance), daily: "", adDay: "", adCount: 0, created: new Date().toISOString() });
+      return true;
+    },
+    async walletAdd(key, delta) {
+      const w = wallets.get(key) || { balance: 0, daily: "", adDay: "", adCount: 0, created: new Date().toISOString() };
+      w.balance = Math.max(0, w.balance + Math.round(delta));
+      wallets.set(key, w);
+      return w.balance;
+    },
+    async walletSetField(key, field, value) {
+      const w = wallets.get(key) || { balance: 0, daily: "", adDay: "", adCount: 0, created: new Date().toISOString() };
+      w[field] = field === "adCount" ? Number(value) : String(value);
+      wallets.set(key, w);
+    },
+    // Same shape as the Redis store so local testing works the same
     async bumpStats(day, fields, records = []) {
       for (const bucket of [day, "all"]) {
         if (!stats.has(bucket)) stats.set(bucket, {});
@@ -105,6 +127,7 @@ function redisStore(url) {
   const LIST = `${NS_PREFIX}7bust:public`; // Room code to its summary
   const STATS = (day) => `${NS_PREFIX}7bust:stats:${day}`;
   const EVENTS = `${NS_PREFIX}7bust:events`; // Latest raw records, capped
+  const WALLET = (k) => `${NS_PREFIX}7bust:wallet:${k}`; // Balance and the daily and ad claim info
   const redis = new Redis(url, { maxRetriesPerRequest: 3, enableAutoPipelining: true });
   let subConn = null; // Own connection, a Redis client that's subscribed can't run other commands
   const subs = new Map();
@@ -194,6 +217,26 @@ function redisStore(url) {
         redis.lrange(EVENTS, 0, 49),
       ]);
       return { day: today || {}, all: all || {}, recent: (recent || []).map((r) => JSON.parse(r)) };
+    },
+    // Wallets are kept on the server, keyed by a hash of the CrazyGames user ID
+    // Increments are atomic so two requests at once can't spend or pay twice
+    async walletGet(key) {
+      const h = (await redis.hgetall(WALLET(key))) || {};
+      return { balance: Number(h.balance || 0), daily: h.daily || "", adDay: h.adDay || "", adCount: Number(h.adCount || 0), created: h.created || "" };
+    },
+    async walletInit(key, balance) {
+      // Only writes if the wallet is new, so a returning player is never reset
+      const created = await redis.hsetnx(WALLET(key), "created", new Date().toISOString());
+      if (created) await redis.hset(WALLET(key), "balance", Math.round(balance));
+      return created === 1;
+    },
+    async walletAdd(key, delta) {
+      const bal = await redis.hincrby(WALLET(key), "balance", Math.round(delta));
+      if (bal < 0) return await redis.hincrby(WALLET(key), "balance", -bal); // Never goes below zero
+      return bal;
+    },
+    async walletSetField(key, field, value) {
+      await redis.hset(WALLET(key), field, String(value));
     },
     async subscribe(code, fn) {
       subs.set(code, fn);
