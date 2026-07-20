@@ -6,7 +6,8 @@
   "description": "7Bust: a casino-style press-your-luck card game (single-player vs AI, and online rooms).",
   "scripts": {
     "start": "node serve.mjs",
-    "dev": "PORT=3001 node serve.mjs"
+    "dev": "PORT=3001 node serve.mjs",
+    "build:cg": "node build-crazygames.mjs"
   },
   "dependencies": {
     "ioredis": "^5.4.1",

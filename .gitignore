@@ -1,6 +1,9 @@
 # dependencies
 node_modules/
 
+# CrazyGames upload bundle (regenerate with: npm run build:cg)
+build/
+
 audio/*.mp4
 audio/*.m4a
 audio/*.wav
