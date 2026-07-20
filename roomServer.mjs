@@ -8,6 +8,7 @@ import { aiReactions, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
 import { trackMultiplayerGame, setAnalyticsSink, countersFor } from "./src/engine/analytics.js";
 import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
+import { moderate, cleanDisplayName } from "./src/engine/profanity.js";
 import { verifyUserToken, walletKeyFor } from "./src/server/cgAuth.mjs";
 
 // Every platform shares this server, so an older game version gets turned away
@@ -50,7 +51,8 @@ const roomSockets = new Map();
 const tickers = new Map();
 
 const newId = () => Math.random().toString(36).slice(2, 10);
-const cleanName = (n) => String(n || "Player").replace(/[<>]/g, "").trim().slice(0, 12) || "Player";
+// Names are checked here, not in the browser, so a changed game can't seat a slur
+const cleanName = (n) => cleanDisplayName(String(n || "").replace(/[<>]/g, "").trim().slice(0, 12), "Player");
 
 function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
@@ -871,7 +873,10 @@ async function handle(ws, msg) {
       // Chat for the lobby and the game, saved in the room so a rejoin still sees it
       const now = Date.now();
       if (ws.lastChatAt && now - ws.lastChatAt < 800) return;
-      const text = String(msg.text || "").replace(/[<>]/g, "").trim().slice(0, 140);
+      const raw = String(msg.text || "").replace(/[<>]/g, "").trim().slice(0, 140);
+      // Checked on the server before it's saved or sent, swearing is masked
+      // Slurs and sexual stuff are dropped, and the sender just sees nothing send
+      const text = moderate(raw);
       if (!text) return;
       ws.lastChatAt = now;
       await withRoom(ws, async (room) => {

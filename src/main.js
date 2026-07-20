@@ -13,7 +13,7 @@ import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
+import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
 
 // Solo is free practice, the engine holds no money
 // Chips only move where the server can check them, so the browser can't make chips
@@ -213,11 +213,15 @@ function syncPlatform(matchVisible) {
   const paused = !!(view.pause && view.pause.until > Date.now());
   // Playing means sat at the table in a live round, not a menu, overlay or pause
   cgSetPlaying(!!(matchVisible && s && s.phase === "round" && !paused));
+  // Tells the platform our room so friends can join
+  // Only joinable while seats are free and no cards are out, or friends hit a full room
   const o = view.online;
-  if (view.mode === "online" && o && o.lobby && (o.screen === "waiting" || o.screen === "buyin")) {
-    cgShowInvite(o.lobby.code);
+  const L = o && o.lobby;
+  if (view.mode === "online" && L) {
+    const joinable = L.status === "lobby" && L.slots.some((sl) => sl.type === "open");
+    cgUpdateRoom(L.code, joinable);
   } else {
-    cgHideInvite();
+    cgLeftRoom();
   }
 }
 

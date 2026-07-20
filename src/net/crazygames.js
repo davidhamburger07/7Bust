@@ -27,18 +27,20 @@ export function cgSetPlaying(active) {
 }
 export const cgHappytime = () => safe((s) => s.game.happytime());
 
-// Shows the SDK's invite button with our room code, only when the code changes
-// Off the platform this does nothing, the room code and link still work
-let shownRoom = null;
-export function cgShowInvite(roomId) {
-  if (!roomId || roomId === shownRoom) return;
-  shownRoom = roomId;
-  safe((s) => s.game.showInviteButton({ roomId }));
+// Tells CrazyGames our room and if friends can still join, this replaced the old invite button
+// Only sends changes, this runs on every render
+let roomSig = null;
+export function cgUpdateRoom(roomId, isJoinable) {
+  if (!roomId) return;
+  const sig = `${roomId}:${isJoinable ? 1 : 0}`;
+  if (sig === roomSig) return;
+  roomSig = sig;
+  safe((s) => s.game.updateRoom({ roomId, isJoinable: !!isJoinable, inviteParams: { roomId } }));
 }
-export function cgHideInvite() {
-  if (shownRoom === null) return;
-  shownRoom = null;
-  safe((s) => s.game.hideInviteButton());
+export function cgLeftRoom() {
+  if (roomSig === null) return;
+  roomSig = null;
+  safe((s) => s.game.leftRoom());
 }
 // Room code the player was invited to, or null
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
