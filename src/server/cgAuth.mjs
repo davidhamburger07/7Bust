@@ -24,6 +24,10 @@ async function publicKey({ force = false } = {}) {
 
 const b64urlToBuf = (s) => Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 
+// Without a game ID, tokens from any CrazyGames game would work here
+// so it warns once in the logs
+let warnedNoGameId = false;
+
 // Only trust what comes out of here, never anything the player sends with the token
 export async function verifyUserToken(token, { gameId = process.env.CG_GAME_ID } = {}) {
   if (typeof token !== "string" || token.split(".").length !== 3) throw new Error("malformed token");
@@ -59,6 +63,16 @@ export async function verifyUserToken(token, { gameId = process.env.CG_GAME_ID }
   if (typeof claims.iat === "number" && claims.iat > now + 300) throw new Error("token from the future");
   if (!claims.userId) throw new Error("token has no userId");
   if (gameId && claims.gameId && String(claims.gameId) !== String(gameId)) throw new Error("token is for another game");
+
+  // The game ID only comes from a real CrazyGames token, so it's printed once on the first sign in
+  // Copy it from the logs into the game ID setting and redeploy
+  if (!gameId && !warnedNoGameId) {
+    warnedNoGameId = true;
+    console.warn(
+      `[7bust] CG_GAME_ID is not set, so tokens from other CrazyGames titles are accepted too. ` +
+        `This token's gameId is "${claims.gameId ?? "(absent)"}", set CG_GAME_ID to that and redeploy.`,
+    );
+  }
 
   return { userId: String(claims.userId), gameId: claims.gameId ? String(claims.gameId) : null, username: claims.username || null };
 }
