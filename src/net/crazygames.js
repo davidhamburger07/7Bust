@@ -43,9 +43,9 @@ export function cgHideInvite() {
 // Room code the player was invited to, or null
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
 
-// Only resolves when the player watched to the end, so a skipped or missing ad never pays
-// Sound is muted while it plays
-export function cgRewardedAd({ onStart, onEnd } = {}) {
+// Rewarded ads only resolve when watched to the end, a skipped or missing one pays nothing
+// Midgame ads are just a break, callers carry on either way
+function requestAd(type, { onStart, onEnd } = {}) {
   const s = sdk();
   if (!s || !s.ad) return Promise.reject(new Error("no-ad"));
   return new Promise((resolve, reject) => {
@@ -57,7 +57,7 @@ export function cgRewardedAd({ onStart, onEnd } = {}) {
       fn(arg);
     };
     try {
-      s.ad.requestAd("rewarded", {
+      s.ad.requestAd(type, {
         adStarted: () => onStart && onStart(),
         adFinished: () => done(resolve),
         adError: (e) => done(reject, e || new Error("ad-error")),
@@ -70,3 +70,6 @@ export function cgRewardedAd({ onStart, onEnd } = {}) {
     setTimeout(() => done(reject, new Error("ad-timeout")), 45000);
   });
 }
+
+export const cgRewardedAd = (opts) => requestAd("rewarded", opts);
+export const cgMidgameAd = (opts) => requestAd("midgame", opts);

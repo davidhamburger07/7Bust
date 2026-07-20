@@ -11,7 +11,7 @@ import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom, cgRewardedAd } from "./net/crazygames.js";
+import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgShowInvite, cgHideInvite, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
 
 const server = createServer();
 const root = document.getElementById("app");
@@ -408,6 +408,8 @@ function pump() {
 }
 
 async function start() {
+  // A break is between matches with nobody waiting on us
+  await maybeMidgameAd();
   const res = await server.startMatch({ entryFee: view.entryFee });
   if (!res.ok) {
     view.snapshot = res.snapshot;
@@ -776,12 +778,16 @@ function mpKick(slot) {
 }
 
 function acceptTos() {
+  let firstRun = true;
   try {
+    firstRun = !localStorage.getItem(TOS_KEY); // Only teach on the first accept, not when they read the terms again
     localStorage.setItem(TOS_KEY, String(Date.now()));
   } catch {
     // Storage isn't available, the game still works without it
   }
   view.showTos = false;
+  // Go straight into How to Play so a first timer learns before playing
+  if (firstRun) view.showRules = true;
   sfx("ding");
   render();
 }
@@ -822,6 +828,7 @@ async function mpLeave() {
   // Back to the solo lobby, the online snapshot isn't ours any more
   if (!view.snapshot || view.snapshot.cashless) await refreshSolo();
   render();
+  await maybeMidgameAd(); // Back at the menu counts as a break
 }
 function mpCopy() {
   const code = view.online && view.online.lobby && view.online.lobby.code;
@@ -840,6 +847,24 @@ async function refreshSolo() {
 function setEntry(fee) {
   view.entryFee = fee;
   render();
+}
+
+// Ads only show at a break, never during a match or while other players wait on us
+// window.__AD_INTERVAL_MS__ lets tests change how often they show
+const AD_INTERVAL_MS = Number(window.__AD_INTERVAL_MS__) || 20 * 60 * 1000;
+let lastAdAt = Date.now();
+async function maybeMidgameAd() {
+  if (Date.now() - lastAdAt < AD_INTERVAL_MS) return;
+  // Never interrupt live play, whatever the caller thinks
+  const s = view.snapshot;
+  const inMatch = view.mode === "online" ? !!(view.online && view.online.screen === "playing") : !!s && s.phase !== "lobby";
+  if (inMatch) return;
+  lastAdAt = Date.now(); // Count the try either way so an empty ad slot can't spam retries
+  try {
+    await cgMidgameAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
+  } catch {
+    // No ad or a skipped one, just carry on into the game
+  }
 }
 
 function dailyState() {
