@@ -1254,6 +1254,7 @@
   place-items: center;
   padding: var(--s5);
   background: rgba(8, 5, 2, 0.72);
+  -webkit-backdrop-filter: blur(6px); /* Safari and iOS still need the prefixed version */
   backdrop-filter: blur(6px);
   animation: fade 0.3s ease both;
 }
