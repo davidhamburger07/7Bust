@@ -9,3 +9,6 @@ audio/*.wav
 .DS_Store
 Thumbs.db
 *.log
+
+# personal scratch notes
+puzzle_ideas.txt
