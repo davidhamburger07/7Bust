@@ -107,23 +107,39 @@ const CANVAS_H = 880;
 function fitStage() {
   if (window.innerWidth < 900) {
     document.documentElement.style.removeProperty("--stage-scale");
-    dockRadio();
+    placeRadio();
     return;
   }
   // Small margin so the game's rounded corners never touch the window edge
   const s = Math.min((window.innerWidth * 0.99) / CANVAS_W, (window.innerHeight * 0.96) / CANVAS_H);
   document.documentElement.style.setProperty("--stage-scale", s.toFixed(4));
-  dockRadio();
+  placeRadio();
 }
 window.addEventListener("resize", fitStage);
 window.addEventListener("orientationchange", fitStage);
 
-// The radio lives outside #app so redraws don't break it. On desktop it sits bottom left
-// Phones keep it as a small button top right
+// The radio lives outside #app so redraws don't break it
+// It sits in the radio slot if the screen has one, otherwise floats bottom left
+function placeRadio() {
+  const r = document.getElementById("radio");
+  if (!r) return;
+  const slot = document.getElementById("radio-slot");
+  if (slot) {
+    r.classList.add("inline");
+    r.style.left = r.style.top = r.style.right = r.style.bottom = "";
+    if (r.parentElement !== slot) slot.appendChild(r);
+    return;
+  }
+  r.classList.remove("inline");
+  if (r.parentElement !== document.body) document.body.appendChild(r);
+  dockRadio();
+}
+
+// No slot on this screen, so pin it inside the scaled game, not the window
 function dockRadio() {
   requestAnimationFrame(() => {
     const r = document.getElementById("radio");
-    if (!r) return;
+    if (!r || r.classList.contains("inline")) return;
     if (window.innerWidth < 900) {
       r.style.left = "";
       r.style.top = "";
@@ -167,9 +183,13 @@ function render() {
   // So typing, focus and the phone keyboard are never interrupted
   const liveChat = document.getElementById("chatpanel");
   if (liveChat) liveChat.remove();
+  // Move the radio outside #app so swapping the page can't remove it, then put it back
+  const liveRadio = document.getElementById("radio");
+  if (liveRadio && liveRadio.parentElement !== document.body) document.body.appendChild(liveRadio);
   root.innerHTML = renderApp(view);
   const freshChat = document.getElementById("chatpanel");
   if (liveChat && freshChat) freshChat.replaceWith(liveChat);
+  placeRadio();
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
   if (!liveChat) {
@@ -177,7 +197,6 @@ function render() {
     if (chatList) chatList.scrollTop = chatList.scrollHeight;
   }
   tickClock(); // Show the right time straight away, no 0:00 flicker
-  dockRadio(); // Keeps the radio in the game's corner between screens
   syncPlatform(matchVisible);
 }
 

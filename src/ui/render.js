@@ -318,6 +318,7 @@ export function renderMatch(view) {
   <div class="screen screen--match${s.players.length >= 5 ? " crowded" : ""}">
     <div class="matchbar">
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
+      <span id="radio-slot" class="radio-slot"></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
         <span class="balance-chip">${chipStack(s.wallet ? s.wallet.balance : view.soloBalance || 0)}</span>
