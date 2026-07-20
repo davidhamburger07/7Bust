@@ -3263,3 +3263,27 @@
     max-width: 520px;
   }
 }
+
+/* New players are dealt straight in, so the help button pulses with a ring until they open it */
+/* Only transform and opacity change so it never causes a relayout */
+.icon-btn.pulse {
+  position: relative;
+}
+.icon-btn.pulse::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--gold-hi);
+  opacity: 0;
+  transform: scale(1);
+  animation: hint-ring 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  pointer-events: none;
+}
+@keyframes hint-ring {
+  0% { opacity: 0.9; transform: scale(1); }
+  70%, 100% { opacity: 0; transform: scale(1.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.pulse::after { animation: none; opacity: 0.9; }
+}

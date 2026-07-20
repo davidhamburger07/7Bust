@@ -82,6 +82,7 @@ const view = {
   pause: null,
   pauseUsed: false,
   showTos: false,
+  hintRules: false, // Pulse the "?" until a first timer opens How to Play
   showSettings: false,
   settings: { sfx: true, voice: true },
   browse: null,
@@ -757,7 +758,7 @@ function mpKick(slot) {
   net && net.kick(slot);
 }
 
-function acceptTos() {
+async function acceptTos() {
   let firstRun = true;
   try {
     firstRun = !localStorage.getItem(TOS_KEY); // Only teach on the first accept, not when they read the terms again
@@ -766,10 +767,12 @@ function acceptTos() {
     // Storage isn't available, the game still works without it
   }
   view.showTos = false;
-  // Go straight into How to Play so a first timer learns before playing
-  if (firstRun) view.showRules = true;
   sfx("ding");
-  render();
+  if (!firstRun) return render();
+  // CrazyGames allows one click before play, so accepting deals the hand straight away
+  // How to Play waits behind the "?", which pulses until they've opened it
+  view.hintRules = true;
+  await start();
 }
 
 function sendChat() {
@@ -983,6 +986,7 @@ async function confirmExitYes() {
 
 const showRules = () => {
   view.showRules = true;
+  view.hintRules = false;
   view.showSettings = false;
   render();
 };

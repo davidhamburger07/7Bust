@@ -12,7 +12,7 @@ const OUT_DIR = join(ROOT, "build");
 const STAGE = join(OUT_DIR, "crazygames");
 const ZIP = join(OUT_DIR, "7bust-crazygames.zip");
 
-const INCLUDE = ["index.html", "src", join("audio", "Voicelines"), join("audio", "Casino-1.mp3")];
+const INCLUDE = ["index.html", "src", "fonts", join("audio", "Voicelines"), join("audio", "Casino-1.mp3")];
 
 const MAX_TOTAL_MB = 250;
 const MAX_FILES = 1500;
