@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import { join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as esbuild from "esbuild";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const OUT_DIR = join(ROOT, "build");
@@ -17,6 +18,11 @@ const INCLUDE = ["index.html", "src", "fonts", join("audio", "Voicelines"), join
 // Server only files under src, the browser never loads them
 // Shipping them would also hand players the word filter and the login checks
 const EXCLUDE = ["src/server/cgAuth.mjs", "src/engine/profanity.js"];
+
+// Ships one classic script instead of the modules used in development
+// Modules won't load unless the site serves them with the right type, and we don't run their CDN
+const BUNDLE_ENTRY = "src/main.js";
+const BUNDLE_OUT = "game.js";
 
 const MAX_TOTAL_MB = 250;
 const MAX_FILES = 1500;
@@ -136,7 +142,32 @@ async function main() {
     }
   }
 
-  const html = await readFile(join(STAGE, "index.html"), "utf8");
+  // One classic script, the game won't boot if a site serves modules with the wrong type
+  // Uses the esbuild API, the command line one can't run on Windows with a space in the path
+  await esbuild.build({
+    entryPoints: [join(STAGE, BUNDLE_ENTRY)],
+    bundle: true,
+    format: "iife",
+    target: "es2020",
+    outfile: join(STAGE, BUNDLE_OUT),
+    logLevel: "warning",
+  });
+  const bundleBytes = (await stat(join(STAGE, BUNDLE_OUT))).size;
+  console.log(`  = ${BUNDLE_OUT} (${fmt(bundleBytes)}, one classic script in place of the modules)`);
+
+  // The raw modules aren't needed now, and shipping both could let them get out of step
+  for (const f of await walk(join(STAGE, "src"))) {
+    if (/\.(js|mjs)$/.test(f)) await rm(f);
+  }
+
+  let html = await readFile(join(STAGE, "index.html"), "utf8");
+  const moduleTag = /<script\s+type="module"\s+src="\.\/src\/main\.js"><\/script>/;
+  if (!moduleTag.test(html)) {
+    console.error("index.html no longer has the expected module tag, the bundle swap needs updating");
+    process.exit(1);
+  }
+  html = html.replace(moduleTag, `<script src="./${BUNDLE_OUT}"></script>`);
+  await writeFile(join(STAGE, "index.html"), html);
   const problems = [];
   if (!/sdk\.crazygames\.com/.test(html)) problems.push("index.html is missing the CrazyGames SDK script tag");
   const backend = /__WS_BACKEND__\s*=\s*"([^"]*)"/.exec(html);
