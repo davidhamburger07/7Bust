@@ -68,6 +68,17 @@ function memoryStore() {
     async listAll() {
       return [...listings.values()].map((s) => JSON.parse(JSON.stringify(s)));
     },
+    // One trip instead of two, any delay here feels like input lag
+    async setAndPublish(code, obj, payload) {
+      await this.set(code, obj);
+      await this.publish(code, payload);
+    },
+    // Locks and loads the room in one trip, if the lock was taken the loaded room is thrown away
+    async lockAndGet(code, opts) {
+      const t = await this.lock(code, opts);
+      if (!t) return { token: null, room: null };
+      return { token: t, room: await this.get(code) };
+    },
     async publish(code, payload) {
       const fns = subs.get(code);
       if (!fns) return;
@@ -200,6 +211,29 @@ function redisStore(url) {
     },
     async publish(code, payload) {
       await redis.publish(CH(code), JSON.stringify(payload));
+    },
+    // Saves and sends in one trip, almost all the server time on an action was Redis trips
+    // Every trip removed here is felt by the player
+    async setAndPublish(code, obj, payload) {
+      await redis
+        .pipeline()
+        .set(KEY(code), JSON.stringify(obj), "EX", TTL_S)
+        .publish(CH(code), JSON.stringify(payload))
+        .exec();
+    },
+    // Locks and loads in one trip, the load runs either way since it costs nothing extra
+    async lockAndGet(code, { retries = 12 } = {}) {
+      const t = token();
+      for (let i = 0; ; i++) {
+        const res = await redis.pipeline().set(LOCK(code), t, "PX", LOCK_MS, "NX").get(KEY(code)).exec();
+        const gotLock = res && res[0] && res[0][1];
+        if (gotLock) {
+          const raw = res[1] && res[1][1];
+          return { token: t, room: raw ? JSON.parse(raw) : null };
+        }
+        if (i >= retries) return { token: null, room: null };
+        await sleep(100);
+      }
     },
     // Counters instead of raw events, one batched trip per call
     // keeps us well inside Upstash's limits however busy the game gets

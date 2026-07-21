@@ -320,8 +320,8 @@ async function syncListing(room) {
 
 async function saveAndPublish(room, opts = {}) {
   await syncListing(room);
-  await store.set(room.code, room);
-  await store.publish(room.code, await payloadFor(room, opts));
+  // Save and send in one go, it used to be two round trips between a click and the table showing it
+  await store.setAndPublish(room.code, room, await payloadFor(room, opts));
 }
 
 function pushChat(room, entry) {
@@ -586,10 +586,18 @@ function stopTicker(code) {
 async function withRoom(ws, fn, { lock = true } = {}) {
   const code = ws.roomCode;
   if (!code) return;
-  const token = lock ? await store.lock(code) : null;
-  if (lock && !token) return; // Someone else has the lock, the next update will refresh this player
+  // Lock and load in one go, the player waits on both before their move is even looked at
+  let token = null;
+  let room;
+  if (lock) {
+    const got = await store.lockAndGet(code);
+    if (!got.token) return; // Someone else has the lock, the next update will refresh this player
+    token = got.token;
+    room = got.room;
+  } else {
+    room = await store.get(code);
+  }
   try {
-    const room = await store.get(code);
     if (!room) return;
     await fn(room);
   } finally {
