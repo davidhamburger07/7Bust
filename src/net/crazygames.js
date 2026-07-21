@@ -83,6 +83,10 @@ export function cgLeftRoom() {
 // Room code the player was invited to, or null
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
 
+// The platform's own invite link, it carries CrazyGames info a link from the URL can't
+// Null off the platform, our own link is used then
+export const cgInviteLink = (roomId) => safe((s) => s.game.inviteLink({ roomId }), "inviteLink");
+
 // Invite accepted with the game already open, the platform calls this instead of reloading
 // Uses the same retry as settings, it isn't there until init is done
 export function cgOnJoinRoom(fn) {

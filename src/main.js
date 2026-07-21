@@ -15,7 +15,7 @@ import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgOnJoinRoom, cgInstantMultiplayer, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
+import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgInviteLink, cgOnJoinRoom, cgInstantMultiplayer, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
 import * as storage from "./net/storage.js";
 
 // Solo is free practice, the engine holds no money
@@ -843,10 +843,12 @@ async function mpLeave() {
   render();
   await maybeMidgameAd(); // Back at the menu counts as a break
 }
-function mpCopy() {
+async function mpCopy() {
   const code = view.online && view.online.lobby && view.online.lobby.code;
   if (!code) return;
-  const link = `${location.origin}${location.pathname}?room=${code}`;
+  // The platform's invite link carries CrazyGames info ours can't
+  // Off the platform it's null and our own link is used
+  const link = (await cgInviteLink(code)) || `${location.origin}${location.pathname}?room=${code}`;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link).then(() => toast("Invite link copied!"), () => toast(code));
   } else {
