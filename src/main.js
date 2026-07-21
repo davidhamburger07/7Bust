@@ -1084,6 +1084,8 @@ const ACTIONS = {
 
 root.addEventListener("click", (e) => {
   if (!audioReady) {
+    // The click that unlocks audio is the last chance to apply a platform mute
+    applyPlatformSettings();
     initAudio();
     startRadio();
     audioReady = true;
@@ -1216,6 +1218,13 @@ root.addEventListener("keydown", (e) => {
 
   applyPlatformSettings();
   cgOnSettings(applyPlatformSettings);
+  // The SDK starts in its own time, so keep checking for a few seconds
+  // Muting late is fine, never muting isn't
+  let settleTries = 0;
+  const settle = setInterval(() => {
+    applyPlatformSettings();
+    if (++settleTries >= 12) clearInterval(settle);
+  }, 500);
 
   cgLoadingStop();
 

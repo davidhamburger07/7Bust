@@ -55,18 +55,48 @@ export function cgLeftRoom() {
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
 
 // CrazyGames can mute the game and turn chat off, their mute beats our sound settings
-// Read at the start and again when the player changes either
+// Also read from the URL, the SDK starts late and one early read can miss it
+function urlFlag(name) {
+  try {
+    const v = new URLSearchParams(location.search).get(name);
+    return v === "" || v === "true" || v === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function cgSettings() {
+  const forcedMute = urlFlag("muteAudio");
+  const forcedChat = urlFlag("disableChat");
   try {
     const s = sdk();
     const v = s && s.game && s.game.settings;
-    return { muteAudio: !!(v && v.muteAudio), disableChat: !!(v && v.disableChat) };
+    // Either one saying mute wins, nothing here turns sound back on
+    return { muteAudio: forcedMute || !!(v && v.muteAudio), disableChat: forcedChat || !!(v && v.disableChat) };
   } catch {
-    return { muteAudio: false, disableChat: false }; // Off the platform, nothing to follow
+    return { muteAudio: forcedMute, disableChat: forcedChat };
   }
 }
+// Adding the listener fails until the SDK is ready, so keep trying until it works
+// Give up after about 15 seconds, by then there's no SDK
 export function cgOnSettings(fn) {
-  safe((s) => s.game.addSettingsChangeListener(fn));
+  let tries = 0;
+  const attempt = () => {
+    const s = sdk();
+    if (s && s.game && typeof s.game.addSettingsChangeListener === "function") {
+      try {
+        s.game.addSettingsChangeListener(fn);
+        return true;
+      } catch {
+        // Not ready yet
+      }
+    }
+    return false;
+  };
+  if (attempt()) return;
+  const t = setInterval(() => {
+    if (attempt() || ++tries > 30) clearInterval(t);
+  }, 500);
 }
 
 // Rewarded ads only resolve when watched to the end, a skipped or missing one pays nothing
