@@ -175,6 +175,28 @@ async function main() {
   }
   for (const m of missing) problems.push(`index.html reaches "${m}" but it is not in the bundle`);
 
+  // Stylesheets load fonts and images through url, and a missing font doesn't throw
+  // It just falls back to a system font. Outside links are bad too, CrazyGames may block them
+  for (const css of (await walk(STAGE)).filter((f) => f.endsWith(".css"))) {
+    const rel = relative(STAGE, css).split(/[\\/]/).join("/");
+    const dir = rel.split("/").slice(0, -1);
+    for (const m of (await readFile(css, "utf8")).matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)) {
+      const spec = m[1].trim();
+      if (spec.startsWith("data:")) continue; // Inlined, nothing to load
+      if (/^(https?:)?\/\//.test(spec)) {
+        problems.push(`${rel} loads "${spec}" from the network, bundle it instead`);
+        continue;
+      }
+      const parts = [...dir];
+      for (const seg of spec.split("/")) {
+        if (seg === "." || seg === "") continue;
+        else if (seg === "..") parts.pop();
+        else parts.push(seg);
+      }
+      if (!existsSync(join(STAGE, ...parts))) problems.push(`${rel} references "${spec}" but it is not in the bundle`);
+    }
+  }
+
   const files = await walk(STAGE);
   let total = 0;
   const sizes = [];
