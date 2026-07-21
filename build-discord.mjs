@@ -257,10 +257,17 @@ async function main() {
     process.exit(1);
   }
   console.log("\nAll checks passed.");
-  console.log("\nBefore it will run, in the Discord developer portal:");
-  console.log("  1. set window.__DISCORD_CLIENT_ID__ in index.discord.html to your application id");
-  console.log("  2. Activities -> URL Mappings: map prefix  /backend  ->  7-bust-cg.vercel.app");
-  console.log("  3. set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in the backend environment");
+  // Only list what's still left to do, a list of done steps stops getting read
+  const clientId = (html.match(/__DISCORD_CLIENT_ID__\s*=\s*"([^"]*)"/) || [])[1] || "";
+  const todo = [];
+  if (!/^\d{17,20}$/.test(clientId)) {
+    todo.push("set window.__DISCORD_CLIENT_ID__ in index.discord.html to your application id");
+  }
+  todo.push("Activities -> URL Mappings: map prefix  /backend  ->  7-bust-cg.vercel.app");
+  todo.push("set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in the backend environment");
+  console.log("\nStill to do in the Discord developer portal / Vercel:");
+  todo.forEach((t, i) => console.log(`  ${i + 1}. ${t}`));
+  if (clientId) console.log(`\n  (client id baked into the build: ${clientId})`);
 }
 
 main().catch((e) => {
