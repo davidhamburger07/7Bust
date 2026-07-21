@@ -83,6 +83,10 @@ export function createNet(handlers = {}) {
     // token lets buy-ins come off the right account. Guests can only sit at free tables
     create: async (name, cid) => send({ type: "create", name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
     join: async (code, name, cid) => send({ type: "join", code, name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
+    // In Discord everyone arrives at once and nobody is set to make the room
+    // so whoever lands first opens it
+    joinOrCreate: async (code, name, cid) =>
+      send({ type: "joinOrCreate", code, name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
     rejoin: (code, id) => send({ type: "rejoin", code, id, v: PROTOCOL_VERSION }),
     kick: (slot) => send({ type: "kick", slot }),
     start: () => send({ type: "start" }),

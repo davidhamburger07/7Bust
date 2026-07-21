@@ -7,13 +7,15 @@
   "scripts": {
     "start": "node serve.mjs",
     "dev": "PORT=3001 node serve.mjs",
-    "build:cg": "node build-crazygames.mjs"
+    "build:cg": "node build-crazygames.mjs",
+    "build:discord": "node build-discord.mjs"
   },
   "dependencies": {
     "ioredis": "^5.4.1",
     "ws": "^8.21.1"
   },
   "devDependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
     "esbuild": "^0.25.0"
   }
 }

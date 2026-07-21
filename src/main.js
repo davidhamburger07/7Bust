@@ -11,6 +11,7 @@ import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
+import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
@@ -1169,6 +1170,9 @@ root.addEventListener("keydown", (e) => {
 
 (async function init() {
   cgInit(); // Has to run before anything else touches the SDK
+  // Discord goes first and is waited on, it sends every request through their proxy
+  // Nothing can connect before that's done
+  await discordBoot();
   cgLoadingStart();
   fitStage();
   // Solo runs the engine in the page, so its analytics needs a way to the backend
@@ -1252,6 +1256,20 @@ root.addEventListener("keydown", (e) => {
     openOnline();
     joinListed(code);
   });
+
+  // In Discord everyone in the channel's Activity shares one table, so go straight there
+  if (discordReady()) {
+    const code = roomCodeFor(discordInstanceId());
+    openOnline();
+    ensureNet();
+    view.online.name = readName();
+    view.online.screen = "connecting";
+    view.online.hadRoom = true;
+    render();
+    net.joinOrCreate(code, view.online.name, clientId());
+    discordSetActivity("7Bust", "At the table");
+    return;
+  }
 
   const params = new URLSearchParams(location.search);
   const invited = ((await cgGetInviteRoom()) || params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);

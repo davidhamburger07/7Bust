@@ -640,6 +640,82 @@ async function handle(ws, msg) {
       await store.publish(code, await payloadFor(room));
       break;
     }
+    // Everyone in one Discord Activity belongs at one table and they all arrive at once
+    // The code comes from the Activity, the first one in opens the room and the lock stops two opening
+    case "joinOrCreate": {
+      if (!versionOk(ws, msg)) return;
+      const code = String(msg.code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+      if (code.length !== 4) return send(ws, { type: "error", error: "Bad room code" });
+      const token = await store.lock(code);
+      try {
+        const existing = await store.get(code);
+        const me = await walletIdentity(msg);
+        if (existing) {
+          if (existing.status !== "lobby") return send(ws, { type: "error", error: "That game already started" });
+          if (msg.cid && (existing.banned || []).includes(msg.cid)) return send(ws, { type: "error", error: "You can't rejoin this room." });
+          const already = msg.cid && existing.players.find((x) => x.cid === msg.cid);
+          if (already) {
+            // Same person coming back, like a refresh inside Discord, so give them their seat back
+            already.connected = true;
+            already.disconnectedAt = null;
+            await store.set(code, existing);
+            await attachLocal(ws, code, already.id);
+            await store.publish(code, await payloadFor(existing, { withLobby: true }));
+            break;
+          }
+          let slot = -1;
+          for (let i = 0; i < existing.size; i++) {
+            if (existing.slots[i].type === "open" && !existing.players.some((x) => x.slot === i)) {
+              slot = i;
+              break;
+            }
+          }
+          if (slot < 0) return send(ws, { type: "error", error: "This table is full" });
+          if (existing.entry > 0 && !me) return send(ws, { type: "error", error: NEEDS_ACCOUNT });
+          const pid = newId();
+          existing.players.push({ id: pid, cid: msg.cid || null, slot, seat: slot, seats: [slot], hands: null, name: displayName(me, msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null });
+          await store.set(code, existing);
+          await attachLocal(ws, code, pid);
+          await store.publish(code, await payloadFor(existing));
+          break;
+        }
+        const pid = newId();
+        const room = {
+          code,
+          hostId: pid,
+          status: "lobby",
+          phase: "lobby",
+          // Opened at full size on purpose, everyone in the channel arrives at once
+          // A smaller table would turn the last of them away
+          size: MAX_SIZE,
+          entry: 0,
+          rounds: 9,
+          multiHand: false,
+          dropRule: "ai",
+          isPublic: false,
+          listed: false,
+          listedAt: 0,
+          slots: Array.from({ length: MAX_SIZE }, () => ({ type: "open", ai: null })),
+          players: [{ id: pid, cid: msg.cid || null, slot: 0, seat: 0, seats: [0], hands: null, name: displayName(me, msg.name), connected: true, pauseUsed: false, disconnectedAt: null, wallet: me ? me.key : null }],
+          charged: null,
+          settled: false,
+          banned: [],
+          chat: [],
+          roster: null,
+          game: null,
+          auto: false,
+          pausedUntil: 0,
+          pauseVote: null,
+          lastStepAt: 0,
+        };
+        await store.set(code, room);
+        await attachLocal(ws, code, pid);
+        await store.publish(code, await payloadFor(room));
+      } finally {
+        if (token) await store.unlock(code, token);
+      }
+      break;
+    }
     case "browse": {
       // The public match list, only live ones, newest first, with a cap
       const now = Date.now();
