@@ -36,10 +36,13 @@ export async function discordBoot() {
     if (!boot || !boot.DiscordSDK) return false;
     const { DiscordSDK, patchUrlMappings } = boot;
 
-    // 1. Set up the proxy before anything opens a connection
+    // 1. The proxy, only needed if the game and the backend are ever on different domains
     const backend = String(window.__WS_BACKEND__ || "");
     const host = backend.replace(/^wss?:\/\//, "").split("/")[0];
-    if (host) patchUrlMappings([{ prefix: "/backend", target: host }], { patchFetch: true, patchWebSocket: true, patchXhr: true });
+    const sameOrigin = /\.discordsays\.com$/i.test(location.hostname);
+    if (host && !sameOrigin) {
+      patchUrlMappings([{ prefix: "/backend", target: host }], { patchFetch: true, patchWebSocket: true, patchXhr: true });
+    }
 
     sdk = new DiscordSDK(window.__DISCORD_CLIENT_ID__);
     await sdk.ready();
@@ -85,10 +88,10 @@ export async function discordBoot() {
   }
 }
 
-// Copied rather than imported so this file works on its own
+// Inside Discord the page's own address reaches the API, the backend URL is only a fallback
 function backendHttpOrigin() {
-  const backend = String(window.__WS_BACKEND__ || "");
-  return backend.replace(/^ws/, "http").replace(/\/api\/ws$/, "");
+  if (typeof location !== "undefined" && /\.discordsays\.com$/i.test(location.hostname)) return location.origin;
+  return String(window.__WS_BACKEND__ || "").replace(/^ws/, "http").replace(/\/api\/ws$/, "");
 }
 
 // What Discord shows other people in the channel about this player

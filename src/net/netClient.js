@@ -15,6 +15,8 @@ function backendUrl() {
   const wss = location.protocol === "https:" ? "wss" : "ws";
   if (host === "localhost" || host === "127.0.0.1" || host === "") return `${wss}://${location.host}/api/ws`;
   if (/\.vercel\.app$/i.test(host) || host === "vercel.app") return `wss://${location.host}/api/ws`;
+  // Inside Discord the game and the backend are on one domain, so the page's own address works
+  if (/\.discordsays\.com$/i.test(host)) return `wss://${location.host}/api/ws`;
   const override = typeof window !== "undefined" && window.__WS_BACKEND__;
   return override || CG_BACKEND_FALLBACK; // CrazyGames and custom domains
 }
