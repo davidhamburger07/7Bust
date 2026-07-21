@@ -14,6 +14,10 @@ const ZIP = join(OUT_DIR, "7bust-crazygames.zip");
 
 const INCLUDE = ["index.html", "src", "fonts", join("audio", "Voicelines"), join("audio", "Casino-1.mp3")];
 
+// Server only files under src, the browser never loads them
+// Shipping them would also hand players the word filter and the login checks
+const EXCLUDE = ["src/server/cgAuth.mjs", "src/engine/profanity.js"];
+
 const MAX_TOTAL_MB = 250;
 const MAX_FILES = 1500;
 const MAX_INITIAL_MB = 50; // Ours is far under this, the audio loads when it is needed
@@ -124,6 +128,13 @@ async function main() {
     await cp(join(ROOT, rel), join(STAGE, rel), { recursive: true });
     console.log(`  + ${rel}`);
   }
+  for (const rel of EXCLUDE) {
+    const p = join(STAGE, rel);
+    if (existsSync(p)) {
+      await rm(p);
+      console.log(`  - ${rel} (backend only)`);
+    }
+  }
 
   const html = await readFile(join(STAGE, "index.html"), "utf8");
   const problems = [];
@@ -132,6 +143,37 @@ async function main() {
   if (!backend || !backend[1]) problems.push("window.__WS_BACKEND__ is empty, multiplayer would not reach the server from their CDN");
   else if (!/^wss:\/\//.test(backend[1])) problems.push(`window.__WS_BACKEND__ should be a wss:// URL (got "${backend[1]}")`);
   if (/(src|href)="\//.test(html)) problems.push("index.html uses an absolute path, CrazyGames requires relative paths");
+
+  // Follow every import from index.html and check each file is in the bundle
+  // The exclude list is written by hand, so a mistake fails the build instead of a white screen
+  const reached = new Set();
+  const missing = [];
+  const queue = [...html.matchAll(/(?:src|href)="\.\/([^"]+)"/g)].map((m) => m[1]);
+  while (queue.length) {
+    const rel = queue.shift();
+    if (reached.has(rel)) continue;
+    reached.add(rel);
+    const abs = join(STAGE, rel);
+    if (!existsSync(abs)) {
+      missing.push(rel);
+      continue;
+    }
+    if (!/\.(js|mjs)$/.test(rel)) continue;
+    const src = await readFile(abs, "utf8");
+    const dir = rel.split("/").slice(0, -1);
+    for (const m of src.matchAll(/from\s+"([^"]+)"|import\("([^"]+)"\)/g)) {
+      const spec = m[1] || m[2];
+      if (!spec || !spec.startsWith(".")) continue;
+      const parts = [...dir];
+      for (const seg of spec.split("/")) {
+        if (seg === ".") continue;
+        else if (seg === "..") parts.pop();
+        else parts.push(seg);
+      }
+      queue.push(parts.join("/"));
+    }
+  }
+  for (const m of missing) problems.push(`index.html reaches "${m}" but it is not in the bundle`);
 
   const files = await walk(STAGE);
   let total = 0;
@@ -159,8 +201,11 @@ async function main() {
   console.log(`\n  ZIP: ${ZIP}  (${fmt(zipSize)})`);
 
   if (problems.length) {
+    // Delete the zip so a broken one doesn't look ready to upload
+    await rm(ZIP, { force: true });
     console.log("\nPROBLEMS:");
     problems.forEach((p) => console.log(`  ✗ ${p}`));
+    console.log("\nThe zip was deleted. Fix the above and build again.");
     process.exit(1);
   }
   console.log("\nAll checks passed, ready to upload.");
