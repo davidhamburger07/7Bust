@@ -15,7 +15,7 @@ import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
+import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgOnJoinRoom, cgInstantMultiplayer, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
 import * as storage from "./net/storage.js";
 
 // Solo is free practice, the engine holds no money
@@ -1242,15 +1242,27 @@ root.addEventListener("keydown", (e) => {
     render();
   });
 
+  // Invite accepted with the game already open, the platform calls this instead of reloading
+  cgOnJoinRoom((roomId) => {
+    const code = String(roomId).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+    if (code.length !== 4) return;
+    if (view.mode === "online" && view.online && view.online.lobby && view.online.lobby.code === code) return;
+    openOnline();
+    joinListed(code);
+  });
+
   const params = new URLSearchParams(location.search);
   const invited = ((await cgGetInviteRoom()) || params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
   const roomParam = invited;
   const saved = loadNet();
   if (roomParam.length === 4) {
+    // Invited players join the table straight away, CrazyGames wants them playing, not typing a code
     openOnline();
-    view.online.codeInput = roomParam;
-    view.online.screen = "join";
-    render();
+    joinListed(roomParam);
+  } else if (cgInstantMultiplayer()) {
+    // CrazyGames launched the game to play with others, so open the table list, not the solo lobby
+    openOnline();
+    openBrowse();
   } else if (saved && saved.code && saved.id) {
     ensureNet();
     view.mode = "online";

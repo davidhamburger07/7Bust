@@ -23,6 +23,18 @@ export function cgInit() {
   return initPromise;
 }
 
+// Just reading SDK.game, user, data or ad throws off the platform and before init
+// So a plain if check would crash, every access goes through this
+function mod(name) {
+  try {
+    const s = sdk();
+    const m = s && s[name];
+    return m || null;
+  } catch {
+    return null;
+  }
+}
+
 async function safe(fn, label = "sdk") {
   const s = sdk();
   if (!s) return null;
@@ -71,6 +83,46 @@ export function cgLeftRoom() {
 // Room code the player was invited to, or null
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
 
+// Invite accepted with the game already open, the platform calls this instead of reloading
+// Uses the same retry as settings, it isn't there until init is done
+export function cgOnJoinRoom(fn) {
+  let tries = 0;
+  const attempt = () => {
+    try {
+      const s = sdk();
+      if (!s || typeof s.game.addJoinRoomListener !== "function") return false;
+      s.game.addJoinRoomListener((params) => {
+        const roomId = params && (params.roomId || params.roomName);
+        if (roomId) fn(String(roomId));
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (attempt()) return;
+  const t = setInterval(() => {
+    if (attempt() || ++tries > 30) clearInterval(t);
+  }, 500);
+}
+
+// CrazyGames can launch straight into multiplayer with ?instantJoin=true
+// Check the URL too, it can be read before init is done
+export function cgInstantMultiplayer() {
+  try {
+    if (new URLSearchParams(location.search).get("instantJoin") === "true") return true;
+  } catch {
+    // No location to read
+  }
+  const s = sdk();
+  try {
+    const g = mod("game");
+    return !!(g && g.isInstantMultiplayer);
+  } catch {
+    return false; // Not set up yet, or off the platform
+  }
+}
+
 // CrazyGames can mute the game and turn chat off, their mute beats our sound settings
 // Also read from the URL, the SDK starts late and one early read can miss it
 function urlFlag(name) {
@@ -87,7 +139,8 @@ export function cgSettings() {
   const forcedChat = urlFlag("disableChat");
   try {
     const s = sdk();
-    const v = s && s.game && s.game.settings;
+    const g = mod("game");
+    const v = g && g.settings;
     // Either one saying mute wins, nothing here turns sound back on
     return { muteAudio: forcedMute || !!(v && v.muteAudio), disableChat: forcedChat || !!(v && v.disableChat) };
   } catch {
@@ -119,7 +172,7 @@ export function cgOnSettings(fn) {
 // Midgame ads are just a break, callers carry on either way
 function requestAd(type, { onStart, onEnd } = {}) {
   const s = sdk();
-  if (!s || !s.ad) return Promise.reject(new Error("no-ad"));
+  if (!s || !mod("ad")) return Promise.reject(new Error("no-ad"));
   return new Promise((resolve, reject) => {
     let settled = false;
     const done = (fn, arg) => {
@@ -152,7 +205,7 @@ let accountsCached = null;
 export async function cgAccountsAvailable() {
   if (accountsCached !== null) return accountsCached;
   const s = sdk();
-  if (!s || !s.user) return (accountsCached = false);
+  if (!s || !mod("user")) return (accountsCached = false);
   try {
     const v = s.user.isUserAccountAvailable;
     accountsCached = !!(typeof v === "function" ? await v.call(s.user) : v);
@@ -170,7 +223,7 @@ export const cgGetUser = () => safe((s) => s.user.getUser());
 // The SDK refreshes it, so just ask for a new one each time
 export async function cgUserToken() {
   const s = sdk();
-  if (!s || !s.user) return null;
+  if (!s || !mod("user")) return null;
   try {
     return (await s.user.getUserToken()) || null;
   } catch {
@@ -181,7 +234,7 @@ export async function cgUserToken() {
 // CrazyGames sign in box, gives the user or null if they close it
 export async function cgSignIn() {
   const s = sdk();
-  if (!s || !s.user) return null;
+  if (!s || !mod("user")) return null;
   try {
     return (await s.user.showAuthPrompt()) || null;
   } catch {
