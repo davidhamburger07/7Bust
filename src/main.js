@@ -2,6 +2,8 @@
 
 import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
+import { morph } from "./ui/morph.js";
+import { startCoach, place as placeCoach, coachRunning } from "./ui/coach.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
@@ -27,6 +29,7 @@ const SAVE_KEY = "7bust:save:v3"; // The deck changed, older saves can't resume
 const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
 const HISTORY_KEY = "7bust:history";
 const DAILY_KEY = "7bust:daily"; // Last day the login bonus was claimed
+const COACH_KEY = "7bust:coach:v1"; // Set once the first run tour has been seen
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
 const TOS_KEY = "7bust:tos:v1";
@@ -187,23 +190,23 @@ function render() {
       ? !!(view.online && view.online.screen === "playing" && view.snapshot.online)
       : view.snapshot.phase !== "lobby");
   document.body.classList.toggle("scr-match", matchVisible);
-  // The chat panel survives redraws, it's taken out, the page swapped, then put back
-  // So typing, focus and the phone keyboard are never interrupted
-  const liveChat = document.getElementById("chatpanel");
-  if (liveChat) liveChat.remove();
-  // Move the radio outside #app so swapping the page can't remove it, then put it back
+  // The radio moves between a corner and the match bar, so park it on body while patching
+  // Then put it back
   const liveRadio = document.getElementById("radio");
   if (liveRadio && liveRadio.parentElement !== document.body) document.body.appendChild(liveRadio);
-  root.innerHTML = renderApp(view);
-  const freshChat = document.getElementById("chatpanel");
-  if (liveChat && freshChat) freshChat.replaceWith(liveChat);
+  // Patches the page instead of rebuilding it, snapshots arrive all the time
+  // Rebuilding stole focus mid-word, lost hover and restarted every card animation
+  const chatWasAtBottom = (() => {
+    const cl = document.getElementById("chatlist");
+    return !cl || cl.scrollHeight - cl.scrollTop - cl.clientHeight < 40;
+  })();
+  morph(root, renderApp(view));
   placeRadio();
+  if (coachRunning()) placeCoach(); // What it points at moves as cards are dealt
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
-  if (!liveChat) {
-    const chatList = document.getElementById("chatlist");
-    if (chatList) chatList.scrollTop = chatList.scrollHeight;
-  }
+  const chatList = document.getElementById("chatlist");
+  if (chatList && chatWasAtBottom) chatList.scrollTop = chatList.scrollHeight;
   tickClock(); // Show the right time straight away, no 0:00 flicker
   syncPlatform(matchVisible);
 }
@@ -779,6 +782,27 @@ async function acceptTos() {
   // How to Play waits behind the "?", which pulses until they've opened it
   view.hintRules = true;
   await start();
+  maybeCoach();
+}
+
+// The tour runs on the table during the first hand, CrazyGames allow one click before play
+// Shown once ever and can be skipped from the first step
+function maybeCoach() {
+  try {
+    if (storage.getItem(COACH_KEY)) return;
+  } catch {
+    return;
+  }
+  const seen = () => {
+    try {
+      storage.setItem(COACH_KEY, String(Date.now()));
+    } catch {
+      // Storage isn't available, the game still works without it
+    }
+    view.hintRules = false; // They took the tour, stop pulsing the "?"
+    render();
+  };
+  setTimeout(() => startCoach(seen), 700); // Let the deal animation settle first
 }
 
 function sendChat() {

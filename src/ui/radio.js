@@ -5,7 +5,7 @@ import * as storage from "../net/storage.js";
 
 const MUSIC = "audio/Casino-1.mp3";
 const KEY = "7bust:radio";
-const DEFAULT_VOL = 0.35;
+const DEFAULT_VOL = 0.2; // Starts quiet so the music doesn't blast anyone on arrival
 
 let audio = null;
 let muted = false;
