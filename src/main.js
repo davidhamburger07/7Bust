@@ -88,6 +88,7 @@ const view = {
   pauseUsed: false,
   showTos: false,
   chatDisabled: false, // CrazyGames can turn chat off on their side
+  pendingDraw: false, // Online, a card asked for that the server hasn't named yet
   hintRules: false, // Pulse the "?" until a first timer opens How to Play
   showSettings: false,
   settings: { sfx: true, voice: true },
@@ -412,9 +413,27 @@ async function start() {
   apply(res);
 }
 // Actions go to the local engine in solo or to the room server online
-// Sounds and announcements play off the new snapshot either way
+// Online only the server knows the card, so it's dealt face down and flips when it arrives
+let pendingDrawTimer = null;
+function clearPendingDraw() {
+  if (pendingDrawTimer) clearTimeout(pendingDrawTimer);
+  pendingDrawTimer = null;
+  if (!view.pendingDraw) return false;
+  view.pendingDraw = false;
+  return true;
+}
 async function hit() {
-  if (view.mode === "online") return net.intent({ intent: "hit" });
+  if (view.mode === "online") {
+    sfx("card"); // The sound plays on the press, not the reply
+    view.pendingDraw = true;
+    render();
+    // If the server never answers, don't leave the face down card waiting forever
+    if (pendingDrawTimer) clearTimeout(pendingDrawTimer);
+    pendingDrawTimer = setTimeout(() => {
+      if (clearPendingDraw()) render();
+    }, 4000);
+    return net.intent({ intent: "hit" });
+  }
   apply(await server.hit());
 }
 async function stay() {
@@ -507,6 +526,14 @@ function ensureNet() {
     onState(snapshot, extra) {
       if (!view.online) return;
       reconnectTries = 0;
+      // Once the server answers the face down card stops waiting
+      // It clears when our turn is over or our hand changes
+      if (view.pendingDraw) {
+        const before = view.snapshot && view.snapshot.players[view.snapshot.you];
+        const now = snapshot.players[snapshot.you];
+        const dealt = !before || now.numbers.length !== before.numbers.length || now.modifiers.length !== before.modifiers.length;
+        if (dealt || !snapshot.yourTurn || now.turnState !== "active") clearPendingDraw();
+      }
       view.snapshot = snapshot;
       view.online.screen = "playing";
       if (extra) {

@@ -36,7 +36,12 @@ function modChip(card, { mini = false } = {}) {
 function dupCard(value, { mini = false } = {}) {
   return `<div class="card card--dup${mini ? " card--mini" : ""}"><span class="corner">${value}</span><span class="face">${value}</span></div>`;
 }
-function handCards(p, { mini = false, newSeat = -1 } = {}) {
+// Online the deck lives on the server, so the card is dealt face down straight away
+// and flips when the server says what it is
+function pendingCard() {
+  return `<div class="card card--pending" aria-label="Dealing"><span class="card-back"></span></div>`;
+}
+function handCards(p, { mini = false, newSeat = -1, pending = false } = {}) {
   const heat = heatTriple(p.uniqueCount);
   const last = p.numbers.length - 1;
   const nums = p.numbers
@@ -44,7 +49,8 @@ function handCards(p, { mini = false, newSeat = -1 } = {}) {
     .join("");
   const mods = p.modifiers.map((m) => modChip(m, { mini })).join("");
   const dup = p.turnState === "busted" && p.bustCard != null ? dupCard(p.bustCard, { mini }) : "";
-  if (!nums && !mods && !dup) return `<span class="hand-empty">no cards</span>`;
+  // A card on its way doesn't count as no cards
+  if (!nums && !mods && !dup) return pending ? "" : `<span class="hand-empty">no cards</span>`;
   return nums + mods + dup;
 }
 function handScoreText(p) {
@@ -104,7 +110,7 @@ function youSeat(p, view, nextSeat) {
       <span class="you-name">YOU${view.snapshot && view.snapshot.yourHands > 1 ? `<span class="hand-ix">HAND ${(view.snapshot.yourSeats || []).indexOf(p.seat) + 1}/${view.snapshot.yourHands}</span>` : ""}${dealerChip(p)} ${isNext ? '<span class="badge badge--next">YOU\'RE NEXT</span>' : badge(p.turnState)}</span>
       <span class="you-score num">hand <b>${handScoreText(p)}</b> · total <b>${p.totalScore}</b></span>
     </div>
-    <div class="you-hand">${handCards(p, { newSeat })}${p.secondChance ? '<span class="sc-dot big">2nd chance</span>' : ""}</div>
+    <div class="you-hand">${handCards(p, { newSeat, pending: view.pendingDraw })}${view.pendingDraw ? pendingCard() : ""}${p.secondChance ? '<span class="sc-dot big">2nd chance</span>' : ""}</div>
     <div class="progress"><span class="pips">${pips}</span><span class="count num">${p.uniqueCount}/${TARGET}</span></div>
   </div>`;
 }
