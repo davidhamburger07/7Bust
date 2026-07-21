@@ -3390,3 +3390,8 @@
   .coach-card,
   .coach-ring { transition: none; }
 }
+
+/* With nobody hosting this button is the way out, so the list is never a dead end */
+.browse-host {
+  margin-top: var(--s2);
+}

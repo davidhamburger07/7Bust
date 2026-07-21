@@ -778,7 +778,9 @@ function renderOnlineBrowse(o, view) {
       </div>`;
     })
     .join("");
-  const empty = b.loading && !b.list.length ? `<div class="browse-empty"><span class="spinner"></span> Looking for tables…</div>` : `<div class="browse-empty">No public matches match your filters.<br /><small>Host one and flip it to PUBLIC so others can join.</small></div>`;
+  const empty = b.loading && !b.list.length
+    ? `<div class="browse-empty"><span class="spinner"></span> Looking for tables…</div>`
+    : `<div class="browse-empty">Nobody's hosting a public table right now.<br /><small>Start one below, the house AI fills any seats nobody takes, so you can play straight away.</small></div>`;
   return `
   <div class="screen screen--online">
     <div class="mp-card mp-card--wide">
@@ -791,6 +793,7 @@ function renderOnlineBrowse(o, view) {
         <button class="link" data-action="mp-browse-refresh">${b.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
       <div class="browse-list">${rows || empty}</div>
+      <button class="btn btn--play browse-host" data-action="mp-create">HOST A TABLE<span class="sub">empty seats fill with the house AI</span></button>
       ${onlineError(o)}
     </div>
   </div>`;
