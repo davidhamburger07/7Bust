@@ -19,8 +19,30 @@ const INCLUDE = ["index.html", "src", "fonts", join("audio", "Voicelines"), join
 // Shipping them would also hand players the word filter and the login checks
 const EXCLUDE = ["src/server/cgAuth.mjs", "src/engine/profanity.js"];
 
-// Ships one classic script instead of the modules used in development
-// Modules won't load unless the site serves them with the right type, and we don't run their CDN
+// Every SDK method the game calls
+// The build loads the SDK index.html uses and checks each one is really there
+const SDK_METHODS = [
+  "sdkGameLoadingStart",
+  "gameplayStart",
+  "gameplayStop",
+  "happytime",
+  "requestAd",
+  "getInviteParam",
+  "updateRoom",
+  "leftRoom",
+  "addSettingsChangeListener",
+  "muteAudio",
+  "disableChat",
+  "isUserAccountAvailable",
+  "getUser",
+  "getUserToken",
+  "showAuthPrompt",
+  "addAuthListener",
+  "getItem",
+  "setItem",
+  "removeItem",
+];
+
 const BUNDLE_ENTRY = "src/main.js";
 const BUNDLE_OUT = "game.js";
 
@@ -170,6 +192,24 @@ async function main() {
   await writeFile(join(STAGE, "index.html"), html);
   const problems = [];
   if (!/sdk\.crazygames\.com/.test(html)) problems.push("index.html is missing the CrazyGames SDK script tag");
+
+  // Load the SDK the page uses and check every method we call is there
+  // The old v2 SDK still loads but quietly has no mute, room state or cloud saves
+  const sdkUrl = /<script src="(https:\/\/sdk\.crazygames\.com\/[^"]+)"/.exec(html)?.[1];
+  if (!sdkUrl) problems.push("could not find the SDK script URL in index.html");
+  else {
+    try {
+      const sdkSrc = await (await fetch(sdkUrl)).text();
+      const missing = SDK_METHODS.filter((m) => !sdkSrc.includes(m));
+      if (missing.length) {
+        problems.push(`the SDK at ${sdkUrl} does not contain: ${missing.join(", ")}, the features using them would silently do nothing`);
+      } else {
+        console.log(`  ✓ ${sdkUrl.split("/").pop()} has all ${SDK_METHODS.length} methods the game calls`);
+      }
+    } catch (e) {
+      console.log(`  ! could not verify the SDK (${e.message}), offline build, skipping that check`);
+    }
+  }
   const backend = /__WS_BACKEND__\s*=\s*"([^"]*)"/.exec(html);
   if (!backend || !backend[1]) problems.push("window.__WS_BACKEND__ is empty, multiplayer would not reach the server from their CDN");
   else if (!/^wss:\/\//.test(backend[1])) problems.push(`window.__WS_BACKEND__ should be a wss:// URL (got "${backend[1]}")`);

@@ -7,9 +7,26 @@ export const cgAvailable = () => !!sdk();
 // Runs an SDK call, ignoring the throw it does off CrazyGames domains
 // On crazygames.com the error is shown, or a wrong method name would go unnoticed
 const onPlatform = () => typeof location !== "undefined" && /(^|\.)crazygames\.(com|co\.uk)$/i.test(location.hostname);
+
+// v3 has to start before anything touches the SDK, or every call fails quietly
+// v2 has no init, so a missing init means it's already ready
+let initPromise = null;
+export function cgInit() {
+  const s = sdk();
+  if (initPromise) return initPromise;
+  if (!s) return (initPromise = Promise.resolve(false));
+  if (typeof s.init !== "function") return (initPromise = Promise.resolve(true));
+  initPromise = Promise.resolve()
+    .then(() => s.init())
+    .then(() => true)
+    .catch(() => false); // Not a CrazyGames domain, or the SDK said no
+  return initPromise;
+}
+
 async function safe(fn, label = "sdk") {
   const s = sdk();
   if (!s) return null;
+  await cgInit(); // Nothing can touch the SDK before this is done
   try {
     return await fn(s);
   } catch (e) {
@@ -82,16 +99,15 @@ export function cgSettings() {
 export function cgOnSettings(fn) {
   let tries = 0;
   const attempt = () => {
-    const s = sdk();
-    if (s && s.game && typeof s.game.addSettingsChangeListener === "function") {
-      try {
-        s.game.addSettingsChangeListener(fn);
-        return true;
-      } catch {
-        // Not ready yet
-      }
+    // Even reading .game throws off the platform, so the whole check sits in the try
+    try {
+      const s = sdk();
+      if (!s || typeof s.game.addSettingsChangeListener !== "function") return false;
+      s.game.addSettingsChangeListener(fn);
+      return true;
+    } catch {
+      return false; // Not ready, or not a CrazyGames domain
     }
-    return false;
   };
   if (attempt()) return;
   const t = setInterval(() => {

@@ -15,7 +15,7 @@ import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
+import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
 import * as storage from "./net/storage.js";
 
 // Solo is free practice, the engine holds no money
@@ -1166,6 +1166,7 @@ root.addEventListener("keydown", (e) => {
 });
 
 (async function init() {
+  cgInit(); // Has to run before anything else touches the SDK
   cgLoadingStart();
   fitStage();
   // Solo runs the engine in the page, so its analytics needs a way to the backend
@@ -1217,6 +1218,7 @@ root.addEventListener("keydown", (e) => {
   pump();
 
   applyPlatformSettings();
+  cgInit().then(applyPlatformSettings); // Settings can only be read once init is done
   cgOnSettings(applyPlatformSettings);
   // The SDK starts in its own time, so keep checking for a few seconds
   // Muting late is fine, never muting isn't
