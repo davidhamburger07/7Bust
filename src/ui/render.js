@@ -358,7 +358,7 @@ export function renderMatch(view) {
       ${youSeat(me, view, nextSeat)}
     </div>
 
-    <div class="rightcol">${logPanel(s)}${view.mode === "online" ? chatPanel(view) : ""}</div>
+    <div class="rightcol">${logPanel(s)}${view.mode === "online" && !view.chatDisabled ? chatPanel(view) : ""}</div>
 
     <div class="action-area">${peekChip(s)}${dock(view)}</div>
   </div>`;

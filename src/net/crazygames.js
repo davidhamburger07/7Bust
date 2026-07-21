@@ -45,6 +45,21 @@ export function cgLeftRoom() {
 // Room code the player was invited to, or null
 export const cgGetInviteRoom = () => safe((s) => s.game.getInviteParam("roomId"));
 
+// CrazyGames can mute the game and turn chat off, their mute beats our sound settings
+// Read at the start and again when the player changes either
+export function cgSettings() {
+  try {
+    const s = sdk();
+    const v = s && s.game && s.game.settings;
+    return { muteAudio: !!(v && v.muteAudio), disableChat: !!(v && v.disableChat) };
+  } catch {
+    return { muteAudio: false, disableChat: false }; // Off the platform, nothing to follow
+  }
+}
+export function cgOnSettings(fn) {
+  safe((s) => s.game.addSettingsChangeListener(fn));
+}
+
 // Rewarded ads only resolve when watched to the end, a skipped or missing one pays nothing
 // Midgame ads are just a break, callers carry on either way
 function requestAd(type, { onStart, onEnd } = {}) {

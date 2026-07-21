@@ -12,6 +12,9 @@ let muted = false;
 let volume = DEFAULT_VOL;
 let started = false;
 let available = true;
+// CrazyGames' own mute beats the player's mute and volume
+// Every way to start the music checks it, so no in-game control can undo it
+let platformMuted = false;
 
 function loadPrefs() {
   try {
@@ -32,8 +35,14 @@ function savePrefs() {
 }
 
 function tryPlay() {
+  if (platformMuted) return;
   if (audio && available && audio.paused) audio.play().catch(() => {});
 }
+
+// The volume the music should play at, with both mutes counted
+const applyVolume = () => {
+  if (audio) audio.volume = platformMuted || muted ? 0 : volume;
+};
 
 export function initRadio() {
   loadPrefs();
@@ -73,7 +82,7 @@ export function initRadio() {
       volume = 0.2; // Unmuting never lands on silence
       vol.value = 20;
     }
-    audio.volume = muted ? 0 : volume;
+    applyVolume();
     paint();
     if (!muted) tryPlay();
     savePrefs();
@@ -85,7 +94,7 @@ export function initRadio() {
       muted = false;
       paint();
     }
-    audio.volume = muted ? 0 : volume;
+    applyVolume();
     if (!muted) tryPlay();
     savePrefs();
   });
@@ -99,19 +108,30 @@ export function initRadio() {
 export function startRadio() {
   if (started) return;
   started = true;
-  if (!muted) tryPlay();
+  if (!platformMuted && !muted) tryPlay();
+}
+
+// The player's own mute and volume stay as they were for when the platform unmutes
+export function setPlatformMute(on) {
+  platformMuted = !!on;
+  if (!audio) return;
+  if (platformMuted) audio.pause();
+  else if (started && !muted) tryPlay();
+  applyVolume();
 }
 
 // CrazyGames needs game sound off during ads, so pause the music and resume it after
 // The player's own mute and volume aren't touched
 let pausedForAd = false;
 export function pauseForAd() {
+  if (platformMuted) return; // Already silent, and coming back from the ad mustn't unmute it
   if (audio && !audio.paused) {
     pausedForAd = true;
     audio.pause();
   }
 }
 export function resumeAfterAd() {
+  if (platformMuted) return;
   if (pausedForAd) {
     pausedForAd = false;
     tryPlay();

@@ -2,13 +2,13 @@
 
 import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
-import { announce, initAudio, sfx, playVoice, setAudioPrefs } from "./ui/announce.js";
-import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd } from "./ui/radio.js";
+import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
+import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
 import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
-import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth } from "./net/crazygames.js";
+import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
@@ -83,6 +83,7 @@ const view = {
   pause: null,
   pauseUsed: false,
   showTos: false,
+  chatDisabled: false, // CrazyGames can turn chat off on their side
   hintRules: false, // Pulse the "?" until a first timer opens How to Play
   showSettings: false,
   settings: { sfx: true, voice: true },
@@ -850,6 +851,17 @@ async function maybeMidgameAd() {
   }
 }
 
+// The CrazyGames mute beats the player's sound settings, so it's applied in the audio code
+// The player's own settings stay as they were and come back when it unmutes
+function applyPlatformSettings() {
+  const { muteAudio, disableChat } = cgSettings();
+  setAnnounceMute(muteAudio);
+  setRadioMute(muteAudio);
+  const was = view.chatDisabled;
+  view.chatDisabled = disableChat;
+  if (was !== disableChat) render();
+}
+
 // The only chip numbers the UI reads, from the browser for guests or the server if signed in
 // The game engine never holds money
 function syncWallet() {
@@ -1177,6 +1189,9 @@ root.addEventListener("keydown", (e) => {
   save();
   setInterval(tickClock, 1000);
   pump();
+
+  applyPlatformSettings();
+  cgOnSettings(applyPlatformSettings);
 
   cgLoadingStop();
 

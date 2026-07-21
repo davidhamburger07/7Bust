@@ -9,6 +9,14 @@ export function setAudioPrefs(p) {
   audioPrefs = { ...audioPrefs, ...p };
 }
 
+// CrazyGames can mute the game from their own page and their docs say that comes first
+// So it's checked before the player's settings everywhere and the settings can't override it
+let platformMuted = false;
+export function setPlatformMute(on) {
+  platformMuted = !!on;
+}
+export const isPlatformMuted = () => platformMuted;
+
 export function initAudio() {
   try {
     if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -76,7 +84,7 @@ function noise(startAt, dur, { type = "bandpass", freq = 2000, q = 1, gain = 0.2
 }
 
 export function sfx(kind) {
-  if (!ac || !audioPrefs.sfx) return;
+  if (platformMuted || !ac || !audioPrefs.sfx) return;
   switch (kind) {
     case "card": // A card flipped onto the table by any player
       noise(0, 0.07, { type: "bandpass", freq: 2100 + Math.random() * 700, q: 0.9, gain: 0.16 });
@@ -155,7 +163,7 @@ let currentVoice = null;
 
 // Plays a random voice line from a category, only one at a time
 export function playVoice(category, { volume = 0.95 } = {}) {
-  if (!audioPrefs.voice) return;
+  if (platformMuted || !audioPrefs.voice) return;
   const list = VOICE[category];
   if (!list || !list.length) return;
   const file = list[(Math.random() * list.length) | 0];
