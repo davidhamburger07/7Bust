@@ -5,18 +5,27 @@ const sdk = () => (typeof window !== "undefined" && window.CrazyGames && window.
 export const cgAvailable = () => !!sdk();
 
 // Runs an SDK call, ignoring the throw it does off CrazyGames domains
-async function safe(fn) {
+// On crazygames.com the error is shown, or a wrong method name would go unnoticed
+const onPlatform = () => typeof location !== "undefined" && /(^|\.)crazygames\.(com|co\.uk)$/i.test(location.hostname);
+async function safe(fn, label = "sdk") {
   const s = sdk();
   if (!s) return null;
   try {
     return await fn(s);
-  } catch {
-    return null; // Blocked domain or an SDK error, never break the game
+  } catch (e) {
+    if (onPlatform()) console.warn(`[7bust] CrazyGames SDK call "${label}" failed:`, e && e.message ? e.message : e);
+    return null; // Never break the game over analytics
   }
 }
 
-export const cgLoadingStart = () => safe((s) => s.game.sdkGameLoadingStart());
-export const cgLoadingStop = () => safe((s) => s.game.sdkGameLoadingStop());
+// Older SDKs name the loading calls differently, so use whichever exists
+// Without them CrazyGames measures the whole download for size
+const callFirst = (s, names) => {
+  for (const n of names) if (typeof s.game[n] === "function") return s.game[n]();
+  throw new Error(`none of ${names.join("/")} exist on SDK.game`);
+};
+export const cgLoadingStart = () => safe((s) => callFirst(s, ["loadingStart", "sdkGameLoadingStart"]), "loadingStart");
+export const cgLoadingStop = () => safe((s) => callFirst(s, ["loadingStop", "sdkGameLoadingStop"]), "loadingStop");
 
 // gameplayStart and gameplayStop decide when ads can show, so only send real changes
 let playing = false;
