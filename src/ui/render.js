@@ -149,14 +149,26 @@ function dock(view) {
       .join("");
     return `<div class="prompt">You drew <b>${verb}</b>: hit a player:</div><div class="targets">${buttons}</div>`;
   }
+  // Banking or holding is waiting for the server, so the dock says what was asked
+  // and ignores a second press of the same button
+  if (view.pendingAction && s.yourTurn) {
+    const label = view.pendingAction === "bank" ? "BANKING" : "HOLDING";
+    // Same two line shape as the real buttons, so the dock doesn't jump in height
+    return `<div class="dock dock--pending"><div class="btn btn--pending" aria-live="polite"><span class="pending-label"><span class="spinner"></span>${label}</span><span class="sub">confirming…</span></div></div>`;
+  }
   if (s.yourTurn) {
     const me = s.players[s.you];
     const risk = Math.round(s.yourBustRisk * 100);
+    // No presses while a card is coming, a second hit would draw a card nobody asked for
+    const dealing = !!view.pendingDraw;
     const left = s.youHitThisTurn
-      ? `<button class="btn btn--stop" data-action="stop">STOP<span class="sub">hold ${me.handScore}</span></button>`
-      : `<button class="btn btn--bank${s.canBank ? "" : " ghosted"}" data-action="stay" ${s.canBank ? "" : "disabled"}>BANK<span class="sub">${s.canBank ? me.handScore : "draw first"}</span></button>`;
-    const pulse = me.uniqueCount >= 5 ? " pulse" : "";
-    return `<div class="dock">${left}<button class="btn btn--hit${pulse}" data-action="hit">HIT<span class="sub">risk ${risk}%</span></button></div>`;
+      ? `<button class="btn btn--stop" ${dealing ? "disabled" : 'data-action="stop"'}>STOP<span class="sub">hold ${me.handScore}</span></button>`
+      : `<button class="btn btn--bank${s.canBank && !dealing ? "" : " ghosted"}" ${s.canBank && !dealing ? 'data-action="stay"' : "disabled"}>BANK<span class="sub">${s.canBank ? me.handScore : "draw first"}</span></button>`;
+    const pulse = me.uniqueCount >= 5 && !dealing ? " pulse" : "";
+    const right = dealing
+      ? `<button class="btn btn--hit" disabled>HIT<span class="sub">dealing…</span></button>`
+      : `<button class="btn btn--hit${pulse}" data-action="hit">HIT<span class="sub">risk ${risk}%</span></button>`;
+    return `<div class="dock${dealing ? " dock--pending" : ""}">${left}${right}</div>`;
   }
   const a = s.actingSeat;
   const who = a === s.you ? "Your forced flips" : `${s.players[a].name} is playing`;

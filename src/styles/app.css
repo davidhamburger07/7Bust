@@ -836,6 +836,30 @@
   align-items: center;
   gap: 2px;
 }
+/* Waiting on the server to confirm a bank or hold */
+/* This button looks pressed in so it's clear the choice is made and the game is just waiting */
+.dock--pending .btn--pending {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, #1a1207, #241809);
+  color: var(--gold-hi);
+  border-color: rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 210, 74, 0.12);
+  text-shadow: none;
+  cursor: default;
+}
+.dock--pending .pending-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.dock--pending .pending-label .spinner {
+  flex: none;
+  border-color: rgba(255, 210, 74, 0.25);
+  border-top-color: var(--gold);
+}
+.dock--pending .btn--pending .sub {
+  color: var(--faint);
+}
 .dock-wait {
   display: inline-flex;
   align-items: center;

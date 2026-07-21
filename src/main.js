@@ -89,6 +89,7 @@ const view = {
   showTos: false,
   chatDisabled: false, // CrazyGames can turn chat off on their side
   pendingDraw: false, // Online, a card asked for that the server hasn't named yet
+  pendingAction: null, // Online, a bank or stop asked for that the server hasn't confirmed yet
   hintRules: false, // Pulse the "?" until a first timer opens How to Play
   showSettings: false,
   settings: { sfx: true, voice: true },
@@ -412,26 +413,30 @@ async function start() {
   sfx("ding");
   apply(res);
 }
-// Actions go to the local engine in solo or to the room server online
 // Online only the server knows the card, so it's dealt face down and flips when it arrives
-let pendingDrawTimer = null;
-function clearPendingDraw() {
-  if (pendingDrawTimer) clearTimeout(pendingDrawTimer);
-  pendingDrawTimer = null;
-  if (!view.pendingDraw) return false;
+// Bank and hold just show what was asked and stop taking presses until the server agrees
+let pendingTimer = null;
+function clearPending() {
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = null;
+  if (!view.pendingDraw && !view.pendingAction) return false;
   view.pendingDraw = false;
+  view.pendingAction = null;
   return true;
+}
+// If the server never answers, give the buttons back instead of waiting forever
+function armPending() {
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    if (clearPending()) render();
+  }, 4000);
 }
 async function hit() {
   if (view.mode === "online") {
     sfx("card"); // The sound plays on the press, not the reply
     view.pendingDraw = true;
     render();
-    // If the server never answers, don't leave the face down card waiting forever
-    if (pendingDrawTimer) clearTimeout(pendingDrawTimer);
-    pendingDrawTimer = setTimeout(() => {
-      if (clearPendingDraw()) render();
-    }, 4000);
+    armPending();
     return net.intent({ intent: "hit" });
   }
   apply(await server.hit());
@@ -442,12 +447,22 @@ async function stay() {
     playVoice("coward");
     lastFlavorAt = Date.now();
   }
-  if (view.mode === "online") return net.intent({ intent: "stay" });
+  if (view.mode === "online") {
+    view.pendingAction = "bank";
+    render();
+    armPending();
+    return net.intent({ intent: "stay" });
+  }
   apply(await server.stay());
 }
 async function stop() {
   sfx("click");
-  if (view.mode === "online") return net.intent({ intent: "stop" });
+  if (view.mode === "online") {
+    view.pendingAction = "stop";
+    render();
+    armPending();
+    return net.intent({ intent: "stop" });
+  }
   apply(await server.stop());
 }
 async function next() {
@@ -526,13 +541,13 @@ function ensureNet() {
     onState(snapshot, extra) {
       if (!view.online) return;
       reconnectTries = 0;
-      // Once the server answers the face down card stops waiting
+      // Once the server answers, a face down card, bank or hold stops waiting
       // It clears when our turn is over or our hand changes
-      if (view.pendingDraw) {
+      if (view.pendingDraw || view.pendingAction) {
         const before = view.snapshot && view.snapshot.players[view.snapshot.you];
         const now = snapshot.players[snapshot.you];
         const dealt = !before || now.numbers.length !== before.numbers.length || now.modifiers.length !== before.modifiers.length;
-        if (dealt || !snapshot.yourTurn || now.turnState !== "active") clearPendingDraw();
+        if (dealt || !snapshot.yourTurn || now.turnState !== "active") clearPending();
       }
       view.snapshot = snapshot;
       view.online.screen = "playing";
@@ -864,6 +879,7 @@ async function mpLeave() {
   net = null;
   clearNet();
   reconnectTries = 0;
+  clearPending(); // Nothing is waiting once the socket is gone
   view.mode = "solo";
   view.online = null;
   // Back to the solo lobby, the online snapshot isn't ours any more
