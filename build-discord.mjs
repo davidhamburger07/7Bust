@@ -164,9 +164,21 @@ async function main() {
   await rm(sdkEntry, { force: true });
   console.log(`  = ${SDK_OUT} (${fmt((await stat(join(STAGE, SDK_OUT))).size)})`);
 
+  // Vercel serves this repo as it is, so the copy at the root gets refreshed here too
+  // Building it in one place keeps the hosted Activity and the folder the same
+  await cp(join(STAGE, SDK_OUT), join(ROOT, SDK_OUT));
+  console.log(`  = ${SDK_OUT} refreshed at the repo root (for the Vercel deployment)`);
+
   for (const f of await walk(join(STAGE, "src"))) if (/\.(js|mjs)$/.test(f)) await rm(f);
 
-  const html = await readFile(join(STAGE, "index.html"), "utf8");
+  let html = await readFile(join(STAGE, "index.html"), "utf8");
+  const moduleTag = /<script\s+type="module"\s+src="\.\/src\/main\.js"><\/script>/;
+  if (!moduleTag.test(html)) {
+    console.error("index.discord.html no longer has the expected module tag, the bundle swap needs updating");
+    process.exit(1);
+  }
+  html = html.replace(moduleTag, `<script src="./${BUNDLE_OUT}"></script>`);
+  await writeFile(join(STAGE, "index.html"), html);
   const problems = [];
 
   if (/sdk\.crazygames\.com/.test(html)) {

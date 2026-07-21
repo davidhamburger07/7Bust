@@ -4,5 +4,12 @@
     "api/ws.mjs": {
       "maxDuration": 300
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": ".*discord.*" }],
+      "destination": "/index.discord.html"
+    }
+  ]
 }

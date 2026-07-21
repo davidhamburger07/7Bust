@@ -28,6 +28,7 @@
     <main id="app" aria-live="polite"></main>
     <!-- Big announcements like "Bust" and "Clean 7" sit outside the app so redraws never cut them off -->
     <div id="slam" aria-hidden="true"></div>
-    <script src="./game.js"></script>
+    <!-- Runs the real modules here, the build swaps in the bundled game.js -->
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
