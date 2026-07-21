@@ -3,6 +3,7 @@
 
 import { backendHttpOrigin } from "./netClient.js";
 import { cgUserToken, cgAccountsAvailable } from "./crazygames.js";
+import * as storage from "./storage.js";
 
 const LOCAL_KEY = "7bust:chips";
 const STARTING_BALANCE = 1000;
@@ -14,7 +15,7 @@ let dailyClaimed = null; // Whether today's bonus is taken, from the server. Nul
 
 const readLocal = () => {
   try {
-    const raw = localStorage.getItem(LOCAL_KEY);
+    const raw = storage.getItem(LOCAL_KEY);
     if (raw === null) return STARTING_BALANCE; // Never played before, give them the starting chips
     const v = Number(raw);
     return Number.isFinite(v) && v >= 0 ? v : STARTING_BALANCE;
@@ -24,7 +25,7 @@ const readLocal = () => {
 };
 const writeLocal = (v) => {
   try {
-    localStorage.setItem(LOCAL_KEY, String(Math.max(0, Math.round(v))));
+    storage.setItem(LOCAL_KEY, String(Math.max(0, Math.round(v))));
   } catch {
     // Storage isn't available, the game still works without it
   }
@@ -51,7 +52,7 @@ async function post(action, extra = {}) {
 export function seedLocalIfUnset(amount) {
   if (!Number.isFinite(amount) || amount < 0) return false;
   try {
-    if (localStorage.getItem(LOCAL_KEY) != null) return false;
+    if (storage.getItem(LOCAL_KEY) != null) return false;
   } catch {
     return false;
   }

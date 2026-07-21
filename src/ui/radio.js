@@ -1,6 +1,8 @@
 // Background music radio, it lives outside the app so music keeps playing through redraws
 // Volume is saved but mute isn't, a saved mute made the game seem broken
 
+import * as storage from "../net/storage.js";
+
 const MUSIC = "audio/Casino-1.mp3";
 const KEY = "7bust:radio";
 const DEFAULT_VOL = 0.35;
@@ -13,7 +15,7 @@ let available = true;
 
 function loadPrefs() {
   try {
-    const p = JSON.parse(localStorage.getItem(KEY) || "{}");
+    const p = JSON.parse(storage.getItem(KEY) || "{}");
     if (typeof p.volume === "number") volume = p.volume;
   } catch {
     // No saved settings, use the defaults
@@ -23,7 +25,7 @@ function loadPrefs() {
 }
 function savePrefs() {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ volume }));
+    storage.setItem(KEY, JSON.stringify({ volume }));
   } catch {
     // Analytics failing never affects the game
   }

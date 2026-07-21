@@ -14,6 +14,7 @@ import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
 import { cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
+import * as storage from "./net/storage.js";
 
 // Solo is free practice, the engine holds no money
 // Chips only move where the server can check them, so the browser can't make chips
@@ -35,10 +36,10 @@ const SETTINGS_KEY = "7bust:settings";
 
 function clientId() {
   try {
-    let c = localStorage.getItem(CID_KEY);
+    let c = storage.getItem(CID_KEY);
     if (!c) {
       c = Math.random().toString(36).slice(2, 12);
-      localStorage.setItem(CID_KEY, c);
+      storage.setItem(CID_KEY, c);
     }
     return c;
   } catch {
@@ -47,21 +48,21 @@ function clientId() {
 }
 function loadSettings() {
   try {
-    return { sfx: true, voice: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+    return { sfx: true, voice: true, ...JSON.parse(storage.getItem(SETTINGS_KEY) || "{}") };
   } catch {
     return { sfx: true, voice: true };
   }
 }
 function saveSettings(s) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    storage.setItem(SETTINGS_KEY, JSON.stringify(s));
   } catch {
     // Storage isn't available, the game still works without it
   }
 }
 const savedName = () => {
   try {
-    return localStorage.getItem(NAME_KEY) || "";
+    return storage.getItem(NAME_KEY) || "";
   } catch {
     return "";
   }
@@ -253,7 +254,7 @@ function toast(msg) {
 function save() {
   if (view.mode === "online") return; // The room server owns online state
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(server.serialize()));
+    storage.setItem(SAVE_KEY, JSON.stringify(server.serialize()));
   } catch {
     // Storage isn't available, the game still works without it
   }
@@ -279,7 +280,7 @@ async function settleMpWallet(s) {
 
 function loadHistory() {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return JSON.parse(storage.getItem(HISTORY_KEY) || "[]");
   } catch {
     return [];
   }
@@ -315,7 +316,7 @@ function recordHistory(s) {
     })),
   });
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 30)));
+    storage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 30)));
   } catch {
     // Storage isn't available, the game still works without it
   }
@@ -436,21 +437,21 @@ async function target(seat) {
 
 const loadNet = () => {
   try {
-    return JSON.parse(localStorage.getItem(NET_KEY) || "null");
+    return JSON.parse(storage.getItem(NET_KEY) || "null");
   } catch {
     return null;
   }
 };
 const persistNet = (code, id, name) => {
   try {
-    localStorage.setItem(NET_KEY, JSON.stringify({ code, id, name }));
+    storage.setItem(NET_KEY, JSON.stringify({ code, id, name }));
   } catch {
     // Analytics failing never affects the game
   }
 };
 const clearNet = () => {
   try {
-    localStorage.removeItem(NET_KEY);
+    storage.removeItem(NET_KEY);
   } catch {
     // Analytics failing never affects the game
   }
@@ -586,7 +587,7 @@ const readName = () => {
   const el = document.getElementById("mp-name");
   const n = ((el ? el.value : view.online && view.online.name) || "").trim() || "Player";
   try {
-    localStorage.setItem(NAME_KEY, n); // Used as the default name in settings and on the next visit
+    storage.setItem(NAME_KEY, n); // Used as the default name in settings and on the next visit
   } catch {
     // Analytics failing never affects the game
   }
@@ -765,8 +766,8 @@ function mpKick(slot) {
 async function acceptTos() {
   let firstRun = true;
   try {
-    firstRun = !localStorage.getItem(TOS_KEY); // Only teach on the first accept, not when they read the terms again
-    localStorage.setItem(TOS_KEY, String(Date.now()));
+    firstRun = !storage.getItem(TOS_KEY); // Only teach on the first accept, not when they read the terms again
+    storage.setItem(TOS_KEY, String(Date.now()));
   } catch {
     // Storage isn't available, the game still works without it
   }
@@ -876,7 +877,7 @@ function dailyState() {
   if (server !== null) return { available: !server, last: server ? today() : "" };
   let last = "";
   try {
-    last = localStorage.getItem(DAILY_KEY) || "";
+    last = storage.getItem(DAILY_KEY) || "";
   } catch {
     // Analytics failing never affects the game
   }
@@ -892,7 +893,7 @@ async function claimDaily() {
   if (!view.dailyAvailable) return;
   const res = await claimDailyBonus(() => {
     try {
-      localStorage.setItem(DAILY_KEY, today());
+      storage.setItem(DAILY_KEY, today());
     } catch {
       // Analytics failing never affects the game
     }
@@ -1082,7 +1083,7 @@ root.addEventListener("input", (e) => {
   if (e.target.id === "set-name") {
     view.settingsName = e.target.value;
     try {
-      localStorage.setItem(NAME_KEY, e.target.value.trim().slice(0, 12));
+      storage.setItem(NAME_KEY, e.target.value.trim().slice(0, 12));
     } catch {
       // Analytics failing never affects the game
     }
@@ -1134,14 +1135,14 @@ root.addEventListener("keydown", (e) => {
   installAnalyticsFlush();
   initRadio();
   try {
-    view.showTos = !localStorage.getItem(TOS_KEY);
+    view.showTos = !storage.getItem(TOS_KEY);
   } catch {
     view.showTos = true;
   }
   view.settings = loadSettings();
   setAudioPrefs(view.settings);
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = storage.getItem(SAVE_KEY);
     if (raw) {
       const blob = JSON.parse(raw);
       if (blob && (blob.phase === "round" || blob.phase === "round_end")) {
@@ -1158,7 +1159,7 @@ root.addEventListener("keydown", (e) => {
   if (!view.snapshot) view.snapshot = await server.getState();
   // Chips used to be in the engine save, move that balance into the wallet once
   try {
-    const old = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+    const old = JSON.parse(storage.getItem(SAVE_KEY) || "null");
     if (old && old.wallet && Number.isFinite(old.wallet.balance)) seedLocalIfUnset(old.wallet.balance);
   } catch {
     // No old save to carry over
