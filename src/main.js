@@ -1262,9 +1262,10 @@ root.addEventListener("keydown", (e) => {
     openOnline();
     joinListed(roomParam);
   } else if (cgInstantMultiplayer()) {
-    // CrazyGames launched the game to play with others, so open the table list, not the solo lobby
+    // CrazyGames launched a party leader to play with friends, so host a table straight away
+    // Landing on the table list would leave friends nothing to join
     openOnline();
-    openBrowse();
+    mpCreate();
   } else if (saved && saved.code && saved.id) {
     ensureNet();
     view.mode = "online";
