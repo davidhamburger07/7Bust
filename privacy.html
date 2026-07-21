@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>7Bust: Privacy Policy</title>
+    <link rel="stylesheet" href="./src/styles/fonts.css" />
+    <link rel="stylesheet" href="./legal.css" />
+  </head>
+  <body>
+    <main class="doc">
+      <a class="back" href="./">&larr; Back to the game</a>
+      <p class="eyebrow">7Bust</p>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated 21 July 2026</p>
+
+      <p class="lede">
+        7Bust is a card game. It is not an advertising business and it is not a data business, so this policy is short
+        and it is specific: here is every place the game keeps anything about you, and how long it stays there.
+      </p>
+
+      <h2>What is kept on your device</h2>
+      <p>
+        Your progress is stored in your browser, or, on CrazyGames and Discord, through that platform's own save
+        feature, so it follows your account instead of one browser. It holds:
+      </p>
+      <ul>
+        <li>your chip balance, and the date you last claimed the daily bonus</li>
+        <li>your match history: scores, placings and who won</li>
+        <li>your settings: sound preferences, music volume, and the name you type for online play</li>
+        <li>whether you have accepted the terms and seen the tutorial</li>
+        <li>a random identifier for your browser, used to stop one person taking two seats at the same table</li>
+      </ul>
+      <p>You can erase all of it at any time by clearing site data for the game in your browser settings.</p>
+
+      <h2>What is kept on our servers</h2>
+
+      <h3>Online tables</h3>
+      <p>
+        While a table is live, the server holds the game state, the display names of the people at it, and the chat
+        messages sent there. <strong>Abandoned tables are deleted automatically after six hours.</strong> Nothing about a
+        finished match is kept beyond that except as described below.
+      </p>
+
+      <h3>Chip balances</h3>
+      <p>
+        If you sign in with a CrazyGames or Discord account, your chips are stored on our server so they survive
+        changing device. That record is keyed by a <strong>one-way hash of your platform user id</strong>: we do not
+        store the id itself, your email, or your real name. The record contains only your balance, the date you last
+        claimed a daily bonus, and a count of rewards claimed today.
+      </p>
+
+      <h3>Game statistics</h3>
+      <p>
+        The game records aggregate counters, how many matches were played, rounds finished, rewards claimed, to
+        understand whether it is working. Daily counters are kept for about four months. Alongside them, a rolling
+        buffer of the most recent few hundred match results is kept, and those results include the
+        <strong>display name of the winner</strong>. That is the only place a name is retained after a match ends. Use a
+        nickname if you would rather it were not your own.
+      </p>
+
+      <h2>What is never collected</h2>
+      <ul>
+        <li>No email address, password, phone number or real name</li>
+        <li>No raw platform account ids, they are hashed before they are stored</li>
+        <li>No payment details of any kind: the game sells nothing</li>
+        <li>No tracking of you across other websites, and no advertising profile</li>
+        <li>Nothing is sold or shared with data brokers, because none of it would be of use to one</li>
+      </ul>
+
+      <h2>Other services involved</h2>
+      <ul>
+        <li>
+          <strong>CrazyGames</strong>: on their site, their SDK handles sign-in, saved progress and adverts under
+          <a href="https://www.crazygames.com/privacy" rel="noopener">their own privacy policy</a>.
+        </li>
+        <li>
+          <strong>Discord</strong>: inside a Discord Activity, the game asks Discord only for the
+          <code>identify</code> scope: your user id and display name. It never reads your messages, servers or friends.
+          Discord's handling is covered by <a href="https://discord.com/privacy" rel="noopener">their privacy policy</a>.
+        </li>
+        <li>
+          <strong>Vercel</strong> hosts the game and its server, and <strong>Upstash</strong> stores the data described
+          above. Both keep ordinary server logs, which include IP addresses, for their own operational security.
+        </li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>
+        7Bust is intended for players aged 13 and over, in line with the platforms it appears on. It is not directed at
+        younger children and we do not knowingly keep data from them.
+      </p>
+
+      <h2>Your choices</h2>
+      <p>
+        Clearing site data removes everything held on your device. To have a server-side chip balance deleted, contact
+        us with the platform you played on and the display name you used, and we will remove it. Because balances are
+        keyed by a hash rather than an account id, we may need you to sign in so the right record can be found.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes in a way that affects what is collected, the date at the top will change and the updated
+        version will appear here before the change takes effect.
+      </p>
+
+      <h2>Contact</h2>
+      <p>Questions, or a deletion request: <a href="mailto:hambidavid@gmail.com">hambidavid@gmail.com</a></p>
+
+      <p class="foot"><a href="./terms">Terms of Service</a> &middot; <a href="./">Play 7Bust</a></p>
+    </main>
+  </body>
+</html>

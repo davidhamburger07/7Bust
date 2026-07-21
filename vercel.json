@@ -8,8 +8,14 @@
   "rewrites": [
     {
       "source": "/",
-      "has": [{ "type": "host", "value": ".*discord.*" }],
+      "has": [
+        {
+          "type": "host",
+          "value": ".*discord.*"
+        }
+      ],
       "destination": "/index.discord.html"
     }
-  ]
+  ],
+  "cleanUrls": true
 }
