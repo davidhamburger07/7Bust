@@ -414,6 +414,7 @@ async function start() {
     toast("Can't start right now.");
     return;
   }
+  hasPlayed = true; // After a first match the next break can show an ad
   sfx("ding");
   apply(res);
 }
@@ -555,6 +556,7 @@ function ensureNet() {
       }
       view.snapshot = snapshot;
       view.online.screen = "playing";
+      hasPlayed = true; // Online matches count too for the ad break rule
       if (extra) {
         view.pause = extra.pause || null;
         view.pauseUsed = !!extra.pauseUsed;
@@ -907,17 +909,21 @@ async function refreshSolo() {
   view.snapshot = await server.getState();
   prevPhase = view.snapshot.phase;
 }
-// Ads only show at a break, never during a match or while other players wait on us
+// Ads only show at a break, never in a match, while players wait on us, or before a first match
 // window.__AD_INTERVAL_MS__ lets tests change how often they show
 const AD_INTERVAL_MS = Number(window.__AD_INTERVAL_MS__) || 20 * 60 * 1000;
-let lastAdAt = Date.now();
+let lastAdAt = 0;
+let hasPlayed = false;
+let midgameShown = false; // Has the first ad of the session shown
 async function maybeMidgameAd() {
-  if (Date.now() - lastAdAt < AD_INTERVAL_MS) return;
+  if (!hasPlayed) return;
+  if (midgameShown && Date.now() - lastAdAt < AD_INTERVAL_MS) return; // After the first ad, space them out
   // Never interrupt live play, whatever the caller thinks
   const s = view.snapshot;
   const inMatch = view.mode === "online" ? !!(view.online && view.online.screen === "playing") : !!s && s.phase !== "lobby";
   if (inMatch) return;
   lastAdAt = Date.now(); // Count the try either way so an empty ad slot can't spam retries
+  midgameShown = true;
   try {
     await midgameAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
   } catch {
@@ -1073,6 +1079,7 @@ async function confirmExitYes() {
     aiTimer = null;
   }
   apply(await server.abandonMatch());
+  await maybeMidgameAd(); // Leaving a match counts as a break
 }
 
 const showRules = () => {
