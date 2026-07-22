@@ -2,8 +2,6 @@
 // The page catches the SDK's events before this loads and keeps them until it's ready
 
 let ready = false;
-// An ad closed early can still count as shown, so only the watch complete event pays out
-let rewardedComplete = false;
 // Set while an ad plays so the music comes back as soon as it ends
 let audioPause = null;
 let audioResume = null;
@@ -19,7 +17,6 @@ function preloadRewarded() {
 }
 
 // SDK ready means ads can be asked for, the pause events stop and start the music
-// The watch complete event is what allows a reward
 function handleEvent(e) {
   if (!e || !e.name) return;
   switch (e.name) {
@@ -35,9 +32,6 @@ function handleEvent(e) {
         audioResume();
         audioResume = null; // Cleared after the ad too, so this mustn't run twice
       }
-      break;
-    case "SDK_REWARDED_WATCH_COMPLETE":
-      rewardedComplete = true;
       break;
   }
 }
@@ -74,11 +68,10 @@ async function showAd(type, { onStart, onEnd } = {}) {
   }
 }
 
-// Throws unless the player watched it all, so a skip, close or empty slot pays nothing
+// Throws on a skip, close or empty slot, so getting past this means the ad was watched
+// Doesn't wait for the watch complete event, some SDK builds never send it
 export async function gdRewardedAd(opts = {}) {
-  rewardedComplete = false;
   await showAd("rewarded", opts);
-  if (!rewardedComplete) throw new Error("not-completed");
   preloadRewarded();
 }
 
