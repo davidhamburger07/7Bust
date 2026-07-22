@@ -13,7 +13,7 @@ import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, ad
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { gdBoot } from "./net/gamedistribution.js";
-import { rewardedAd, midgameAd } from "./net/ads.js";
+import { rewardedAd, midgameAd, adsAvailable } from "./net/ads.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
@@ -99,6 +99,7 @@ const view = {
   wheel: null,
   adPending: false,
   dailyAvailable: false,
+  adsAvailable: false,
 };
 let net = null;
 let aiTimer = null;
@@ -176,6 +177,7 @@ function dockRadio() {
 function render() {
   view.lastEvent = view.snapshot ? view.snapshot.lastEvent : null;
   view.dailyAvailable = dailyState().available;
+  view.adsAvailable = adsAvailable(); // No ad button where no network can serve one
   // Keep the log's scroll, follow the bottom unless the player scrolled up
   const oldLog = document.getElementById("log");
   let atBottom = true;

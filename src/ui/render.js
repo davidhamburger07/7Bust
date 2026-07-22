@@ -262,13 +262,16 @@ function walletCard(view) {
   </div>`;
 }
 
+// The ad wheel only shows where ads work, not on Discord or our own site
 function freeChips(view) {
   const daily = view.dailyAvailable
     ? `<button class="btn btn--daily" data-action="daily">DAILY BONUS<span class="sub">+${DAILY_BONUS} free chips</span></button>`
     : `<div class="daily-done">✓ Daily bonus claimed, come back tomorrow</div>`;
-  const ad = view.adPending
-    ? `<button class="btn btn--ad" disabled>LOADING AD…<span class="sub">hang tight</span></button>`
-    : `<button class="btn btn--ad" data-action="watch-ad">FREE CHIPS<span class="sub">📺 watch an ad &amp; spin the wheel</span></button>`;
+  const ad = !view.adsAvailable
+    ? ""
+    : view.adPending
+      ? `<button class="btn btn--ad" disabled>LOADING AD…<span class="sub">hang tight</span></button>`
+      : `<button class="btn btn--ad" data-action="watch-ad">FREE CHIPS<span class="sub">📺 watch an ad &amp; spin the wheel</span></button>`;
   return `<div class="freechips">${daily}${ad}</div>`;
 }
 
