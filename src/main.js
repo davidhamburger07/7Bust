@@ -12,11 +12,13 @@ import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
+import { gdBoot } from "./net/gamedistribution.js";
+import { rewardedAd, midgameAd } from "./net/ads.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
 import { aiReactions } from "./engine/aiChatter.js";
 import { createNet } from "./net/netClient.js";
-import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgInviteLink, cgOnJoinRoom, cgInstantMultiplayer, cgRewardedAd, cgMidgameAd } from "./net/crazygames.js";
+import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgInviteLink, cgOnJoinRoom, cgInstantMultiplayer } from "./net/crazygames.js";
 import * as storage from "./net/storage.js";
 
 // Solo is free practice, the engine holds no money
@@ -915,7 +917,7 @@ async function maybeMidgameAd() {
   if (inMatch) return;
   lastAdAt = Date.now(); // Count the try either way so an empty ad slot can't spam retries
   try {
-    await cgMidgameAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
+    await midgameAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
   } catch {
     // No ad or a skipped one, just carry on into the game
   }
@@ -1001,7 +1003,7 @@ async function watchAdForChips() {
   view.adPending = true;
   render();
   try {
-    await cgRewardedAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
+    await rewardedAd({ onStart: pauseForAd, onEnd: resumeAfterAd });
   } catch (e) {
     view.adPending = false;
     render();
@@ -1213,8 +1215,9 @@ root.addEventListener("keydown", (e) => {
 
 (async function init() {
   cgInit(); // Has to run before anything else touches the SDK
+  gdBoot(); // Only serves ads, nothing waits on it
+  // An ad blocker may never let it load, so waiting on it could hang the game
   // Discord goes first and is waited on, it sends every request through their proxy
-  // Nothing can connect before that's done
   await discordBoot();
   cgLoadingStart();
   fitStage();
