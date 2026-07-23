@@ -544,6 +544,7 @@ export function renderRules() {
         <div class="rules-demo">${rmod("+2")}${rmod("+4")}${rmod("+6")}${rmod("+8")}${rmod("+10")}${rmod("×2")}</div>
         <p>Bonus cards that boost a banked hand: <b>+X</b> adds points, <b>×2</b> doubles your number sum. They can't bust you.</p></section>
       <section class="rule-card"><h3>The deck</h3><p>One <b>97-card</b> deck for the whole match. It shrinks as cards are played and only reshuffles when it runs out, counting cards pays off. Online hosts pick the match length (1-9 rounds), the buy-in, multi-hand play and the disconnect rule.</p></section>
+      <section class="rule-card"><h3>Credits</h3><p class="rules-credit">7BUST FM music by <b>Kevin MacLeod</b> (<a href="https://incompetech.com" target="_blank" rel="noopener">incompetech.com</a>), licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons BY 4.0</a>.</p></section>
     </div>
     <button class="btn btn--play" data-action="rules-back">GOT IT</button>
   </div>`;

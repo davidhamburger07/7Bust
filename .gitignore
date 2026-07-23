@@ -8,11 +8,8 @@ audio/*.mp4
 audio/*.m4a
 audio/*.wav
 
-# The raw local music library. 7BUST FM ships a curated, casino-themed subset copied into
-# audio/radio/ (which IS committed); this folder stays local because it also holds tracks that
-# are NOT cleared for in-game use (the named-artist / Epidemic-Sound-style files). Only add a
-# track to audio/radio/ once its licence is confirmed for a distributed, monetised game.
 audio/Music/
+audio/non-copyright/
 
 # OS / editor
 .DS_Store

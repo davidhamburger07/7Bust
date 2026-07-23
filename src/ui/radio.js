@@ -3,17 +3,21 @@
 
 import * as storage from "../net/storage.js";
 
-// Shuffled playlist so a session doesn't hear the same thing over and over
-// Each track streams when it plays, add or remove files here and nothing else changes
+// Shuffled tracks by Kevin MacLeod under CC BY 4.0, the credit must show in "How to Play"
+// and in each store listing. Only add a track whose licence you've checked
 const PLAYLIST = [
-  "audio/radio/7bustfm-classy-lounge.mp3",
-  "audio/radio/7bustfm-vip.mp3",
-  "audio/radio/7bustfm-game.mp3",
-  "audio/radio/7bustfm-mafia-jazz-1.mp3",
-  "audio/radio/7bustfm-mafia-jazz-2.mp3",
-  "audio/radio/7bustfm-edm-lounge.mp3",
-  "audio/radio/7bustfm-las-vegas.mp3",
-  "audio/radio/7bustfm-lottery.mp3",
+  "audio/radio/deadly-roulette.mp3",
+  "audio/radio/deuces.mp3",
+  "audio/radio/hard-boiled.mp3",
+  "audio/radio/backbay-lounge.mp3",
+  "audio/radio/bossa-antigua.mp3",
+  "audio/radio/lobby-time.mp3",
+  "audio/radio/jazz-brunch.mp3",
+  "audio/radio/night-in-venice.mp3",
+  "audio/radio/samba-isobel.mp3",
+  "audio/radio/zazie.mp3",
+  "audio/radio/on-hold-for-you.mp3",
+  "audio/radio/poppers-and-prosecco.mp3",
 ];
 const KEY = "7bust:radio";
 const DEFAULT_VOL = 0.2; // Starts quiet so the music doesn't blast anyone on arrival
