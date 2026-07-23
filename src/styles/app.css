@@ -1574,9 +1574,190 @@
   cursor: pointer;
 }
 .radio-label {
-  letter-spacing: 0.1em;
-  opacity: 0.75;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 96px; /* Holds the current track name, stops the pill growing with it */
+  min-width: 0;
+}
+
+/* "7Bust FM" playlist menu */
+.radio-open {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe89a, #b8860b);
+  border: 2px solid #fff2c0;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s;
+}
+.radio-open:hover {
+  filter: brightness(1.08);
+}
+.radio-open:active {
+  transform: translateY(1px);
+}
+.radio-open:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.radio.open .radio-open {
+  transform: rotate(180deg);
+}
+
+/* Sits on the page and the code moves it next to the radio wherever that is */
+/* Its position is set in code, this is only the look and the opening animation */
+.radio-panel {
+  position: fixed;
+  z-index: 200;
+  width: min(240px, 78vw);
+  max-height: min(320px, 58vh);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  background: linear-gradient(180deg, var(--rail-hi), var(--rail));
+  border: 2px solid var(--gold-lo);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-family: var(--font-body);
+  animation: radiopop 0.16s ease-out;
+}
+/* Added in code when the menu opens below the radio, so it slides in from that side */
+.radio-panel.drop-down {
+  animation-name: radiopopdown;
+}
+@keyframes radiopop {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes radiopopdown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.radio-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 6px;
+}
+.radio-fm {
+  font-family: var(--font-display);
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  font-size: 13px;
+}
+.radio-close {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--gold-hi);
+  border: 1px solid var(--gold-lo);
+  font-size: 15px;
+  line-height: 1;
+}
+.radio-close:hover {
+  background: rgba(0, 0, 0, 0.42);
+}
+.radio-close:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.radio-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.radio-prev,
+.radio-next {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe89a, #c9971a);
+  border: 2px solid #fff2c0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: var(--shadow-card);
+}
+.radio-prev:hover,
+.radio-next:hover {
+  filter: brightness(1.08);
+}
+.radio-prev:active,
+.radio-next:active {
+  transform: translateY(1px);
+}
+.radio-prev:focus-visible,
+.radio-next:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.radio-now-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  color: var(--gold-hi);
+  font-weight: 800;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radio-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.radio-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--cream);
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.radio-item:hover {
+  background: rgba(255, 210, 74, 0.12);
+}
+.radio-item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+.radio-item.active {
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+  font-weight: 800;
+}
+.radio-item.active::before {
+  content: "♪ ";
 }
 /* Every seat played by the AI gets a clear label */
 .ai-chip {
