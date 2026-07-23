@@ -1628,6 +1628,10 @@
   font-family: var(--font-body);
   animation: radiopop 0.16s ease-out;
 }
+/* The display flex above beats the hidden attribute, so the menu would stay open after closing */
+.radio-panel[hidden] {
+  display: none;
+}
 /* Added in code when the menu opens below the radio, so it slides in from that side */
 .radio-panel.drop-down {
   animation-name: radiopopdown;
