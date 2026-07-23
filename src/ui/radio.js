@@ -3,7 +3,18 @@
 
 import * as storage from "../net/storage.js";
 
-const MUSIC = "audio/Casino-1.mp3";
+// Shuffled playlist so a session doesn't hear the same thing over and over
+// Each track streams when it plays, add or remove files here and nothing else changes
+const PLAYLIST = [
+  "audio/radio/7bustfm-classy-lounge.mp3",
+  "audio/radio/7bustfm-vip.mp3",
+  "audio/radio/7bustfm-game.mp3",
+  "audio/radio/7bustfm-mafia-jazz-1.mp3",
+  "audio/radio/7bustfm-mafia-jazz-2.mp3",
+  "audio/radio/7bustfm-edm-lounge.mp3",
+  "audio/radio/7bustfm-las-vegas.mp3",
+  "audio/radio/7bustfm-lottery.mp3",
+];
 const KEY = "7bust:radio";
 const DEFAULT_VOL = 0.2; // Starts quiet so the music doesn't blast anyone on arrival
 
@@ -12,6 +23,25 @@ let muted = false;
 let volume = DEFAULT_VOL;
 let started = false;
 let available = true;
+let tracks = [];
+let idx = 0;
+let errStreak = 0; // Load fails in a row, if the whole playlist fails give up
+
+function shuffle(a) {
+  const b = a.slice();
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
+function loadTrack(i, { play = false } = {}) {
+  if (!audio || !tracks.length) return;
+  idx = ((i % tracks.length) + tracks.length) % tracks.length;
+  audio.src = tracks[idx];
+  if (play) tryPlay();
+}
 // CrazyGames' own mute beats the player's mute and volume
 // Every way to start the music checks it, so no in-game control can undo it
 let platformMuted = false;
@@ -46,16 +76,27 @@ const applyVolume = () => {
 
 export function initRadio() {
   loadPrefs();
-  audio = new Audio(MUSIC);
-  audio.loop = true;
+  tracks = shuffle(PLAYLIST);
+  audio = new Audio();
+  audio.loop = false; // Plays the next track when one ends
   audio.preload = "none";
   audio.volume = volume;
-  audio.addEventListener("error", () => {
-    // Music file missing, it's too big to commit, so hide the radio
-    available = false;
-    const el = document.getElementById("radio");
-    if (el) el.style.display = "none";
+  audio.src = tracks[0];
+  audio.addEventListener("ended", () => {
+    errStreak = 0;
+    loadTrack(idx + 1, { play: true });
   });
+  audio.addEventListener("error", () => {
+    // A track failed, skip to the next. Only hide the radio if every track fails in a row
+    if (++errStreak >= tracks.length) {
+      available = false;
+      const el = document.getElementById("radio");
+      if (el) el.style.display = "none";
+      return;
+    }
+    loadTrack(idx + 1, { play: started && !platformMuted });
+  });
+  audio.addEventListener("playing", () => (errStreak = 0)); // A track that plays resets the fail count
 
   const el = document.createElement("div");
   el.id = "radio";

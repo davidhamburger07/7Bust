@@ -13,7 +13,7 @@ const OUT_DIR = join(ROOT, "build");
 const STAGE = join(OUT_DIR, "crazygames");
 const ZIP = join(OUT_DIR, "7bust-crazygames.zip");
 
-const INCLUDE = ["index.html", "src", "fonts", join("audio", "Voicelines"), join("audio", "Casino-1.mp3")];
+const INCLUDE = ["index.html", "src", "fonts", join("audio", "Voicelines"), join("audio", "radio")];
 
 // Server only files under src, the browser never loads them
 // Shipping them would also hand players the word filter and the login checks

@@ -13,7 +13,7 @@ const OUT_DIR = join(ROOT, "build");
 const STAGE = join(OUT_DIR, "newgrounds");
 const ZIP = join(OUT_DIR, "7bust-newgrounds.zip");
 
-const INCLUDE = ["src", "fonts", join("audio", "Voicelines"), join("audio", "Casino-1.mp3")];
+const INCLUDE = ["src", "fonts", join("audio", "Voicelines"), join("audio", "radio")];
 const EXCLUDE = ["src/server/cgAuth.mjs", "src/server/discordAuth.mjs", "src/engine/profanity.js"];
 
 const BUNDLE_ENTRY = "src/main.js";
