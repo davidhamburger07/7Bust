@@ -338,10 +338,14 @@ async function emitAiChatter(room, g) {
   const sig = le ? `${le.kind}:${le.seat}:${le.from ?? ""}:${le.card ? le.card.value ?? le.card.action ?? "" : ""}` : "";
   if (!sig || sig === room.reactSig) return;
   room.reactSig = sig;
+  // Send the emotes together, not one at a time
+  // This runs while the room is locked, so every extra round trip makes the next player wait
+  const emotes = [];
   for (const r of aiReactions(le, s.players)) {
-    if (r.emoji) await store.publish(room.code, { kind: "emote", seat: r.seat, emoji: r.emoji });
+    if (r.emoji) emotes.push(store.publish(room.code, { kind: "emote", seat: r.seat, emoji: r.emoji }));
     if (r.text) pushChat(room, { name: s.players[r.seat].name, seat: r.seat, at: Date.now(), text: r.text, ai: true });
   }
+  if (emotes.length) await Promise.all(emotes); // Sent together, so it's about one round trip
 }
 
 // Chips only ever move here, against a wallet the server owns
@@ -398,10 +402,14 @@ async function settleStakes(room, g) {
   if (s.phase !== "match_end" || !s.tournament || !s.tournament.settled) return;
   room.settled = true;
   const winners = s.tournament.winnerSeats || [];
+  // Pay every winner at once, each has their own wallet so the adds can't clash
+  // And a full table doesn't keep the room locked for one round trip per winner
+  const pays = [];
   for (const p of room.players) {
     const won = seatsOf(p).filter((seat) => winners.includes(seat)).length;
-    if (won && p.wallet) await store.walletAdd(p.wallet, s.tournament.payout * won);
+    if (won && p.wallet) pays.push(store.walletAdd(p.wallet, s.tournament.payout * won));
   }
+  if (pays.length) await Promise.all(pays);
 }
 
 // A player who leaves before the deal gets their buy-in back
@@ -530,7 +538,7 @@ function ensureTicker(code) {
         await store.set(code, peek);
       }
       if (!voteExpired && !dropDue && !stepDue) return;
-      const token = await store.lock(code, { retries: 0 });
+      const token = await store.lock(code, { waitMs: 0 }); // Don't wait, a player who wants the lock goes first
       if (!token) return;
       try {
         const room = await store.get(code);

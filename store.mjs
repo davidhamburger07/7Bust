@@ -4,7 +4,10 @@
 import Redis from "ioredis";
 
 const TTL_S = 6 * 60 * 60; // Abandoned rooms are deleted after this
-const LOCK_MS = 2500;
+const LOCK_MS = 2500; // A held lock expires after this, so a crashed server can't jam a room
+// Must be longer than the lock time, so a waiter is still trying when a dead server's lock ends
+// Uses a deadline, not a retry count, so slow Redis trips don't matter
+const LOCK_WAIT_MS = LOCK_MS + 600;
 
 // Sites sharing one Redis each set their own room namespace so rooms never mix
 // Empty keeps the old keys, give two sites the same one only for cross play
@@ -42,8 +45,9 @@ function memoryStore() {
     async del(code) {
       rooms.delete(code);
     },
-    async lock(code, { retries = 12 } = {}) {
-      for (let i = 0; ; i++) {
+    async lock(code, { waitMs = LOCK_WAIT_MS } = {}) {
+      const deadline = Date.now() + waitMs; // No wait means one try, then give up
+      for (;;) {
         if (!locks.has(code)) {
           const t = token();
           locks.set(code, t);
@@ -52,7 +56,7 @@ function memoryStore() {
           }, LOCK_MS).unref?.();
           return t;
         }
-        if (i >= retries) return null;
+        if (Date.now() >= deadline) return null;
         await sleep(100);
       }
     },
@@ -178,12 +182,13 @@ function redisStore(url) {
     async del(code) {
       await redis.del(KEY(code));
     },
-    async lock(code, { retries = 12 } = {}) {
+    async lock(code, { waitMs = LOCK_WAIT_MS } = {}) {
       const t = token();
-      for (let i = 0; ; i++) {
+      const deadline = Date.now() + waitMs; // No wait means one try, then give up
+      for (;;) {
         const ok = await redis.set(LOCK(code), t, "PX", LOCK_MS, "NX");
         if (ok) return t;
-        if (i >= retries) return null;
+        if (Date.now() >= deadline) return null;
         await sleep(100);
       }
     },
@@ -222,16 +227,17 @@ function redisStore(url) {
         .exec();
     },
     // Locks and loads in one trip, the load runs either way since it costs nothing extra
-    async lockAndGet(code, { retries = 12 } = {}) {
+    async lockAndGet(code, { waitMs = LOCK_WAIT_MS } = {}) {
       const t = token();
-      for (let i = 0; ; i++) {
+      const deadline = Date.now() + waitMs;
+      for (;;) {
         const res = await redis.pipeline().set(LOCK(code), t, "PX", LOCK_MS, "NX").get(KEY(code)).exec();
         const gotLock = res && res[0] && res[0][1];
         if (gotLock) {
           const raw = res[1] && res[1][1];
           return { token: t, room: raw ? JSON.parse(raw) : null };
         }
-        if (i >= retries) return { token: null, room: null };
+        if (Date.now() >= deadline) return { token: null, room: null };
         await sleep(100);
       }
     },
