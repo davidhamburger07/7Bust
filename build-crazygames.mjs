@@ -150,7 +150,9 @@ async function main() {
     }
   }
 
-  await rm(OUT_DIR, { recursive: true, force: true });
+  // Only clears this build's folder, the other platforms' builds sit next to it
+  await rm(STAGE, { recursive: true, force: true });
+  await rm(ZIP, { force: true });
   await mkdir(STAGE, { recursive: true });
   for (const rel of INCLUDE) {
     await cp(join(ROOT, rel), join(STAGE, rel), { recursive: true });
