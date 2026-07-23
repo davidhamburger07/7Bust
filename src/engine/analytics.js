@@ -75,6 +75,11 @@ export function countersFor(rec) {
       add("mp_seats_" + (rec.tableSize || 0));
     } else {
       add("mp_finishes");
+      // The house cut from settled pots, the pot totals and paid matches
+      // So the house margin can be read against all chips wagered
+      add("mp_rake_total", rec.rake || 0);
+      add("mp_pot_settled_total", rec.pot || 0);
+      if (rec.entryFee) add("mp_paid_matches");
     }
   } else if (rec.event === "reward") {
     if (rec.kind === "daily") {

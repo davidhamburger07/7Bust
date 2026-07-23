@@ -131,6 +131,7 @@ function syncGame(room, g) {
       room: room.code,
       pot: s.tournament ? s.tournament.pot : 0,
       prizePool: s.tournament ? s.tournament.prizePool : 0,
+      rake: s.tournament ? s.tournament.houseRake : 0, // The house's cut of this pot
       entryFee: room.entry || 0,
       tableSize: s.players.length,
       humans: room.players.length,
