@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0604" />
+    <title>7Bust: hit the felt</title>
+
+    <!-- Fonts are bundled since the game runs in other sites' frames, where a CDN font can be blocked -->
+    <link rel="stylesheet" href="./src/styles/fonts.css" />
+    <link rel="stylesheet" href="./src/styles/tokens.css" />
+    <link rel="stylesheet" href="./src/styles/app.css" />
+
+    <!-- The shared server every platform uses, so all players share the same rooms -->
+    <!-- GamePix may block online play, the solo game still works if they do -->
+    <script>
+      window.__WS_BACKEND__ = "wss://7-bust-cg.vercel.app/api/ws";
+    </script>
+
+    <!-- Their ad SDK, it has to load from their site. The game id comes from their dashboard -->
+    <!-- Off their site, or with an ad blocker, every ad just fails -->
+    <script src="https://integration.gamepix.com/sdk/v3/gamepix.sdk.js"></script>
+  </head>
+  <body>
+    <main id="app" aria-live="polite"></main>
+    <!-- Big announcements like "Bust" and "Clean 7" sit outside the app so redraws never cut them off -->
+    <!-- The id has to be announce, that's what the code looks for -->
+    <div id="announce" aria-hidden="true"></div>
+    <noscript>7Bust needs JavaScript enabled.</noscript>
+    <!-- Runs the real modules here, the build swaps in the bundled game.js -->
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

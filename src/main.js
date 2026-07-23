@@ -13,6 +13,7 @@ import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, ad
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { gdBoot } from "./net/gamedistribution.js";
+import { gpBoot, gpLoaded } from "./net/gamepix.js";
 import { rewardedAd, midgameAd, adsAvailable } from "./net/ads.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
@@ -1226,7 +1227,9 @@ root.addEventListener("keydown", (e) => {
   cgInit(); // Has to run before anything else touches the SDK
   gdBoot(); // Only serves ads, nothing waits on it
   // An ad blocker may never let it load, so waiting on it could hang the game
+  gpBoot(); // Ads only too, nothing waits on it
   // Discord goes first and is waited on, it sends every request through their proxy
+  // Nothing can connect before that's done
   await discordBoot();
   cgLoadingStart();
   fitStage();
@@ -1290,6 +1293,7 @@ root.addEventListener("keydown", (e) => {
   }, 500);
 
   cgLoadingStop();
+  gpLoaded(); // GamePix needs this before it serves ads, it also hides their loading screen
 
   // Links the wallet to a CrazyGames account after the game shows, so a slow reply never holds it up
   // Guests can play on the local balance the whole time
