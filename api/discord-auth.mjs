@@ -1,6 +1,7 @@
 // Swaps a Discord login code for an access token
 // Done here because it needs the client secret, which can't live in the browser
 import { verifyDiscordToken } from "../src/server/discordAuth.mjs";
+import { signSession } from "../src/server/sessionToken.mjs";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -42,7 +43,10 @@ export default async function handler(req, res) {
 
     // Check the token really belongs to someone before saying ok
     const who = await verifyDiscordToken(access_token);
-    return res.status(200).json({ ok: true, access_token, user: { id: who.id, username: who.username } });
+    // Our own wallet token, so the player's chips follow their Discord account
+    // With no wallet secret set it's null and the player stays on the guest wallet
+    const walletToken = signSession({ platform: "discord", uid: who.id, username: who.username });
+    return res.status(200).json({ ok: true, access_token, user: { id: who.id, username: who.username }, walletToken });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String((e && e.message) || e) });
   }

@@ -9,7 +9,7 @@ import { trackMultiplayerGame, setAnalyticsSink, countersFor } from "./src/engin
 import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
 import { moderate, cleanDisplayName } from "./src/engine/profanity.js";
-import { verifyUserToken, walletKeyFor } from "./src/server/cgAuth.mjs";
+import { resolveIdentity } from "./src/server/identity.mjs";
 
 // Every platform shares this server, so an older game version gets turned away
 // Games that send no version are older builds and still get let in
@@ -352,14 +352,14 @@ async function emitAiChatter(room, g) {
 // Chips only ever move here, against a wallet the server owns
 // Guests only play free tables, so real chips are never paid out of made up ones
 
-const NEEDS_ACCOUNT = "Tables that play for chips need everyone signed in to CrazyGames.";
+const NEEDS_ACCOUNT = "Tables that play for chips need everyone signed in.";
 
 // Never throws, a missing or bad login just means a guest
 async function walletIdentity(msg) {
   if (!msg || !msg.token) return null;
   try {
-    const u = await verifyUserToken(msg.token);
-    return { key: walletKeyFor(u.userId), name: u.username || null };
+    const u = await resolveIdentity({ platform: msg.platform, token: msg.token });
+    return { key: u.key, name: u.username || null };
   } catch {
     return null;
   }

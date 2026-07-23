@@ -22,7 +22,13 @@ function backendUrl() {
 }
 
 import { PROTOCOL_VERSION } from "../engine/protocol.js";
-import { cgUserToken } from "./crazygames.js";
+import { walletCredential } from "./credential.js";
+
+// Sign in details added to room messages, empty for a guest
+const cred = async () => {
+  const c = await walletCredential();
+  return c ? { token: c.token, platform: c.platform } : {};
+};
 
 export function createNet(handlers = {}) {
   const url = backendUrl();
@@ -83,12 +89,12 @@ export function createNet(handlers = {}) {
   return {
     // v is the protocol version, so an old build on another site can't break a shared room
     // token lets buy-ins come off the right account. Guests can only sit at free tables
-    create: async (name, cid) => send({ type: "create", name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
-    join: async (code, name, cid) => send({ type: "join", code, name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
+    create: async (name, cid) => send({ type: "create", name, cid, v: PROTOCOL_VERSION, ...(await cred()) }),
+    join: async (code, name, cid) => send({ type: "join", code, name, cid, v: PROTOCOL_VERSION, ...(await cred()) }),
     // In Discord everyone arrives at once and nobody is set to make the room
     // so whoever lands first opens it
     joinOrCreate: async (code, name, cid) =>
-      send({ type: "joinOrCreate", code, name, cid, v: PROTOCOL_VERSION, token: await cgUserToken() }),
+      send({ type: "joinOrCreate", code, name, cid, v: PROTOCOL_VERSION, ...(await cred()) }),
     rejoin: (code, id) => send({ type: "rejoin", code, id, v: PROTOCOL_VERSION }),
     kick: (slot) => send({ type: "kick", slot }),
     start: () => send({ type: "start" }),

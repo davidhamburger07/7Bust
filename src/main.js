@@ -14,7 +14,7 @@ import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, c
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { gdBoot } from "./net/gamedistribution.js";
 import { gpBoot, gpLoaded } from "./net/gamepix.js";
-import { ngBoot } from "./net/newgrounds.js";
+import { ngBoot, ngOnAuth } from "./net/newgrounds.js";
 import { rewardedAd, midgameAd, adsAvailable } from "./net/ads.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
@@ -1297,13 +1297,15 @@ root.addEventListener("keydown", (e) => {
   cgLoadingStop();
   gpLoaded(); // GamePix needs this before it serves ads, it also hides their loading screen
 
-  // Links the wallet to a CrazyGames account after the game shows, so a slow reply never holds it up
-  // Guests can play on the local balance the whole time
-  cgOnAuth(async () => {
+  // Links the wallet to a CrazyGames, Discord or Newgrounds account after the game shows
+  // Newgrounds signs in a bit later, so it links again when that happens
+  const reconnectWallet = async () => {
     await initWallet();
     syncWallet();
     render();
-  });
+  };
+  cgOnAuth(reconnectWallet);
+  ngOnAuth(reconnectWallet);
   initWallet().then(() => {
     syncWallet();
     render();

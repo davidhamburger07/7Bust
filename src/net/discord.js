@@ -3,11 +3,13 @@
 let sdk = null;
 let user = null;
 let ready = false;
+let walletToken = null; // Our own token from the backend, ties the chips to this Discord player
 
 export const discordAvailable = () => typeof window !== "undefined" && !!window.__DISCORD_CLIENT_ID__;
 export const discordReady = () => ready;
 export const discordUser = () => user;
 export const discordInstanceId = () => (sdk ? sdk.instanceId : null);
+export const discordWalletToken = () => walletToken;
 
 // Room codes skip I, O, 0 and 1 as they're hard to read out
 // Hashing the Discord instance puts everyone in it at the same table
@@ -67,6 +69,8 @@ export async function discordBoot() {
       if (json && json.ok && json.access_token) {
         const auth = await sdk.commands.authenticate({ access_token: json.access_token });
         if (auth && auth.user) user = { id: auth.user.id, username: auth.user.global_name || auth.user.username };
+        // The backend already checked this player and signed a wallet token for them
+        if (json.walletToken) walletToken = json.walletToken;
       }
     } catch {
       // The player said no or sign in isn't there, so they play as a guest

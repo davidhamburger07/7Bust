@@ -1,7 +1,7 @@
 // Wallet kept on the server for signed in players
 // The game can ask for an action but never says how much, the server decides every amount
 import { createStore } from "../store.mjs";
-import { verifyUserToken, walletKeyFor } from "../src/server/cgAuth.mjs";
+import { resolveIdentity } from "../src/server/identity.mjs";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "../src/engine/rewards.js";
 import { trackReward } from "../src/engine/analytics.js";
 
@@ -29,14 +29,14 @@ export default async function handler(req, res) {
 
   let user;
   try {
-    user = await verifyUserToken(body.token);
+    user = await resolveIdentity({ platform: body.platform, token: body.token });
   } catch (e) {
     // No valid login means no server wallet, the game uses its guest wallet instead
     return res.status(401).json({ ok: false, error: "unauthenticated", detail: String(e.message || e) });
   }
 
   if (!store) store = createStore();
-  const key = walletKeyFor(user.userId);
+  const key = user.key;
   const day = today();
 
   try {

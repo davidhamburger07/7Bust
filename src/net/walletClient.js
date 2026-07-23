@@ -2,7 +2,7 @@
 // Guests keep a local balance, moved to the server the first time they sign in
 
 import { backendHttpOrigin } from "./netClient.js";
-import { cgUserToken, cgAccountsAvailable } from "./crazygames.js";
+import { walletCredential } from "./credential.js";
 import * as storage from "./storage.js";
 
 const LOCAL_KEY = "7bust:chips";
@@ -32,13 +32,13 @@ const writeLocal = (v) => {
 };
 
 async function post(action, extra = {}) {
-  const token = await cgUserToken();
-  if (!token) return null; // Guest
+  const cred = await walletCredential();
+  if (!cred) return null; // Guest, not signed in on any site
   try {
     const res = await fetch(`${backendHttpOrigin()}/api/wallet`, {
       method: "POST",
       headers: { "Content-Type": "text/plain" }, // Kept simple so the browser skips the preflight check
-      body: JSON.stringify({ token, action, ...extra }),
+      body: JSON.stringify({ platform: cred.platform, token: cred.token, action, ...extra }),
     });
     const j = await res.json();
     return j && j.ok ? j : null;
@@ -67,11 +67,11 @@ export const getBalance = () => balance;
 // Null means no answer from the server, the caller uses its own local copy
 export const dailyClaimedToday = () => (mode === "server" ? dailyClaimed : null);
 
-// Connects to the player's account if there is one, guests keep the local wallet
+// Connects to the CrazyGames, Discord or Newgrounds account if there is one
+// Guests keep the local wallet and nothing is sent
 export async function initWallet() {
   balance = readLocal();
   writeLocal(balance); // A new browser starts with the starting chips, save them now
-  if (!(await cgAccountsAvailable())) return { mode: (mode = "local"), balance };
   const local = balance;
   const res = await post("balance");
   if (!res) return { mode: (mode = "local"), balance };
