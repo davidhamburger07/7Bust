@@ -10,7 +10,8 @@
     "build:cg": "node build-crazygames.mjs",
     "build:discord": "node build-discord.mjs",
     "build:gd": "node build-gamedistribution.mjs",
-    "build:gamepix": "node build-gamepix.mjs"
+    "build:gamepix": "node build-gamepix.mjs",
+    "build:newgrounds": "node build-newgrounds.mjs"
   },
   "dependencies": {
     "ioredis": "^5.4.1",

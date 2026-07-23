@@ -14,6 +14,7 @@ import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, c
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { gdBoot } from "./net/gamedistribution.js";
 import { gpBoot, gpLoaded } from "./net/gamepix.js";
+import { ngBoot } from "./net/newgrounds.js";
 import { rewardedAd, midgameAd, adsAvailable } from "./net/ads.js";
 import { flyCard } from "./ui/fly.js";
 import { showEmote, showSpeech, showShuffle } from "./ui/bubbles.js";
@@ -1228,6 +1229,7 @@ root.addEventListener("keydown", (e) => {
   gdBoot(); // Only serves ads, nothing waits on it
   // An ad blocker may never let it load, so waiting on it could hang the game
   gpBoot(); // Ads only too, nothing waits on it
+  ngBoot(); // Starts a Newgrounds session, nothing waits on it
   // Discord goes first and is waited on, it sends every request through their proxy
   // Nothing can connect before that's done
   await discordBoot();

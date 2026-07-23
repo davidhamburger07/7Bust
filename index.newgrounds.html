@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0604" />
+    <title>7Bust: hit the felt</title>
+
+    <link rel="stylesheet" href="./src/styles/fonts.css" />
+    <link rel="stylesheet" href="./src/styles/tokens.css" />
+    <link rel="stylesheet" href="./src/styles/app.css" />
+
+    <!-- The shared server every platform uses, so all players share the same rooms -->
+    <!-- Newgrounds allows outside calls, so no proxy is needed -->
+    <script>
+      window.__WS_BACKEND__ = "wss://7-bust-cg.vercel.app/api/ws";
+
+      // From the API Tools page of the Newgrounds project
+      // The encryption key is meant to ship in the game, it isn't a server secret
+      window.__NG_APP_ID__ = "REPLACE_WITH_NEWGROUNDS_APP_ID";
+      window.__NG_ENC_KEY__ = "REPLACE_WITH_NEWGROUNDS_ENCRYPTION_KEY";
+    </script>
+
+    <!-- Newgrounds.io library, bundled so nothing loads from a CDN -->
+    <!-- No ads on Newgrounds, so the free chips wheel doesn't show here -->
+    <script src="./newgroundsio.min.js"></script>
+  </head>
+  <body>
+    <main id="app" aria-live="polite"></main>
+    <!-- Big announcements like "Bust" and "Clean 7" sit outside the app so redraws never cut them off -->
+    <!-- The id has to be announce, that's what the code looks for -->
+    <div id="announce" aria-hidden="true"></div>
+    <noscript>7Bust needs JavaScript enabled.</noscript>
+    <!-- Runs the real modules here, the build swaps in the bundled game.js -->
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
