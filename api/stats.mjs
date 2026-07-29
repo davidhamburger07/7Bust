@@ -30,6 +30,8 @@ export default async function handler(req, res) {
         soloVsOnlineAllTime: { solo: a.matches_solo || 0, online: a.matches_online || 0 },
         avgMatchSeconds: a.matches ? Math.round(a.match_ms_total / a.matches / 1000) : 0,
         multiplayerGamesAllTime: a.mp_deals || 0,
+        paidMatchesAllTime: a.mp_paid_matches || 0,
+        houseRakeAllTime: a.mp_rake_total || 0,
         adsWatchedAllTime: a.ads_watched || 0,
         jackpotsAllTime: a.wheel_jackpots || 0,
         dailyClaimsAllTime: a.daily_claims || 0,

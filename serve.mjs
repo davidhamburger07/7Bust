@@ -39,7 +39,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === "/") pathname = "/index.html";
 
     // Runs the Vercel functions locally so stats and wallets work the same
-    const API = { "/api/track": "./api/track.mjs", "/api/stats": "./api/stats.mjs", "/api/wallet": "./api/wallet.mjs" };
+    const API = { "/api/track": "./api/track.mjs", "/api/stats": "./api/stats.mjs", "/api/wallet": "./api/wallet.mjs", "/api/clienterror": "./api/clienterror.mjs" };
     if (API[pathname]) {
       const mod = await import(API[pathname]);
       const shim = {

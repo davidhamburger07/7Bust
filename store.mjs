@@ -21,6 +21,7 @@ function memoryStore() {
   const wallets = new Map();
   const stats = new Map(); // Counts per field for each day
   const events = []; // Raw records, newest first
+  const clientErrors = []; // Browser crash reports, newest first
   const rooms = new Map(); // Room code to the room and when it was saved
   const locks = new Map();
   const subs = new Map();
@@ -137,6 +138,13 @@ function memoryStore() {
     async readStats(day) {
       return { day: stats.get(day) || {}, all: stats.get("all") || {}, recent: events.slice(0, 50) };
     },
+    async saveClientError(rec) {
+      clientErrors.unshift(rec);
+      clientErrors.length = Math.min(clientErrors.length, 300);
+    },
+    async readClientErrors(n = 100) {
+      return clientErrors.slice(0, n);
+    },
   };
 }
 
@@ -149,6 +157,7 @@ function redisStore(url) {
   const LIST = `${NS_PREFIX}7bust:public`; // Room code to its summary
   const STATS = (day) => `${NS_PREFIX}7bust:stats:${day}`;
   const EVENTS = `${NS_PREFIX}7bust:events`; // Latest raw records, capped
+  const CLIENTERR = `${NS_PREFIX}7bust:clienterrors`; // Latest browser crash reports, capped
   const WALLET = (k) => `${NS_PREFIX}7bust:wallet:${k}`; // Balance and the daily and ad claim info
   const redis = new Redis(url, { maxRetriesPerRequest: 3, enableAutoPipelining: true });
   let subConn = null; // Own connection, a Redis client that's subscribed can't run other commands
@@ -264,6 +273,23 @@ function redisStore(url) {
         redis.lrange(EVENTS, 0, 49),
       ]);
       return { day: today || {}, all: all || {}, recent: (recent || []).map((r) => JSON.parse(r)) };
+    },
+    // Keeps the latest browser errors so a live crash can be looked at
+    // without needing a player to screenshot it
+    async saveClientError(rec) {
+      await redis.pipeline().lpush(CLIENTERR, JSON.stringify(rec)).ltrim(CLIENTERR, 0, 299).expire(CLIENTERR, 60 * 60 * 24 * 30).exec();
+    },
+    async readClientErrors(n = 100) {
+      const rows = await redis.lrange(CLIENTERR, 0, Math.max(0, n - 1));
+      return (rows || [])
+        .map((r) => {
+          try {
+            return JSON.parse(r);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
     },
     // Wallets are kept on the server, keyed by a hash of the CrazyGames user ID
     // Increments are atomic so two requests at once can't spend or pay twice

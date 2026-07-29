@@ -1763,6 +1763,46 @@
 .radio-item.active::before {
   content: "♪ ";
 }
+
+.conn-lost {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  animation: radiopop 0.18s ease-out;
+}
+.conn-card {
+  background: linear-gradient(180deg, var(--rail-hi), var(--rail));
+  border: 2px solid var(--gold-lo);
+  border-radius: 18px;
+  padding: 28px 32px;
+  max-width: 340px;
+  margin: 16px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.conn-title {
+  font-family: var(--font-display);
+  color: var(--gold);
+  font-size: 24px;
+  margin: 0 0 8px;
+}
+.conn-msg {
+  color: var(--cream);
+  opacity: 0.85;
+  font-size: 14px;
+  margin: 0 0 20px;
+}
+.conn-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+.conn-retry {
+  width: 100%;
+}
 /* Every seat played by the AI gets a clear label */
 .ai-chip {
   display: inline-block;

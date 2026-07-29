@@ -24,6 +24,58 @@
     <!-- Newgrounds.io library, bundled so nothing loads from a CDN -->
     <!-- No ads on Newgrounds, so the free chips wheel doesn't show here -->
     <script src="./newgroundsio.min.js"></script>
+    <!-- Sends every uncaught error to the server, last in head so it's ready before the game runs -->
+    <!-- Players never see it, the on screen box only shows with debug=1 in the URL -->
+    <script>
+      (function () {
+        var DEBUG = /[?&]debug=1/.test(location.search);
+        var seen = {};
+        function endpoint() {
+          var b = (window.__WS_BACKEND__ || "").replace(/^ws/, "http").replace(/\/api\/ws$/, "");
+          return b ? b + "/api/clienterror" : "";
+        }
+        function report(kind, msg, src, line, col, stack) {
+          var key = kind + "|" + msg + "|" + line + "|" + col;
+          if (seen[key]) return;
+          seen[key] = true;
+          try {
+            var url = endpoint();
+            if (url)
+              navigator.sendBeacon(
+                url,
+                JSON.stringify({ kind: kind, msg: String(msg).slice(0, 500), src: src || "", line: line || 0, col: col || 0, stack: String(stack || "").slice(0, 1500), ua: navigator.userAgent, at: Date.now() })
+              );
+          } catch (e) {}
+          if (!DEBUG) return;
+          try {
+            var box = document.getElementById("__err");
+            if (!box) {
+              box = document.createElement("div");
+              box.id = "__err";
+              box.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99999;max-height:45vh;overflow:auto;background:#2a0008;color:#ffd7d7;font:12px/1.5 monospace;padding:10px 34px 10px 12px;white-space:pre-wrap;border-top:3px solid #ff4d4d";
+              var x = document.createElement("button");
+              x.textContent = "×";
+              x.style.cssText = "position:absolute;top:6px;right:8px;background:none;border:0;color:#ffd7d7;font-size:18px;cursor:pointer";
+              x.onclick = function () { box.remove(); };
+              box.appendChild(x);
+              (document.body || document.documentElement).appendChild(box);
+            }
+            var l = document.createElement("div");
+            l.textContent = "⚠ " + kind + ": " + msg + "  @ " + String(src || "?").split("/").pop() + ":" + line + ":" + col;
+            box.appendChild(l);
+            if (stack) { var pre = document.createElement("div"); pre.style.opacity = ".7"; pre.textContent = String(stack).slice(0, 600); box.appendChild(pre); }
+          } catch (e) {}
+        }
+        window.addEventListener("error", function (e) {
+          if (e && e.error) report("error", e.message, e.filename, e.lineno, e.colno, e.error.stack);
+          else if (e && e.message) report("error", e.message, e.filename, e.lineno, e.colno, "");
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e && e.reason;
+          report("promise", (r && (r.message || r)) || "unhandled rejection", (r && r.fileName) || "", (r && r.lineNumber) || 0, (r && r.columnNumber) || 0, r && r.stack);
+        });
+      })();
+    </script>
   </head>
   <body>
     <main id="app" aria-live="polite"></main>

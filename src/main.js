@@ -264,6 +264,41 @@ function toast(msg) {
   }, 2800);
 }
 
+// Out of reconnect tries, so say the connection is lost instead of leaving a frozen table
+// Sits outside #app so a redraw can't remove it
+function hideConnLost() {
+  const m = document.getElementById("conn-lost");
+  if (m) m.remove();
+}
+function showConnLost() {
+  if (document.getElementById("conn-lost")) return;
+  const m = document.createElement("div");
+  m.id = "conn-lost";
+  m.className = "conn-lost";
+  m.innerHTML = `
+    <div class="conn-card" role="alertdialog" aria-label="Connection lost">
+      <h2 class="conn-title">Connection lost</h2>
+      <p class="conn-msg">We lost the table. Check your connection, then reconnect.</p>
+      <div class="conn-actions">
+        <button class="btn btn--play conn-retry" type="button">RECONNECT</button>
+        <button class="link conn-leave" type="button">Leave to menu</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  m.querySelector(".conn-retry").addEventListener("click", () => {
+    reconnectTries = 0;
+    hideConnLost();
+    const c = loadNet();
+    if (c && c.code && c.id && net) net.rejoin(c.code, c.id);
+    else location.reload();
+  });
+  m.querySelector(".conn-leave").addEventListener("click", () => {
+    clearNet(); // Forget the seat so a reload goes to the solo menu, not a dead room
+    hideConnLost();
+    location.reload();
+  });
+}
+
 function save() {
   if (view.mode === "online") return; // The room server owns online state
   try {
@@ -511,6 +546,7 @@ function ensureNet() {
       view.mode = "online";
       view.online = view.online || { screen: "waiting", name: "", error: null, lobby: null };
       reconnectTries = 0;
+      hideConnLost(); // Back in the lobby, so hide any connection lost panel
       view.online.self = msg.self;
       view.online.error = null;
       view.online.lobby = {
@@ -548,6 +584,7 @@ function ensureNet() {
     onState(snapshot, extra) {
       if (!view.online) return;
       reconnectTries = 0;
+      hideConnLost(); // Getting state again, hide any connection lost panel
       // Once the server answers, a face down card, bank or hold stops waiting
       // It clears when our turn is over or our hand changes
       if (view.pendingDraw || view.pendingAction) {
@@ -626,13 +663,15 @@ function ensureNet() {
       // Vercel closes every WebSocket after a few minutes, so drops are normal
       // Get back into our seat, with a limit on retries
       const screen = view.mode === "online" && view.online ? view.online.screen : null;
-      if ((screen === "playing" || screen === "waiting") && reconnectTries < 8) {
-        const c = loadNet();
-        if (c && c.code && c.id) {
-          reconnectTries += 1;
-          if (screen === "playing") toast("Reconnecting…");
-          setTimeout(() => net && net.rejoin(c.code, c.id), 1200);
-        }
+      if (screen !== "playing" && screen !== "waiting") return;
+      const c = loadNet();
+      if (c && c.code && c.id && reconnectTries < 8) {
+        reconnectTries += 1;
+        if (screen === "playing") toast("Reconnecting…");
+        setTimeout(() => net && net.rejoin(c.code, c.id), 1200);
+      } else {
+        // Out of retries or nothing to rejoin, show it instead of freezing
+        showConnLost();
       }
     },
   });

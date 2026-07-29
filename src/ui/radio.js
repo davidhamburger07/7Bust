@@ -193,7 +193,13 @@ export function initRadio() {
       raf = 0;
       return;
     }
-    positionPanel();
+    // One bad frame, like the radio being moved during a redraw, mustn't throw on every frame
+    // that would flood the console
+    try {
+      positionPanel();
+    } catch {
+      // Skip this frame but keep the loop going
+    }
     raf = requestAnimationFrame(track);
   };
   const setPanel = (show) => {
