@@ -6,6 +6,8 @@ let store = null;
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
+  // Lets a dashboard on another site read this, it's only play money totals
+  res.setHeader("Access-Control-Allow-Origin", "*");
   const token = process.env.STATS_TOKEN;
   if (token) {
     const url = new URL(req.url, "http://x");
