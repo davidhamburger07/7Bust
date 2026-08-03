@@ -1,9 +1,9 @@
 // Game stats. Every event is logged as one JSON line
 // The browser sends them to the server in batches, the server saves them straight to Redis
 
-// Events worth saving. Bot moves are left out, one match makes hundreds of them
-// They still go to the console, and match end sums up how each bot did
-const NETWORK_EVENTS = new Set(["round_end", "match_end", "multiplayer_game", "reward"]);
+// Events worth saving. Bot moves and house rounds are left out, there are too many of them
+// They still go to the console and get summed up into match end and house session
+const NETWORK_EVENTS = new Set(["round_end", "match_end", "multiplayer_game", "reward", "house_session"]);
 
 let sink = null;
 export function setAnalyticsSink(fn) {
@@ -36,6 +36,14 @@ export const trackMatchEnd = (data) => emit("match_end", data);
 
 // Free chips from daily bonuses and the ad wheel
 export const trackReward = (data) => emit("reward", data);
+
+// House table, one entry per round with the bust risk the player saw when they chose
+// Console only, the totals go into the house session record
+export const trackHouseRound = (data) => emit("house_round", data);
+
+// A visit to the house table, sent when the player leaves
+// How many rounds they stayed, what their chips did, top ups, and whether they left or went broke
+export const trackHouseSession = (data) => emit("house_session", data);
 
 // Online games, with a games per day counter
 // The counter is in memory, the real count lives in the store
@@ -81,6 +89,21 @@ export function countersFor(rec) {
       add("mp_pot_settled_total", rec.pot || 0);
       if (rec.entryFee) add("mp_paid_matches");
     }
+  } else if (rec.event === "house_session") {
+    add("house_sessions");
+    add("house_rounds", rec.rounds || 0);
+    add("house_session_ms_total", rec.durationMs || 0);
+    // Wagered against returned is the real house edge, the only true check on the simulator's 4.58%
+    add("house_wagered_total", rec.wagered || 0);
+    add("house_returned_total", rec.returned || 0);
+    add("house_wins", rec.wins || 0);
+    add("house_losses", rec.losses || 0);
+    add("house_player_busts", rec.playerBusts || 0);
+    add("house_dealer_busts", rec.dealerBusts || 0);
+    // Top ups are free chips being used, bust outs are visits that ended because the chips ran out
+    add("house_topups", rec.topUps || 0);
+    if (rec.bustedOut) add("house_bustouts");
+    if ((rec.rounds || 0) >= 10) add("house_sessions_10plus"); // Stayed past trying it out
   } else if (rec.event === "reward") {
     if (rec.kind === "daily") {
       add("daily_claims");

@@ -1519,6 +1519,70 @@
   align-self: center;
 }
 
+/* Four numbered rules because a hand really is decided in that order */
+.rules-wrap {
+  margin: auto;
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  text-align: center;
+}
+.rules-sub {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: -6px;
+}
+.hsr-list {
+  list-style: none;
+  display: grid;
+  gap: var(--s2);
+  width: 100%;
+  text-align: left;
+}
+.hsr-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3);
+  border-radius: 14px;
+  background: rgba(4, 34, 17, 0.6);
+  border: 1.5px solid rgba(255, 210, 74, 0.22);
+}
+.hsr-k {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--gold);
+  color: var(--rail);
+  font-family: var(--font-num);
+  font-size: 13px;
+}
+.hsr-t {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.hsr-t b {
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.hsr-foot {
+  font-size: 12.5px;
+  color: var(--faint);
+  line-height: 1.6;
+  max-width: 540px;
+}
+
 .toast {
   position: absolute;
   left: 50%;
@@ -3706,4 +3770,398 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .card--pending { animation: none; }
+}
+
+/* Just you against the house, the house on top and you below a gold line */
+/* Uses the same card, button and match bar styles so it looks like the same game */
+.screen--house {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas: "bar" "felt" "strip" "actions";
+  padding: var(--s2);
+  gap: var(--s2);
+}
+.hs-stack {
+  padding: 5px var(--s3);
+  border-radius: 999px;
+  background: var(--rail);
+  border: 2px solid var(--gold-lo);
+  color: var(--gold-hi);
+  letter-spacing: 0.06em;
+}
+.hs-stack b {
+  font-size: 16px;
+  color: var(--gold);
+}
+.hs-streak {
+  color: var(--amber);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  animation: hsflicker 2.4s ease-in-out infinite;
+}
+@keyframes hsflicker {
+  50% { opacity: 0.62; }
+}
+
+/* A plain rounded table, the deep curve of the party table looks like a full room */
+/* That's the wrong feel for one on one against the house */
+.hs-felt {
+  grid-area: felt;
+  position: relative;
+  border-radius: 40px;
+  background: radial-gradient(70% 60% at 50% 50%, var(--felt-hi), var(--felt) 52%, var(--felt-lo) 100%);
+  border: 12px solid var(--rail);
+  box-shadow: 0 0 0 3px var(--gold-lo), inset 0 12px 44px rgba(0, 0, 0, 0.45), var(--shadow-big);
+  display: grid;
+  /* Rows sit together in the middle so the two hands stay close to the line between them */
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  padding: var(--s4) var(--s5);
+  overflow: hidden;
+  min-height: 0;
+}
+.hs-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 0;
+}
+.hs-side--house {
+  justify-content: flex-end;
+}
+.hs-side--you {
+  justify-content: flex-start;
+}
+/* Score on the far right so the two totals don't stack on the middle line */
+.hs-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  width: 100%;
+}
+.hs-who {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.hs-rule {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 246, 224, 0.5);
+}
+.hs-hand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 104px;
+  flex-wrap: wrap;
+}
+/* Where the dealer's cards will land, a slot rather than a card since it holds nothing yet */
+.hs-slot {
+  display: grid;
+  place-items: center;
+  height: 96px;
+  padding: 0 var(--s5);
+  border-radius: 12px;
+  border: 2px dashed rgba(255, 246, 224, 0.22);
+  background: rgba(0, 0, 0, 0.1);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 246, 224, 0.42);
+}
+.hs-score {
+  margin-left: auto;
+  font-family: var(--font-num);
+  font-size: 32px;
+  line-height: 1;
+  color: var(--cream);
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+.hs-bust {
+  font-family: var(--font-display);
+  color: var(--bust);
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 18px rgba(255, 77, 77, 0.6);
+}
+.is-bust .hs-score {
+  animation: hsshake 0.4s var(--ease-pop);
+}
+@keyframes hsshake {
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+.hs-divider {
+  position: relative;
+  height: 2px;
+  margin: var(--s4) 0;
+  background: linear-gradient(90deg, transparent, var(--gold-lo) 12%, var(--gold) 50%, var(--gold-lo) 88%, transparent);
+  opacity: 0.55;
+}
+.hs-vs {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: var(--rail);
+  border: 2px solid var(--gold-lo);
+  color: var(--gold-hi);
+  font-family: var(--font-num);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+.hs-pot {
+  position: absolute;
+  right: var(--s5);
+  top: 50%;
+  transform: translateY(-50%);
+}
+.hs-potchip {
+  display: inline-block;
+  padding: 6px var(--s3);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--gold-lo);
+  color: var(--gold-hi);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/* "Live Deck" strip */
+/* One column per card value, holding the copies still in the shoe */
+/* Hold a value and its column lights up, every pip left is a card that busts you */
+.hs-strip {
+  grid-area: strip;
+  padding: var(--s2) var(--s4);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.22));
+  border: 2px solid rgba(255, 210, 74, 0.16);
+}
+.hs-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: 6px;
+}
+.hs-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--gold-lo);
+}
+.hs-read {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.hs-read b {
+  color: var(--cream);
+}
+.hs-risk {
+  font-size: 15px;
+  color: var(--win);
+}
+.hs-risk.hot {
+  color: var(--bust);
+}
+.hs-cols {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 5px;
+  align-items: end;
+}
+.hs-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 0 2px;
+  border-radius: 8px;
+  border: 1.5px solid transparent;
+  transition: border-color 0.2s var(--ease-out), background-color 0.2s var(--ease-out);
+}
+.hs-pips {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 3px;
+  width: 100%;
+  min-height: 34px;
+  max-height: 34px;
+}
+.hs-pips i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: rgba(255, 246, 224, 0.38);
+}
+.hs-val {
+  font-family: var(--font-num);
+  font-size: 13px;
+  color: var(--muted);
+}
+.hs-col.held {
+  background: rgba(255, 77, 77, 0.12);
+  border-color: rgba(255, 77, 77, 0.4);
+}
+.hs-col.held .hs-val {
+  color: var(--bust);
+}
+.hs-col.live .hs-pips i {
+  background: var(--bust);
+  box-shadow: 0 0 6px rgba(255, 77, 77, 0.7);
+}
+/* Held, but every copy is gone so it can't bust you any more */
+.hs-col.held .hs-pips:empty::after {
+  content: "safe";
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  color: var(--win);
+  align-self: center;
+}
+
+.hs-dock {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: var(--s3);
+  width: 100%;
+  max-width: 560px;
+}
+.hs-dock .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.hs-dock--bet,
+.hs-dock--settle,
+.hs-dock--broke {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: var(--s2);
+}
+.hs-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.hs-betlabel {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--gold-lo);
+  margin-right: 2px;
+}
+.hs-chip {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-family: var(--font-num);
+  font-size: 14px;
+  color: #fff;
+  border: 3px dashed rgba(255, 255, 255, 0.55);
+  box-shadow: var(--shadow-card), inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+  transition: transform 0.12s var(--ease-pop), box-shadow 0.15s var(--ease-out);
+}
+.hs-chip--red { background: var(--chip-red); }
+.hs-chip--green { background: var(--chip-green); }
+.hs-chip--blue { background: var(--chip-blue); }
+.hs-chip--black { background: var(--chip-black); }
+.hs-chip--max {
+  background: linear-gradient(180deg, #ffe38a, #f2a51e);
+  color: #4a2b16;
+  font-size: 12px;
+}
+.hs-chip:hover {
+  transform: translateY(-3px);
+}
+.hs-chip:active {
+  transform: translateY(1px);
+}
+.hs-chip:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+.hs-chip.on {
+  transform: translateY(-5px);
+  box-shadow: 0 0 0 3px var(--gold), var(--shadow-card);
+}
+.hs-chip.off {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.hs-deal {
+  max-width: 340px;
+}
+.hs-dock.is-dealing .btn {
+  opacity: 0.75;
+}
+.hs-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.hs-vtitle {
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 0.03em;
+  line-height: 1.05;
+}
+.hs-vsub {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.hs-verdict--win .hs-vtitle {
+  color: var(--win);
+  text-shadow: 0 0 22px rgba(70, 229, 140, 0.5);
+}
+.hs-verdict--lose .hs-vtitle {
+  color: var(--bust);
+  text-shadow: 0 0 22px rgba(255, 77, 77, 0.45);
+}
+.hs-verdict--push .hs-vtitle {
+  color: var(--ice);
+}
+
+@media (max-width: 899px) {
+  .screen--house {
+    padding: var(--s1);
+    gap: var(--s1);
+  }
+  .hs-felt {
+    border-radius: 26px;
+    border-width: 8px;
+    padding: var(--s3) var(--s2);
+  }
+  .hs-hand {
+    min-height: 76px;
+    gap: 5px;
+  }
+  .hs-who { font-size: 16px; }
+  .hs-score { font-size: 24px; }
+  .hs-pot { display: none; }
+  .hs-strip { padding: 6px var(--s2); }
+  .hs-cols { gap: 3px; }
+  .hs-pips { min-height: 18px; max-height: 18px; }
+  .hs-pips i { width: 4px; height: 4px; }
+  .hs-chip { width: 44px; height: 44px; font-size: 12px; }
+  .hs-chip--max { font-size: 10px; }
+  .hs-vtitle { font-size: 21px; }
 }

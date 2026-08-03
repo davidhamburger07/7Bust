@@ -7,7 +7,9 @@ import { startCoach, place as placeCoach, coachRunning } from "./ui/coach.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
-import { setAnalyticsSink, trackReward } from "./engine/analytics.js";
+import { setAnalyticsSink, trackReward, trackHouseRound, trackHouseSession } from "./engine/analytics.js";
+import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/houseGame.js";
+import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
@@ -102,6 +104,8 @@ const view = {
   adPending: false,
   dailyAvailable: false,
   adsAvailable: false,
+  house: null,
+  showHouseRules: false,
 };
 let net = null;
 let aiTimer = null;
@@ -194,10 +198,12 @@ function render() {
     !view.showHistory &&
     !view.showSettings &&
     !view.showTos &&
-    !!view.snapshot &&
-    (view.mode === "online"
-      ? !!(view.online && view.online.screen === "playing" && view.snapshot.online)
-      : view.snapshot.phase !== "lobby");
+    (view.house
+      ? !view.showHouseRules // The house table is a felt table too, so the radio docks the same
+      : !!view.snapshot &&
+        (view.mode === "online"
+          ? !!(view.online && view.online.screen === "playing" && view.snapshot.online)
+          : view.snapshot.phase !== "lobby"));
   document.body.classList.toggle("scr-match", matchVisible);
   // The radio moves between a corner and the match bar, so park it on body while patching
   // Then put it back
@@ -1204,6 +1210,294 @@ const hideRules = () => {
   render();
 };
 
+// The house table plays for its own practice stack, it never touches wallet chips
+// The browser can't be trusted to pay real chips, that has to happen on the server
+const HOUSE_KEY = "7bust:house:v1";
+const HOUSE_START_STACK = 500;
+const HOUSE_TOPUP = 500;
+const HOUSE_REVEAL_MS = 620; // Slow on the dealer's draws, that's the exciting part
+const HOUSE_DEAL_MS = 240;
+
+let houseSeeds = null;
+let houseNonce = 0;
+let houseRevealTimer = null;
+let houseSession = null;
+
+const loadHouseStack = () => {
+  try {
+    const raw = storage.getItem(HOUSE_KEY);
+    if (raw === null) return HOUSE_START_STACK; // Never sat here, give them the starting stack
+    const v = Number(raw); // Turning null into a number gives 0, so check for null first
+    return Number.isFinite(v) && v >= 0 ? v : HOUSE_START_STACK;
+  } catch {
+    return HOUSE_START_STACK;
+  }
+};
+const saveHouseStack = (v) => {
+  try {
+    storage.setItem(HOUSE_KEY, String(Math.max(0, Math.round(v))));
+  } catch {
+    // Storage isn't available, the game still works without it
+  }
+};
+
+// An empty hand so the screen can draw a table before anything is dealt
+const emptyHouseState = () => ({
+  phase: "bet",
+  outcome: null,
+  wager: 0,
+  payout: 0,
+  net: 0,
+  player: { values: [], score: 0, busted: false, bustValue: null },
+  dealer: { values: [], score: 0, busted: false, bustValue: null, drew: false },
+  deckRemaining: HOUSE_DECK_SIZE,
+});
+
+function clearHouseReveal() {
+  if (houseRevealTimer) clearTimeout(houseRevealTimer);
+  houseRevealTimer = null;
+}
+
+function openHouse() {
+  const stack = loadHouseStack();
+  view.house = {
+    phase: "bet",
+    stack,
+    wager: Math.min(50, stack),
+    game: null,
+    state: emptyHouseState(),
+    risk: 0,
+    reveal: 0,
+    dealt: false,
+    dealing: false,
+    result: null,
+    streak: 0,
+    roundsPlayed: 0,
+  };
+  // Same provably fair seeds as the party game, so a house hand can be checked the same way
+  houseSeeds = { serverSeed: randomSeedHex(), clientSeed: randomSeedHex(8) };
+  houseNonce = 0;
+  houseSession = {
+    startedAt: Date.now(),
+    rounds: 0,
+    wagered: 0,
+    returned: 0,
+    wins: 0,
+    losses: 0,
+    playerBusts: 0,
+    dealerBusts: 0,
+    topUps: 0,
+    bestStreak: 0,
+    startStack: stack,
+  };
+  sfx("shuffle");
+  render();
+}
+
+function houseBet(v) {
+  const h = view.house;
+  if (!h || h.phase !== "bet") return;
+  h.wager = v === "max" ? h.stack : Math.min(Number(v), h.stack);
+  sfx("click");
+  render();
+}
+
+async function houseDeal() {
+  const h = view.house;
+  if (!h || h.phase !== "bet" || h.wager <= 0 || h.wager > h.stack) return;
+  clearHouseReveal();
+  houseNonce += 1;
+  const deck = await shuffleHouseDeck({ ...houseSeeds, nonce: houseNonce });
+  h.stack -= h.wager; // The bet leaves the stack as soon as cards are dealt
+  saveHouseStack(h.stack);
+  h.game = createHouseGame({ deck, wager: h.wager });
+  h.state = h.game.state();
+  h.risk = h.game.bustChance();
+  h.phase = "player";
+  h.reveal = 0;
+  h.dealt = false;
+  h.result = null;
+  h.riskAtFreeze = 0;
+  // The opening card can't bust, so clicking for it is no choice. Deal it
+  houseHit();
+}
+
+function houseHit() {
+  const h = view.house;
+  if (!h || h.phase !== "player" || h.dealing || !h.game || !h.game.canHit()) return;
+  h.dealing = true;
+  sfx("card");
+  render();
+  setTimeout(() => {
+    if (!view.house || view.house !== h) return; // Player left mid-deal
+    const res = h.game.hit();
+    h.state = h.game.state();
+    h.risk = h.game.bustChance();
+    h.dealt = true;
+    h.dealing = false;
+    if (res.bust) {
+      sfx("buzzer");
+      settleHouseRound();
+    } else {
+      render();
+    }
+  }, HOUSE_DEAL_MS);
+}
+
+function houseFreeze() {
+  const h = view.house;
+  if (!h || h.phase !== "player" || h.dealing || !h.game || !h.game.canStay()) return;
+  h.riskAtFreeze = h.risk; // What they walked away from, for analytics
+  sfx("ding");
+  h.game.stay(); // The dealer's hand is settled at once, the UI just paces it
+  h.state = h.game.state();
+  h.phase = "dealer";
+  h.reveal = 0;
+  render();
+  stepHouseReveal();
+}
+
+// Turns the dealer's settled hand over one card at a time
+// The only slow part, on purpose, the wait is the game
+function stepHouseReveal() {
+  const h = view.house;
+  const d = h.state.dealer;
+  const total = d.values.length + (d.busted ? 1 : 0);
+  houseRevealTimer = setTimeout(() => {
+    if (!view.house || view.house !== h) return;
+    h.reveal += 1;
+    sfx(h.reveal > d.values.length ? "buzzer" : "card");
+    render();
+    if (h.reveal < total) stepHouseReveal();
+    else houseRevealTimer = setTimeout(() => view.house === h && settleHouseRound(), 420);
+  }, HOUSE_REVEAL_MS);
+}
+
+// The only place chips move. A server version swaps these two lines for one call
+function settleHouseRound() {
+  const h = view.house;
+  clearHouseReveal();
+  const st = (h.state = h.game.state());
+  h.phase = "settled";
+  h.reveal = st.dealer.values.length + (st.dealer.busted ? 1 : 0); // Show every dealer card once settled
+  h.stack += st.payout;
+  saveHouseStack(h.stack);
+  h.roundsPlayed += 1;
+
+  const won = st.payout > 0;
+  h.streak = won ? h.streak + 1 : 0;
+  h.result = houseVerdict(st);
+  if (won) sfx(h.streak >= 3 ? "fanfare" : "jackpot");
+  else if (st.outcome !== "player_bust") sfx("sad");
+
+  const s = houseSession;
+  s.rounds += 1;
+  s.wagered += st.wager;
+  s.returned += st.payout;
+  s.bestStreak = Math.max(s.bestStreak, h.streak);
+  if (won) s.wins += 1;
+  else s.losses += 1;
+  if (st.outcome === "player_bust") s.playerBusts += 1;
+  if (st.outcome === "dealer_bust") s.dealerBusts += 1;
+
+  trackHouseRound({
+    wager: st.wager,
+    payout: st.payout,
+    net: st.net,
+    outcome: st.outcome,
+    playerScore: st.player.score,
+    playerCards: st.player.values.length,
+    playerBusted: st.player.busted,
+    dealerScore: st.dealer.score,
+    dealerCards: st.dealer.values.length,
+    dealerBusted: st.dealer.busted,
+    // Odds they took or turned down, tells us if players read the strip
+    riskAtDecision: Number((h.riskAtFreeze || 0).toFixed(4)),
+    stackAfter: h.stack,
+    streak: h.streak,
+    round: h.roundsPlayed,
+  });
+  render();
+}
+
+function houseVerdict(st) {
+  const p = st.player.score;
+  const d = st.dealer.score;
+  if (st.outcome === "player_bust") {
+    return { tone: "lose", title: "BUST", sub: `Second ${st.player.bustValue}, the house never had to draw` };
+  }
+  if (st.outcome === "dealer_bust") {
+    return { tone: "win", title: "HOUSE BUSTS", sub: `Its second ${st.dealer.bustValue} pays you ${st.payout}` };
+  }
+  if (st.outcome === "player_win") {
+    return { tone: "win", title: "YOU WIN", sub: `${p} beats ${d}, pays ${st.payout}` };
+  }
+  return d === p
+    ? { tone: "push", title: "HOUSE TAKES IT", sub: `${d} all square, ties go to the house` }
+    : { tone: "lose", title: "HOUSE WINS", sub: `${d} beats your ${p}` };
+}
+
+function houseAgain() {
+  const h = view.house;
+  if (!h) return;
+  clearHouseReveal();
+  h.phase = "bet";
+  h.game = null;
+  h.state = emptyHouseState();
+  h.risk = 0;
+  h.reveal = 0;
+  h.dealt = false;
+  h.result = null;
+  h.wager = Math.min(h.wager, h.stack);
+  render();
+}
+
+function houseTopUp() {
+  const h = view.house;
+  if (!h) return;
+  h.stack += HOUSE_TOPUP;
+  saveHouseStack(h.stack);
+  houseSession.topUps += 1;
+  sfx("chips");
+  toast(`+${HOUSE_TOPUP} practice chips`);
+  houseAgain();
+}
+
+// Sends the visit as one analytics event. Rounds and refills per visit show if players stay
+// Wagered against returned shows the real house edge
+function flushHouseSession(reason) {
+  const h = view.house;
+  const s = houseSession;
+  if (!h || !s || !s.rounds) return;
+  trackHouseSession({
+    reason,
+    rounds: s.rounds,
+    durationMs: Date.now() - s.startedAt,
+    wagered: s.wagered,
+    returned: s.returned,
+    net: s.returned - s.wagered,
+    wins: s.wins,
+    losses: s.losses,
+    playerBusts: s.playerBusts,
+    dealerBusts: s.dealerBusts,
+    topUps: s.topUps,
+    bestStreak: s.bestStreak,
+    startStack: s.startStack,
+    endStack: h.stack,
+    bustedOut: h.stack <= 0,
+    rtp: s.wagered ? Number((s.returned / s.wagered).toFixed(4)) : null,
+  });
+  houseSession = null;
+}
+
+function houseExit() {
+  clearHouseReveal();
+  flushHouseSession("exit");
+  view.house = null;
+  sfx("click");
+  render();
+}
+
 const ACTIONS = {
   start,
   hit,
@@ -1249,6 +1543,21 @@ const ACTIONS = {
   "mp-again": mpStart,
   "mp-leave": mpLeave,
   "mp-copy": mpCopy,
+  "house-open": openHouse,
+  "house-deal": houseDeal,
+  "house-hit": houseHit,
+  "house-freeze": houseFreeze,
+  "house-again": houseAgain,
+  "house-topup": houseTopUp,
+  "house-exit": houseExit,
+  "house-rules": () => {
+    view.showHouseRules = true;
+    render();
+  },
+  "house-rules-back": () => {
+    view.showHouseRules = false;
+    render();
+  },
 };
 
 root.addEventListener("click", (e) => {
@@ -1277,6 +1586,7 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "mp-kick") return mpKick(Number(el.dataset.index));
   if (el.dataset.action === "set-pref") return setPref(el.dataset.k, el.dataset.v === "1");
   if (el.dataset.action === "emote") return sendEmote(el.dataset.e);
+  if (el.dataset.action === "house-bet") return houseBet(el.dataset.v);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();
 });
@@ -1347,6 +1657,14 @@ root.addEventListener("keydown", (e) => {
   fitStage();
   // Solo runs the engine in the page, so its analytics needs a way to the backend
   setAnalyticsSink(analyticsSink);
+  // Added before the analytics flush so a closed tab still sends the house visit
+  const flushHouseOnHide = () => {
+    if (view.house) flushHouseSession("hidden");
+  };
+  window.addEventListener("pagehide", flushHouseOnHide);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushHouseOnHide();
+  });
   installAnalyticsFlush();
   initRadio();
   try {

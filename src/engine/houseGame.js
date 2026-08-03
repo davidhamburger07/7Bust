@@ -161,6 +161,8 @@ export function createHouseGame({ deck, wager = 1, dealerStand = DEALER_STAND } 
     state,
     playerView,
     bustChance: () => bustChanceFor(player),
+    // Copies of each value still in the deck, the live deck strip shows this
+    remainingByValue: () => counts.slice(),
     phase: () => phase,
     outcome: () => outcome,
     canHit: () => phase === "player" && remaining() > 0,

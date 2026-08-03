@@ -3,6 +3,7 @@
 import { heatTriple } from "./heat.js";
 import { PLAYER_EMOTES } from "../engine/aiChatter.js";
 import { WHEEL, DAILY_BONUS } from "../engine/rewards.js";
+import { renderHouseTable, renderHouseRules } from "./houseTable.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
@@ -332,7 +333,8 @@ export function renderLobby(view) {
 
       ${walletCard(view)}
 
-      <button class="btn btn--play" data-action="start">TAKE A SEAT<span class="sub">free practice · 9 rounds against the house</span></button>
+      <button class="btn btn--play" data-action="house-open">HOUSE TABLE<span class="sub">one hand against the dealer · fast</span></button>
+      <button class="btn btn--play btn--seat" data-action="start">TAKE A SEAT<span class="sub">free practice · 9 rounds at a full table</span></button>
       <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">play your chips against real people</span></button>
       ${freeChips(view)}
       <div class="lobby-foot">
@@ -886,6 +888,11 @@ export function renderApp(view) {
   if (view.showSettings) return `<div class="stage">${renderSettings(view)}${renderWheel(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
+  // The house table is its own mode with no seats, match or online play
+  if (view.house) {
+    if (view.showHouseRules) return `<div class="stage">${renderHouseRules()}</div>`;
+    return `<div class="stage">${renderHouseTable(view)}${renderToast(view)}</div>`;
+  }
   const wheel = renderWheel(view); // The prize wheel shows over any screen
   if (view.mode === "online" && view.online) {
     const o = view.online;
