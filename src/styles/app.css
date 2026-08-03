@@ -2677,6 +2677,42 @@
   border-width: 4px;
 }
 
+/* "Quick Match" shows a real live table count on the online menu, never a fake one */
+.mp-presence {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  margin: calc(-1 * var(--s1)) 0 var(--s1);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--win);
+}
+.mp-presence.muted {
+  color: var(--faint);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 34ch;
+  margin-inline: auto;
+  text-align: center;
+}
+.mp-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--win);
+  animation: livepulse 1.8s var(--ease-out) infinite;
+}
+@keyframes livepulse {
+  0% { box-shadow: 0 0 0 0 rgba(70, 229, 140, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(70, 229, 140, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(70, 229, 140, 0); }
+}
+.browse-playnow {
+  margin-top: var(--s3);
+}
+
 .mp-codehead {
   display: flex;
   flex-direction: column;

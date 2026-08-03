@@ -612,16 +612,24 @@ function onlineError(o) {
 }
 
 function renderOnlineMenu(o, view) {
+  // A real count of open public tables, never a made up number
+  const list = (view.browse && view.browse.list) || [];
+  const openTables = list.filter((r) => (r.openSeats || 0) > 0).length;
+  const presence = openTables
+    ? `<div class="mp-presence"><span class="mp-live-dot"></span>${openTables} open table${openTables === 1 ? "" : "s"} to join right now</div>`
+    : `<div class="mp-presence muted">No open tables this second, Play Now opens one and seats the house AI so you play immediately.</div>`;
   return `
   <div class="screen screen--online">
     <div class="mp-card">
       <button class="icon-btn mp-close" data-action="mp-leave" aria-label="Back to solo">←</button>
       <div class="wordmark wordmark--sm">7<span>BUST</span></div>
-      <p class="tagline">Spin up a private table and share the code. Empty seats fill with the house AI.</p>
+      <p class="tagline">Jump straight into a game. Real players when they're around, the house AI when they're not.</p>
       ${nameField(view, o)}
       ${onlineError(o)}
-      <button class="btn btn--play" data-action="mp-create">CREATE A ROOM</button>
-      <button class="btn btn--online" data-action="mp-browse">FIND A MATCH<span class="sub">browse public tables</span></button>
+      <button class="btn btn--play" data-action="mp-quick">PLAY NOW<span class="sub">seats you at a table in seconds, the house AI fills any gaps</span></button>
+      ${presence}
+      <button class="btn btn--online" data-action="mp-browse">FIND A MATCH<span class="sub">browse open tables</span></button>
+      <button class="btn btn--online" data-action="mp-create">CREATE A ROOM<span class="sub">private table, invite friends</span></button>
       <button class="btn btn--online" data-action="mp-join-screen">JOIN WITH A CODE</button>
     </div>
   </div>`;
@@ -648,7 +656,7 @@ function renderOnlineConnecting(o) {
   <div class="screen screen--online">
     <div class="mp-card mp-card--center">
       <span class="spinner spinner--big"></span>
-      <div class="mp-connecting">${o.error ? "" : "Connecting to the table…"}</div>
+      <div class="mp-connecting">${o.error ? "" : o.connMsg || "Connecting to the table…"}</div>
       ${onlineError(o)}
       ${o.error ? `<button class="btn btn--online" data-action="mp-leave">BACK</button>` : ""}
     </div>
@@ -802,7 +810,7 @@ function renderOnlineBrowse(o, view) {
     .join("");
   const empty = b.loading && !b.list.length
     ? `<div class="browse-empty"><span class="spinner"></span> Looking for tables…</div>`
-    : `<div class="browse-empty">Nobody's hosting a public table right now.<br /><small>Start one below, the house AI fills any seats nobody takes, so you can play straight away.</small></div>`;
+    : `<div class="browse-empty">No open tables this second.<br /><small>Hit Play Now, we'll open a table and seat the house AI so you're dealt in immediately, and the next player can join you.</small><br /><button class="btn btn--play browse-playnow" data-action="mp-quick">PLAY NOW</button></div>`;
   return `
   <div class="screen screen--online">
     <div class="mp-card mp-card--wide">

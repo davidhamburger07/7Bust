@@ -4,7 +4,8 @@
 import { WebSocketServer } from "ws";
 import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
-import { aiReactions, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
+import { aiReactions, reactionDelayMs, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
+import { botHandle } from "./src/engine/botNames.js";
 import { trackMultiplayerGame, setAnalyticsSink, countersFor } from "./src/engine/analytics.js";
 import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
@@ -42,6 +43,13 @@ const AI_NAMES = {
 // Rooms saved before the bots were renamed may still use the old keys
 const AI_KEY_ALIASES = { reckless: "rook", cautious: "nova", holder: "pip" };
 const aiKeyNorm = (k) => (AI_NAMES[k] ? k : AI_KEY_ALIASES[k] || null);
+
+// Every name already at the table, so a new bot name never matches one
+function takenNames(room) {
+  const set = new Set(room.players.map((p) => p.name));
+  for (const s of room.slots) if (s && s.handle) set.add(s.handle);
+  return set;
+}
 
 let store = null;
 
@@ -156,7 +164,7 @@ function lobbyView(room) {
       slots.push({ index: i, type: "human", name: p.name, connected: p.connected, isHost: p.id === room.hostId });
     } else {
       const s = room.slots[i];
-      if (s.type === "ai") slots.push({ index: i, type: "ai", ai: s.ai, name: AI_NAMES[s.ai][used[s.ai]++ % AI_NAMES[s.ai].length] });
+      if (s.type === "ai") slots.push({ index: i, type: "ai", ai: s.ai, name: s.handle || AI_NAMES[s.ai][used[s.ai]++ % AI_NAMES[s.ai].length] });
       else slots.push({ index: i, type: s.type });
     }
   }
@@ -339,14 +347,14 @@ async function emitAiChatter(room, g) {
   const sig = le ? `${le.kind}:${le.seat}:${le.from ?? ""}:${le.card ? le.card.value ?? le.card.action ?? "" : ""}` : "";
   if (!sig || sig === room.reactSig) return;
   room.reactSig = sig;
-  // Send the emotes together, not one at a time
-  // This runs while the room is locked, so every extra round trip makes the next player wait
-  const emotes = [];
+  // Bots emote after a short human like delay, without waiting on it
+  // So reactions trickle in, and the room isn't kept locked while they send
+  const code = room.code;
   for (const r of aiReactions(le, s.players)) {
-    if (r.emoji) emotes.push(store.publish(room.code, { kind: "emote", seat: r.seat, emoji: r.emoji }));
-    if (r.text) pushChat(room, { name: s.players[r.seat].name, seat: r.seat, at: Date.now(), text: r.text, ai: true });
+    const { seat, emoji, text } = r;
+    if (emoji) setTimeout(() => store.publish(code, { kind: "emote", seat, emoji }).catch(() => {}), reactionDelayMs());
+    if (text) pushChat(room, { name: s.players[seat].name, seat, at: Date.now(), text, ai: true }); // Muted while bot chat is turned off
   }
-  if (emotes.length) await Promise.all(emotes); // Sent together, so it's about one round trip
 }
 
 // Chips only ever move here, against a wallet the server owns
@@ -439,7 +447,7 @@ async function deal(room, hostWs) {
     const s = room.slots[i];
     if (s.type === "ai" && !room.players.some((x) => x.slot === i)) {
       const pool = AI_NAMES[s.ai];
-      roster.push({ name: pool[used[s.ai]++ % pool.length], isAI: true, aiKey: s.ai });
+      roster.push({ name: s.handle || pool[used[s.ai]++ % pool.length], isAI: true, aiKey: s.ai });
     }
   }
   if (roster.length < 2) {
@@ -819,7 +827,8 @@ async function handle(ws, msg) {
           if (t === "ai") {
             const k = aiKeyNorm(msg.slot.ai);
             if (!k) return;
-            room.slots[i] = { type: "ai", ai: k };
+            // Give the bot a name now so it doesn't change on every redraw, the UI still tags it as a bot
+            room.slots[i] = { type: "ai", ai: k, handle: botHandle(takenNames(room)) };
           } else if (t === "open" || t === "empty") {
             room.slots[i] = { type: t, ai: null };
           } else return;
