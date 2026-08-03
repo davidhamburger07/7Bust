@@ -1,6 +1,8 @@
 // Free chips for the casual build, a daily bonus and a prize wheel you watch an ad for
 
-export const DAILY_BONUS = 200;
+// Free chips once a day. With no ads on the basic launch this is the only way to get free chips
+// The server uses the same number so it pays what the game shows
+export const DAILY_BONUS = 1000;
 export const JACKPOT = 2500;
 
 // Weights add up to 100 so each one is a percent chance, the jackpot is rare

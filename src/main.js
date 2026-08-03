@@ -7,7 +7,14 @@ import { startCoach, place as placeCoach, coachRunning } from "./ui/coach.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
-import { setAnalyticsSink, trackReward, trackHouseRound, trackHouseSession } from "./engine/analytics.js";
+import {
+  setAnalyticsSink,
+  trackReward,
+  trackHouseRound,
+  trackHouseSession,
+  trackSessionStart,
+  trackScreenView,
+} from "./engine/analytics.js";
 import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/houseGame.js";
 import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
@@ -224,6 +231,7 @@ function render() {
   if (chatList && chatWasAtBottom) chatList.scrollTop = chatList.scrollHeight;
   tickClock(); // Show the right time straight away, no 0:00 flicker
   syncPlatform(matchVisible);
+  trackScreenIfChanged(); // After drawing, so a screen only counts once it's really up
 }
 
 // Keeps the CrazyGames play state and invite button matching the screen
@@ -243,6 +251,43 @@ function syncPlatform(matchVisible) {
   } else {
     cgLeftRoom();
   }
+}
+
+// Each platform's page sets one global, so checking which one is there tells us the build
+function platformName() {
+  if (typeof window === "undefined") return "web";
+  if (window.CrazyGames && window.CrazyGames.SDK) return "crazygames";
+  if (window.__DISCORD_CLIENT_ID__) return "discord";
+  if (window.__GD_GAME_ID__) return "gamedistribution";
+  if (window.GamePix) return "gamepix";
+  if (window.__NG_APP_ID__) return "newgrounds";
+  return "web";
+}
+
+// One name per screen the player can see, worked out from the same flags the renderer uses
+// So it always matches what's really on screen
+function screenName() {
+  if (view.showTos) return "tos";
+  if (view.showSettings) return "settings";
+  if (view.showHistory) return "history";
+  if (view.showRules) return "rules";
+  if (view.house) return view.showHouseRules ? "house_rules" : "house";
+  if (view.mode === "online" && view.online) {
+    const o = view.online;
+    if (o.screen === "playing" && view.snapshot && view.snapshot.online) return "online_match";
+    return "online_" + (o.screen || "menu");
+  }
+  return view.snapshot && view.snapshot.phase !== "lobby" ? "solo_match" : "lobby";
+}
+
+let lastScreen = "";
+function trackScreenIfChanged() {
+  const screen = screenName();
+  if (screen === lastScreen) return;
+  const from = lastScreen;
+  lastScreen = screen;
+  // The first screen is counted too, or every funnel is missing its start
+  trackScreenView({ screen, from: from || "boot" });
 }
 
 function tickClock() {
@@ -1215,6 +1260,8 @@ const hideRules = () => {
 const HOUSE_KEY = "7bust:house:v1";
 const HOUSE_START_STACK = 500;
 const HOUSE_TOPUP = 500;
+// Opening bet, players who want higher stakes can raise it
+const HOUSE_DEFAULT_BET = 10;
 const HOUSE_REVEAL_MS = 620; // Slow on the dealer's draws, that's the exciting part
 const HOUSE_DEAL_MS = 240;
 
@@ -1263,7 +1310,7 @@ function openHouse() {
   view.house = {
     phase: "bet",
     stack,
-    wager: Math.min(50, stack),
+    wager: Math.min(HOUSE_DEFAULT_BET, stack),
     game: null,
     state: emptyHouseState(),
     risk: 0,
@@ -1666,6 +1713,22 @@ root.addEventListener("keydown", (e) => {
     if (document.visibilityState === "hidden") flushHouseOnHide();
   });
   installAnalyticsFlush();
+  // Any of the three saved keys means this browser has played before
+  // Read before the game saves anything, or every visit looks like a return
+  const returning = (() => {
+    try {
+      return !!(storage.getItem(SAVE_KEY) || storage.getItem(HOUSE_KEY) || storage.getItem(HISTORY_KEY));
+    } catch {
+      return false;
+    }
+  })();
+  trackSessionStart({
+    platform: platformName(),
+    returning,
+    walletMode: walletMode(),
+    adsAvailable: adsAvailable(),
+    houseStack: loadHouseStack(),
+  });
   initRadio();
   try {
     view.showTos = !storage.getItem(TOS_KEY);

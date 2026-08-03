@@ -38,6 +38,26 @@ export default async function handler(req, res) {
         jackpotsAllTime: a.wheel_jackpots || 0,
         dailyClaimsAllTime: a.daily_claims || 0,
         freeChipsPaidAllTime: (a.wheel_chips || 0) + (a.daily_chips || 0),
+        sessionsAllTime: a.sessions || 0,
+        sessionsToday: d.sessions || 0,
+        newVsReturningAllTime: { new: a.sessions_new || 0, returning: a.sessions_returning || 0 },
+        lobbyFunnelAllTime: {
+          house: a.from_lobby_to_house || 0,
+          solo: a.from_lobby_to_solo_match || 0,
+          online: a.from_lobby_to_online_menu || 0,
+        },
+        houseHandsAllTime: a.house_rounds || 0,
+        houseSessionsAllTime: a.house_sessions || 0,
+        houseHandsPerSession: a.house_sessions ? Number((a.house_rounds / a.house_sessions).toFixed(1)) : 0,
+        avgHouseSessionSeconds: a.house_sessions ? Math.round(a.house_session_ms_total / a.house_sessions / 1000) : 0,
+        // Visits that got past trying it out, the number this mode was made for
+        houseStickySessionsAllTime: a.house_sessions_10plus || 0,
+        // The real house edge, the simulator says about 4.6%
+        houseRealisedRtpPct: a.house_wagered_total
+          ? Number(((a.house_returned_total / a.house_wagered_total) * 100).toFixed(2))
+          : 0,
+        houseTopUpsAllTime: a.house_topups || 0,
+        houseBustOutsAllTime: a.house_bustouts || 0,
       },
       today: d,
       allTime: a,

@@ -4055,8 +4055,10 @@
   gap: var(--s2);
 }
 .hs-chips {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: var(--s2);
 }
 .hs-betlabel {
@@ -4077,9 +4079,11 @@
   box-shadow: var(--shadow-card), inset 0 -3px 0 rgba(0, 0, 0, 0.3);
   transition: transform 0.12s var(--ease-pop), box-shadow 0.15s var(--ease-out);
 }
+.hs-chip--white { background: #f2ece0; color: #3a2f1c; border-color: rgba(0, 0, 0, 0.3); }
 .hs-chip--red { background: var(--chip-red); }
-.hs-chip--green { background: var(--chip-green); }
 .hs-chip--blue { background: var(--chip-blue); }
+.hs-chip--green { background: var(--chip-green); }
+.hs-chip--orange { background: #e5731f; }
 .hs-chip--black { background: var(--chip-black); }
 .hs-chip--max {
   background: linear-gradient(180deg, #ffe38a, #f2a51e);
@@ -4161,7 +4165,9 @@
   .hs-cols { gap: 3px; }
   .hs-pips { min-height: 18px; max-height: 18px; }
   .hs-pips i { width: 4px; height: 4px; }
-  .hs-chip { width: 44px; height: 44px; font-size: 12px; }
-  .hs-chip--max { font-size: 10px; }
+  .hs-chips { gap: 6px; }
+  .hs-chip { width: 40px; height: 40px; font-size: 11px; border-width: 2px; }
+  .hs-chip--max { font-size: 9px; }
+  .hs-betlabel { font-size: 11px; }
   .hs-vtitle { font-size: 21px; }
 }

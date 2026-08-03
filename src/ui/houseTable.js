@@ -4,9 +4,13 @@
 import { heatTriple } from "./heat.js";
 import { HOUSE_MAX_VALUE, DEALER_STAND } from "../engine/houseGame.js";
 
-export const CHIP_TIERS = [10, 25, 50, 100];
+// Low bets matter most, a small stack lasts hours at the cheap tables
+// There are no ads on the basic launch build to rescue a broke player
+export const CHIP_TIERS = [1, 5, 10, 25, 50, 100];
 
-const chipClass = (v) => (v >= 100 ? "black" : v >= 50 ? "blue" : v >= 25 ? "green" : "red");
+// Real casino chip colours
+const CHIP_STYLE = { 1: "white", 5: "red", 10: "blue", 25: "green", 50: "orange", 100: "black" };
+const chipClass = (v) => CHIP_STYLE[v] || "black";
 
 function card(value, heat, { isNew = false, dup = false } = {}) {
   const cls = `card${dup ? " card--dup" : ""}${isNew ? " card--new" : ""}`;
