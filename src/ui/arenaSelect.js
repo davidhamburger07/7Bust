@@ -117,7 +117,7 @@ export function renderArenaSelect(view) {
   return `
   <div class="screen screen--ladder">
     <div class="al-top al-top--ladder">
-      <button class="icon-btn" data-action="arena-exit" aria-label="Back to the lobby">←</button>
+      <button class="icon-btn" data-action="ladder-close" aria-label="Back to the lobby">←</button>
       <div class="al-title">
         <h2>THE LADDER</h2>
         <span class="al-sub">Single-player · practice chips</span>

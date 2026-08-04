@@ -2061,6 +2061,7 @@ const ACTIONS = {
   },
   "arena-open": openLadder,
   "arena-exit": arenaExit,
+  "ladder-close": closeLadder, // Back from the ladder select goes all the way to the lobby
   "arena-hit": arenaHit,
   "arena-stay": arenaStay,
   "arena-again": arenaAgain,
