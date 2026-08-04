@@ -3949,6 +3949,19 @@
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.22));
   border: 2px solid rgba(255, 210, 74, 0.16);
 }
+/* The live deck reused as a side panel at the ladder table */
+/* Two rows of six so the twelve values fit a narrow column */
+.rightcol .hs-panel {
+  flex: 0 0 auto;
+  padding: var(--s3);
+}
+.rightcol .hs-panel .hs-head {
+  margin-bottom: var(--s2);
+}
+.rightcol .hs-panel .hs-cols {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
 .hs-head {
   display: flex;
   align-items: baseline;
