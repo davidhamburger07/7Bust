@@ -12,15 +12,11 @@ import {
   trackReward,
   trackHouseRound,
   trackHouseSession,
-  trackArenaHand,
-  trackArenaSession,
-  trackArenaUnlock,
   trackSessionStart,
   trackScreenView,
 } from "./engine/analytics.js";
 import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/houseGame.js";
-import { ARENAS, arenaById, potAt, ARENA_ROUNDS } from "./engine/arenas.js";
-import { createArenaMatch, openersAt, buildHouseDeck } from "./engine/arenaGame.js";
+import { ARENAS, arenaById, ARENA_ROUNDS } from "./engine/arenas.js";
 import { pveSummary, setChips, getChips, recordHand, restake, peakNetWorth, roomsOpenedBetween, PVE_RESTAKE } from "./engine/pveWallet.js";
 import { PERSONALITIES } from "./engine/ai.js";
 import { randomSeedHex } from "./engine/rng.js";
@@ -1573,49 +1569,6 @@ function houseExit() {
   render();
 }
 
-// Ladder chips live in their own wallet, they never mix with multiplayer chips
-// The engine settles a hand at once, this code only paces showing it
-const ARENA_DEAL_MS = 240; // Your own card landing
-// Long enough to read the standings between rounds, short enough that a match doesn't drag
-const ARENA_ROUND_END_MS = 1250;
-const ARENA_SEAT_GAP = 300; // Pause between one seat's turn and the next
-
-let arenaSeeds = null;
-let arenaNonce = 0;
-let arenaTimer = null;
-let arenaSession = null;
-
-// A fuller table deals each card faster, or a big hand takes so long players start skipping
-const arenaRevealMs = (seats) => Math.round(Math.min(420, 1400 / seats));
-// The first cards are dealt fast, waiting to see who you're up against is dead time
-// Seats after you keep the slow pace, that wait is the game
-const arenaOpenMs = (seats) => Math.round(Math.min(190, 700 / seats));
-
-function clearArenaTimer() {
-  if (arenaTimer) clearTimeout(arenaTimer);
-  arenaTimer = null;
-}
-
-const emptyArenaState = (arena) => ({
-  phase: "opening",
-  outcome: null,
-  round: 1,
-  rounds: ARENA_ROUNDS,
-  wager: arena.buyIn,
-  pot: potAt(arena),
-  rake: arena.rake,
-  houseTake: 0,
-  warmUp: arena.manner === "reckless",
-  winners: [],
-  payout: 0,
-  net: 0,
-  bestShowing: 0,
-  bestTotal: 0,
-  deckRemaining: HOUSE_DECK_SIZE,
-  reshuffles: 0,
-  seats: [],
-  you: { seat: 0, name: "You", isYou: true, values: [], score: 0, rawScore: 0, busted: false, bustValue: null, total: 0, running: 0, rounds: [], payout: 0, played: true, reveal: 0 },
-});
 
 // Kept on the screen state, not loaded each render, the ladder, leaderboard and chip counter use it
 function syncPve() {
@@ -1669,7 +1622,6 @@ async function startLadderMatch(arena) {
     clearTimeout(aiTimer);
     aiTimer = null;
   }
-  clearArenaTimer();
   clearPending();
   setChips(getChips() - arena.buyIn);
   syncPve(); // Refresh so the match bar shows the stack after the buy-in
@@ -1724,262 +1676,6 @@ async function exitLadderGame() {
   openLadder();
 }
 
-// A match needs more than one deck, so it gets several shuffled shoes used one at a time
-// Gluing decks together would make the deck strip show the wrong card counts
-const ARENA_SHOES = 6;
-
-async function arenaShoes() {
-  const shoes = [];
-  for (let i = 0; i < ARENA_SHOES; i++) {
-    arenaNonce += 1;
-    shoes.push(await shuffleHouseDeck({ ...arenaSeeds, nonce: arenaNonce }));
-  }
-  return shoes;
-}
-
-async function arenaStartMatch() {
-  const h = view.arena;
-  if (!h) return;
-  const a = h.arena;
-  if (h.stack < a.buyIn) return; // The ladder handles a player who can't pay the buy-in
-  clearArenaTimer();
-  const shoes = await arenaShoes();
-  if (!view.arena || view.arena !== h) return; // Left while the shuffle was still running
-  let shoeIx = 0;
-
-  // The buy-in comes off once at the start of the match, not every round
-  h.stack = setChips(h.stack - a.buyIn);
-  // You sit in the middle of the room's regulars, in their listed order
-  const openers = openersAt(a);
-  const names = [];
-  for (let i = 0; i < a.bots + 1; i++) names.push(i === openers ? "You" : a.regulars[i < openers ? i : i - 1] || `Seat ${i + 1}`);
-
-  h.match = createArenaMatch({
-    deck: shoes[0],
-    arena: a,
-    names,
-    rounds: ARENA_ROUNDS,
-    // Next shoe when this one runs out, six cover a match easily
-    // The last fallback should never happen, it just stops a freak match getting stuck
-    refill: () => shoes[++shoeIx] || buildHouseDeck(),
-  });
-  h.state = h.match.state();
-  h.risk = h.match.bustChance();
-  h.shown = h.state.seats.map(() => 0);
-  h.stage = "opening";
-  h.dealt = false;
-  h.result = null;
-  h.matches += 1;
-  render();
-  stepReveal(0, "player");
-}
-
-// Turns seats over one card at a time, stopping at the player's seat
-// Used for both halves of every round
-function stepReveal(from, then) {
-  const h = view.arena;
-  if (!h) return;
-  const n = h.state.seats.length;
-  const ms = then === "player" ? arenaOpenMs(n) : arenaRevealMs(n);
-  const gap = then === "player" ? Math.round(ARENA_SEAT_GAP / 2) : ARENA_SEAT_GAP;
-  const seats = h.state.seats;
-
-  const next = (i) => {
-    if (!view.arena || view.arena !== h) return;
-    while (i < seats.length && (seats[i].isYou || h.shown[i] >= seats[i].reveal)) {
-      if (seats[i].isYou && then === "player") {
-        // The opening card can't bust an empty hand, so it's dealt for you, then the room waits
-        h.stage = "player";
-        render();
-        if (!h.state.you.values.length) arenaTimer = setTimeout(() => view.arena === h && arenaHit(), 260);
-        return;
-      }
-      i += 1;
-    }
-    if (i >= seats.length) {
-      if (then === "player") {
-        h.stage = "player";
-        render();
-        return;
-      }
-      endArenaRound();
-      return;
-    }
-    const s = seats[i];
-    h.shown[i] += 1;
-    sfx(h.shown[i] > s.values.length ? "buzzer" : "card");
-    render();
-    const done = h.shown[i] >= s.reveal;
-    arenaTimer = setTimeout(() => next(done ? i + 1 : i), done ? gap : ms);
-  };
-
-  arenaTimer = setTimeout(() => next(from), ms);
-}
-
-function arenaHit() {
-  const h = view.arena;
-  if (!h || h.stage !== "player" || h.dealing || !h.match || !h.match.canHit()) return;
-  h.dealing = true;
-  sfx("card");
-  render();
-  setTimeout(() => {
-    if (!view.arena || view.arena !== h) return;
-    const res = h.match.hit();
-    h.state = h.match.state();
-    h.risk = h.match.bustChance();
-    h.shown[h.state.you.seat] = h.state.you.reveal;
-    h.dealt = true;
-    h.dealing = false;
-    if (res.bust) {
-      sfx("buzzer");
-      closeRoom(); // A bust scores zero, it doesn't end your match
-    } else {
-      render();
-    }
-  }, ARENA_DEAL_MS);
-}
-
-function arenaStay() {
-  const h = view.arena;
-  if (!h || h.stage !== "player" || h.dealing || !h.match || !h.match.canStay()) return;
-  h.scoreAtStop = h.state.you.score;
-  h.riskAtStop = h.risk;
-  sfx("ding");
-  h.match.stay();
-  closeRoom();
-}
-
-function closeRoom() {
-  const h = view.arena;
-  h.state = h.match.state();
-  h.stage = "closing";
-  render();
-  stepReveal(h.state.you.seat + 1, "settled");
-}
-
-function endArenaRound() {
-  const h = view.arena;
-  if (!h || !h.match) return;
-  clearArenaTimer();
-  const st = (h.state = h.match.state());
-  h.shown = st.seats.map((s) => s.reveal);
-
-  const s = arenaSession;
-  if (s) {
-    s.rounds += 1;
-    if (st.you.busted) s.zeroRounds += 1;
-  }
-
-  if (st.phase === "settled") return settleArenaMatch();
-
-  h.stage = "round_end";
-  const gained = st.you.rounds[st.you.rounds.length - 1] || 0;
-  if (gained > 0) sfx("chips");
-  render();
-  arenaTimer = setTimeout(() => {
-    if (!view.arena || view.arena !== h || !h.match) return;
-    h.match.nextRound();
-    h.state = h.match.state();
-    h.risk = h.match.bustChance();
-    h.shown = h.state.seats.map(() => 0);
-    h.stage = "opening";
-    h.dealt = false;
-    render();
-    stepReveal(0, "player");
-  }, ARENA_ROUND_END_MS);
-}
-
-function settleArenaMatch() {
-  const h = view.arena;
-  if (!h || !h.match) return;
-  clearArenaTimer();
-  const a = h.arena;
-  const st = (h.state = h.match.state());
-  h.stage = "settled";
-  h.shown = st.seats.map((s) => s.reveal);
-
-  const won = st.payout > 0;
-  const peakBefore = peakNetWorth();
-  const rec = recordHand({
-    arena: a,
-    payout: st.payout,
-    wager: st.wager,
-    won,
-    busted: false,
-    potShare: st.payout,
-  });
-  h.stack = rec.chips;
-  h.streak = won ? h.streak + 1 : 0;
-  h.result = arenaVerdict(st, a);
-
-  if (won) sfx(h.streak >= 3 ? "fanfare" : "jackpot");
-  else sfx("sad");
-
-  const s = arenaSession;
-  s.matches += 1;
-  s.wagered += st.wager;
-  s.returned += st.payout;
-  s.bestStreak = Math.max(s.bestStreak, h.streak);
-  if (won) s.wins += 1;
-
-  const champ = st.seats.filter((x) => x.payout > 0).sort((x, y) => y.total - x.total)[0];
-  trackArenaHand({
-    arena: a.id,
-    tier: a.tier,
-    seats: st.seats.length,
-    rounds: st.rounds,
-    buyIn: st.wager,
-    pot: st.pot,
-    rake: a.rake,
-    outcome: st.outcome,
-    payout: st.payout,
-    net: st.net,
-    yourTotal: st.you.total,
-    // Gap between you and the room over a match, it shows if the room is pitched right
-    bestTotal: champ ? champ.total : 0,
-    botBest: Math.max(...st.seats.filter((x) => !x.isYou).map((x) => x.total)),
-    zeroRounds: st.you.rounds.filter((v) => v === 0).length,
-    reshuffles: st.reshuffles,
-    stackAfter: h.stack,
-    streak: h.streak,
-    match: h.matches,
-  });
-
-  // A room opening is the point of the mode, so tell the player right away
-  const opened = roomsOpenedBetween(peakBefore, peakNetWorth());
-  for (const room of opened) {
-    trackArenaUnlock({ arena: room.id, tier: room.tier, peak: peakNetWorth(), fromArena: a.id, matchesHere: h.matches });
-    announce(`${room.name.toUpperCase()} IS OPEN`, "win");
-    toast(`New room unlocked, ${room.name}`);
-  }
-  syncPve();
-  render();
-}
-
-function arenaVerdict(st, a) {
-  const you = st.you;
-  const champ = st.seats.filter((s) => s.payout > 0).sort((x, y) => y.total - x.total)[0];
-  if (st.outcome === "split") {
-    const with_ = st.seats.filter((s) => s.payout > 0 && !s.isYou).map((s) => s.name);
-    return { tone: "push", title: "SPLIT POT", sub: `${you.total} ties ${with_.join(" and ")} after ${st.rounds} rounds, ${money(you.payout)} each.` };
-  }
-  if (st.outcome === "win") {
-    const second = Math.max(...st.seats.filter((s) => !s.isYou).map((s) => s.total));
-    return { tone: "win", title: "YOU TAKE THE POT", sub: `${you.total} to ${second} over ${st.rounds} rounds. ${money(you.payout)} to you.` };
-  }
-  return {
-    tone: "lose",
-    title: `${champ ? champ.name.toUpperCase() : "THE HOUSE"} TAKES IT`,
-    sub: champ ? `${champ.total} beats your ${you.total} after ${st.rounds} rounds.` : `Nobody scored.`,
-  };
-}
-
-function arenaAgain() {
-  const h = view.arena;
-  if (!h) return;
-  if (h.stack < h.arena.buyIn) return openLadder();
-  arenaStartMatch();
-}
 
 function arenaRestake() {
   restake();
@@ -1989,40 +1685,6 @@ function arenaRestake() {
   render();
 }
 
-// Sends one room visit as one analytics event. Hands per visit shows if players come back
-// Wagered against returned shows what the room really pays out
-function flushArenaSession(reason) {
-  const h = view.arena;
-  const s = arenaSession;
-  if (!h || !s || !s.matches) return;
-  trackArenaSession({
-    reason,
-    arena: s.arena.id,
-    tier: s.arena.tier,
-    matches: s.matches,
-    rounds: s.rounds,
-    durationMs: Date.now() - s.startedAt,
-    wagered: s.wagered,
-    returned: s.returned,
-    net: s.returned - s.wagered,
-    wins: s.wins,
-    zeroRounds: s.zeroRounds,
-    bestStreak: s.bestStreak,
-    startStack: s.startStack,
-    endStack: h.stack,
-    brokeOut: h.stack < s.arena.buyIn,
-    rtp: s.wagered ? Number((s.returned / s.wagered).toFixed(4)) : null,
-  });
-  arenaSession = null;
-}
-
-function arenaExit() {
-  clearArenaTimer();
-  flushArenaSession("exit");
-  view.arena = null;
-  view.showArenaRules = false;
-  openLadder(); // Leaving a table goes back to the ladder, not all the way out
-}
 
 function openLeaderboard() {
   syncPve();
@@ -2116,22 +1778,10 @@ const ACTIONS = {
     render();
   },
   "arena-open": openLadder,
-  "arena-exit": arenaExit,
   "ladder-close": closeLadder, // Back from the ladder select goes all the way to the lobby
   "ladder-again": ladderAgain,
   "ladder-exit": exitLadderGame,
-  "arena-hit": arenaHit,
-  "arena-stay": arenaStay,
-  "arena-again": arenaAgain,
   "arena-restake": arenaRestake,
-  "arena-rules": () => {
-    view.showArenaRules = true;
-    render();
-  },
-  "arena-rules-back": () => {
-    view.showArenaRules = false;
-    render();
-  },
   leaderboard: openLeaderboard,
   "lb-back": () => {
     view.showLeaderboard = false;

@@ -168,3 +168,19 @@ export const themeStyle = (arena) =>
   Object.entries(arena.theme)
     .map(([k, v]) => `${k}:${v}`)
     .join(";");
+
+// Paints the match table in this room's colours when the ladder plays, only the felt and rail change
+export function matchSkin(arena) {
+  const t = (arena && arena.theme) || {};
+  const map = {
+    "--felt": t["--ar-felt"],
+    "--felt-hi": t["--ar-felt-hi"],
+    "--felt-lo": t["--ar-felt-lo"],
+    "--rail": t["--ar-rail"],
+    "--rail-hi": t["--ar-rail-hi"],
+  };
+  return Object.entries(map)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(";");
+}

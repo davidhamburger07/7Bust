@@ -5,8 +5,8 @@ import { PLAYER_EMOTES } from "../engine/aiChatter.js";
 import { WHEEL, DAILY_BONUS } from "../engine/rewards.js";
 import { renderHouseTable, renderHouseRules } from "./houseTable.js";
 import { renderArenaSelect, pveChipStack } from "./arenaSelect.js";
-import { renderArenaTable, renderArenaRules } from "./arenaTable.js";
 import { renderLeaderboard } from "./leaderboard.js";
+import { matchSkin } from "../engine/arenas.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
@@ -368,7 +368,7 @@ export function renderMatch(view) {
   const nextSeat = upNext(s);
   const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat, nextSeat)).join("");
   return `
-  <div class="screen screen--match${s.players.length >= 5 ? " crowded" : ""}">
+  <div class="screen screen--match${s.players.length >= 5 ? " crowded" : ""}"${view.ladderGame ? ` style="${matchSkin(view.ladderGame.arena)}"` : ""}>
     <div class="matchbar">
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
       <span id="radio-slot" class="radio-slot"></span>
@@ -921,10 +921,6 @@ export function renderApp(view) {
   // The single player ladder has its own chips, tables and board
   // It's checked first because none of the party game's state applies there
   if (view.showLeaderboard) return `<div class="stage">${renderLeaderboard(view)}${renderToast(view)}</div>`;
-  if (view.arena) {
-    if (view.showArenaRules) return `<div class="stage">${renderArenaRules(view)}</div>`;
-    return `<div class="stage">${renderArenaTable(view)}${renderToast(view)}</div>`;
-  }
   if (view.ladder) return `<div class="stage">${renderArenaSelect(view)}${renderToast(view)}</div>`;
   // The house table is its own mode with no seats, match or online play
   if (view.house) {
