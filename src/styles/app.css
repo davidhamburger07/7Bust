@@ -4171,3 +4171,1548 @@
   .hs-betlabel { font-size: 11px; }
   .hs-vtitle { font-size: 21px; }
 }
+
+/* Single player ladder, each room's colours come in as CSS variables from arenas.js */
+/* No room colour is hard coded here, so adding a room only needs new data */
+
+/* Single player chips look like matte clay from a real card room, online chips glow */
+/* The player can tell the two kinds of money apart without reading the numbers */
+.chip--clay-red {
+  background: radial-gradient(circle at 34% 28%, #c9524e, #7e1f1c);
+  border-color: rgba(255, 246, 224, 0.55);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.chip--clay-blue {
+  background: radial-gradient(circle at 34% 28%, #4a6f9e, #1d3355);
+  border-color: rgba(255, 246, 224, 0.5);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.chip--clay-black {
+  background: radial-gradient(circle at 34% 28%, #4a453c, #17140f);
+  border-color: rgba(255, 246, 224, 0.42);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.55);
+}
+.chip-amount--clay {
+  color: var(--bone);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+.chip-stack--neon .chip {
+  box-shadow: 0 0 10px rgba(255, 210, 74, 0.55), var(--shadow-card);
+}
+.chip-amount--neon {
+  color: var(--gold-hi);
+  text-shadow: 0 0 12px rgba(255, 210, 74, 0.6);
+}
+
+.screen--ladder,
+.screen--lb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.al-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s4);
+}
+.al-title h2 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  line-height: 1;
+}
+.al-sub {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.al-purse {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+}
+.btn--ghost {
+  padding: 9px var(--s4);
+  border-radius: 999px;
+  border: 2px solid var(--gold-lo);
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  background: rgba(0, 0, 0, 0.3);
+  transition: transform 0.16s var(--ease-pop), background-color 0.16s var(--ease-out), border-color 0.16s var(--ease-out);
+}
+.btn--ghost:hover {
+  background: rgba(255, 210, 74, 0.14);
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+.btn--ghost:active {
+  transform: translateY(0) scale(0.97);
+}
+.btn--ghost:focus-visible {
+  outline: 3px solid var(--gold-hi);
+  outline-offset: 2px;
+}
+
+.al-goal {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.al-goal b {
+  color: var(--gold-hi);
+}
+.al-goal--done {
+  color: var(--win);
+}
+
+.al-stack {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: var(--s4);
+  min-height: 0;
+  flex: 1;
+}
+.al-floors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Log scaled since the unlock amounts are far apart, a straight rail would bunch the bottom rooms */
+/* A notch at every unlock so how much further is a distance you can see */
+.al-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 0;
+}
+.al-rail-track {
+  position: relative;
+  flex: 1;
+  width: 16px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.3));
+  border: 2px solid rgba(255, 210, 74, 0.22);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6);
+}
+.al-rail-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold) 30%, #c98a12);
+  box-shadow: 0 0 14px rgba(255, 210, 74, 0.55);
+  transition: height 0.6s var(--ease-out);
+}
+.al-rail-head {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  font-family: var(--font-num);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  transition: bottom 0.6s var(--ease-out);
+  z-index: 2;
+}
+.al-notch {
+  position: absolute;
+  left: -5px;
+  right: -5px;
+  height: 2px;
+  background: rgba(255, 246, 224, 0.35);
+}
+.al-notch.open {
+  background: var(--win);
+}
+.al-notch-v {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -115%);
+  font-size: 9px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.al-notch.open .al-notch-v {
+  color: var(--win);
+}
+.al-rail-label {
+  font-size: 9px;
+  line-height: 1.25;
+  letter-spacing: 0.1em;
+  text-align: center;
+  color: var(--faint);
+}
+
+.al-floor {
+  display: grid;
+  grid-template-columns: 56px 1fr 190px;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s3);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--ar-felt), var(--ar-felt-lo));
+  border: 2px solid var(--ar-rail-hi);
+  color: var(--ar-ink);
+  box-shadow: 0 12px 28px -14px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), filter 0.2s var(--ease-out);
+}
+.al-floor:hover {
+  transform: translateX(3px);
+  box-shadow: 0 16px 34px -14px rgba(0, 0, 0, 0.9), 0 0 0 1px var(--ar-accent);
+}
+.al-floor.is-locked {
+  filter: grayscale(0.75) brightness(0.62);
+}
+.al-floor.is-locked:hover {
+  transform: none;
+}
+.al-swatch {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 35% 28%, var(--ar-accent), var(--ar-rail));
+  border: 2px solid var(--ar-accent-hi);
+  box-shadow: 0 0 18px var(--ar-glow);
+}
+.al-tier {
+  font-family: var(--font-num);
+  font-size: 24px;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.al-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+.al-name {
+  font-family: var(--font-display);
+  font-size: 21px;
+  letter-spacing: 0.02em;
+  color: var(--ar-accent-hi);
+}
+.al-where {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+.al-blurb {
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 700;
+  opacity: 0.85;
+  margin: 3px 0 6px;
+  max-width: 62ch;
+}
+.al-facts {
+  display: flex;
+  gap: var(--s4);
+  list-style: none;
+  padding: 0;
+  flex-wrap: wrap;
+}
+.al-facts li {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.al-facts b {
+  font-size: 15px;
+  color: var(--ar-accent-hi);
+}
+.al-facts span {
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.al-record {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.al-record--new {
+  font-style: italic;
+}
+.al-action {
+  display: grid;
+  justify-items: stretch;
+}
+.al-sit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.al-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+}
+.al-lock-need {
+  font-family: var(--font-num);
+  font-size: 19px;
+  color: var(--bone);
+}
+.al-lock-need em {
+  font-family: var(--font-body);
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.al-lock-hint {
+  font-size: 10.5px;
+  line-height: 1.35;
+  opacity: 0.55;
+  max-width: 22ch;
+}
+.al-lock--broke .al-lock-need {
+  color: var(--amber);
+}
+
+.al-broke {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--radius);
+  background: rgba(255, 158, 44, 0.12);
+  border: 2px solid rgba(255, 158, 44, 0.4);
+}
+.al-broke-msg {
+  font-size: 13px;
+  color: var(--cream);
+}
+
+.screen--arena {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas: "bar" "felt" "strip" "actions";
+  padding: var(--s2);
+  gap: var(--s2);
+}
+.as-felt {
+  grid-area: felt;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-radius: 26px;
+  background: radial-gradient(120% 90% at 50% 0%, var(--ar-felt-hi), var(--ar-felt) 45%, var(--ar-felt-lo) 100%);
+  border: 10px solid var(--ar-rail);
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.55), 0 26px 60px -18px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+.as-pot {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ar-accent-hi);
+}
+.as-pot b {
+  font-size: 16px;
+}
+
+.as-room {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--s5);
+  flex-wrap: wrap;
+}
+.as-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.as-group-seats {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.as-group-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ar-ink);
+  opacity: 0.42;
+}
+.as-group--before {
+  order: 0;
+}
+.as-group--after {
+  order: 1;
+}
+
+.as-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 112px;
+  padding: var(--s2);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.09);
+  transition: border-color 0.25s var(--ease-out), background-color 0.25s var(--ease-out), transform 0.25s var(--ease-pop);
+}
+.as-seat--closer {
+  opacity: 0.72;
+}
+.as-seat.has-acted {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.as-seat.is-bust {
+  border-color: rgba(255, 77, 77, 0.55);
+  background: rgba(255, 77, 77, 0.1);
+}
+.as-seat.is-short {
+  border-color: rgba(255, 158, 44, 0.45);
+  background: rgba(255, 158, 44, 0.08);
+}
+.as-seat.is-winner {
+  border-color: var(--ar-accent);
+  background: var(--ar-glow);
+  transform: translateY(-3px);
+  box-shadow: 0 0 22px var(--ar-glow);
+}
+.as-seat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.as-name {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--ar-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.as-ai {
+  flex: none;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--ar-ink);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+.as-hand {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  min-height: 46px;
+  align-items: center;
+}
+.as-wait {
+  font-size: 10px;
+  opacity: 0.4;
+  font-style: italic;
+  color: var(--ar-ink);
+}
+.as-seat-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 18px;
+}
+.as-score {
+  font-family: var(--font-num);
+  font-size: 17px;
+  color: var(--ar-accent-hi);
+}
+.as-verdict--bust {
+  color: var(--bust);
+}
+.as-verdict--short {
+  color: var(--amber);
+}
+.as-seat .as-verdict {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.as-take {
+  font-family: var(--font-num);
+  font-size: 12px;
+  color: var(--win);
+}
+
+.as-you {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: var(--s2);
+  border-top: 2px solid rgba(255, 255, 255, 0.12);
+}
+.as-you-hand {
+  display: flex;
+  gap: var(--s2);
+  min-height: 92px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.as-you-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+}
+.as-you-who {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  color: var(--ar-ink);
+  opacity: 0.75;
+}
+.as-you-score {
+  font-family: var(--font-num);
+  font-size: 27px;
+  color: var(--ar-accent-hi);
+}
+.as-you.is-bust .as-you-score {
+  color: var(--bust);
+}
+.as-you.is-winner .as-you-score {
+  color: var(--win);
+  text-shadow: 0 0 18px rgba(70, 229, 140, 0.6);
+}
+
+/* One bar with the room's minimum and the best score showing, your score fills it */
+/* Past the first notch you're in the pot, past the second you're winning it */
+.am-meter {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.am-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+}
+.am-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.25), var(--amber));
+  transition: width 0.3s var(--ease-out);
+}
+.am-meter.is-called .am-fill {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.25), var(--ar-accent));
+}
+.am-meter.is-ahead .am-fill {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), var(--win));
+  box-shadow: 0 0 14px rgba(70, 229, 140, 0.5);
+}
+.am-mark {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+}
+.am-mark span {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-num);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.am-mark--line {
+  background: var(--bone);
+}
+.am-mark--line span {
+  color: var(--bone);
+  opacity: 0.75;
+}
+.am-mark--lead {
+  background: var(--ar-accent-hi);
+}
+.am-mark--lead span {
+  color: var(--ar-accent-hi);
+}
+.am-read {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--ar-ink);
+}
+.am-read b {
+  font-family: var(--font-num);
+  font-size: 15px;
+}
+.am-read--short {
+  color: var(--amber);
+}
+.am-read--lead {
+  color: var(--win);
+}
+.am-read--bust {
+  color: var(--bust);
+}
+.am-read--chase {
+  opacity: 0.85;
+}
+
+.as-dock {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: var(--s3);
+  width: 100%;
+  max-width: 560px;
+}
+.as-dock .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.as-dock--settle {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: var(--s2);
+}
+.as-dock.is-dealing {
+  opacity: 0.6;
+  pointer-events: none;
+}
+/* Folding short is a real option, it isn't made to look like a way to keep something */
+.btn--fold {
+  background: linear-gradient(180deg, #5a4636, #33261b);
+  border: 2px solid #7a5c42;
+  color: var(--muted);
+}
+.btn--fold:hover {
+  background: linear-gradient(180deg, #6b5341, #3d2d20);
+}
+.as-dock .as-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.as-vtitle {
+  font-family: var(--font-display);
+  font-size: 25px;
+  letter-spacing: 0.03em;
+}
+.as-vsub {
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 52ch;
+}
+.as-verdict--win .as-vtitle {
+  color: var(--win);
+}
+.as-verdict--lose .as-vtitle {
+  color: var(--bust);
+}
+.as-verdict--push .as-vtitle {
+  color: var(--gold);
+}
+
+.lb-tabs {
+  display: flex;
+  gap: var(--s2);
+}
+.lb-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--s3) var(--s4);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: rgba(0, 0, 0, 0.32);
+  border: 2px solid transparent;
+  border-bottom: none;
+  color: var(--faint);
+  text-align: left;
+  transition: background-color 0.18s var(--ease-out), color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
+}
+.lb-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+.lb-tab:focus-visible {
+  outline: 3px solid var(--gold-hi);
+  outline-offset: -3px;
+}
+.lb-tab-l {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+.lb-tab-s {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+/* The active tab takes the colour of its money, warm clay for practice chips, neon gold for real */
+.lb-tab.on {
+  color: var(--cream);
+  background: rgba(0, 0, 0, 0.5);
+}
+.lb-pve .lb-tab.on {
+  border-color: #a2653a;
+  box-shadow: inset 0 3px 0 #c9524e;
+}
+.lb-pvp .lb-tab.on {
+  border-color: var(--gold-lo);
+  box-shadow: inset 0 3px 0 var(--gold);
+}
+
+.lb-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) var(--radius-sm);
+  background: rgba(0, 0, 0, 0.34);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+}
+.lb-panel--pve {
+  border-color: rgba(162, 101, 58, 0.45);
+}
+.lb-panel--pvp {
+  border-color: rgba(255, 210, 74, 0.28);
+}
+
+.lb-mine {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s3);
+  padding: var(--s3);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(201, 82, 78, 0.16), rgba(0, 0, 0, 0.2));
+  border: 1.5px solid rgba(201, 82, 78, 0.35);
+}
+.lb-mine--pvp {
+  background: linear-gradient(135deg, rgba(255, 210, 74, 0.14), rgba(0, 0, 0, 0.2));
+  border-color: rgba(255, 210, 74, 0.35);
+}
+.lb-mine-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lb-k {
+  font-size: 9.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.lb-v {
+  font-size: 19px;
+  color: var(--cream);
+}
+.lb-v.pos {
+  color: var(--win);
+}
+.lb-v.neg {
+  color: var(--bust);
+}
+.lb-note {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint);
+  max-width: 92ch;
+}
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 44px 1.5fr 1.6fr 1fr 84px;
+  align-items: center;
+  gap: var(--s3);
+  padding: 7px var(--s3);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.lb-head {
+  font-size: 9.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding-bottom: 2px;
+}
+.lb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lb-list .lb-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.035);
+}
+.lb-row.is-you {
+  background: linear-gradient(90deg, rgba(255, 210, 74, 0.2), rgba(255, 210, 74, 0.05));
+  border: 1.5px solid var(--gold-lo);
+  color: var(--cream);
+}
+.lb-rank {
+  font-family: var(--font-num);
+  font-size: 14px;
+  color: var(--faint);
+}
+.lb-row.is-you .lb-rank {
+  color: var(--gold);
+}
+.lb-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+}
+.lb-ai {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--faint);
+  font-size: 8px;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+.lb-arena {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lb-accent, var(--gold));
+  box-shadow: 0 0 8px var(--lb-accent, var(--gold));
+  flex: none;
+}
+.lb-figure {
+  font-family: var(--font-num);
+  text-align: right;
+  color: var(--gold-hi);
+}
+.lb-figure.pos {
+  color: var(--win);
+}
+.lb-figure.neg {
+  color: var(--bust);
+}
+.lb-hands {
+  font-family: var(--font-num);
+  text-align: right;
+  color: var(--faint);
+  font-size: 12px;
+}
+.lb-when {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.lb-row--match.is-win {
+  box-shadow: inset 3px 0 0 var(--win);
+}
+.lb-empty {
+  padding: var(--s5) var(--s3);
+  text-align: center;
+  font-size: 13px;
+  color: var(--faint);
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .screen--ladder,
+  .screen--lb {
+    padding: var(--s2);
+    gap: var(--s2);
+  }
+  .al-title h2 {
+    font-size: 22px;
+  }
+  .al-stack {
+    grid-template-columns: 40px 1fr;
+    gap: var(--s2);
+  }
+  .al-rail-label,
+  .al-notch-v {
+    display: none;
+  }
+  .al-rail-head {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
+  .al-floor {
+    grid-template-columns: 40px 1fr;
+    grid-template-areas: "swatch body" "action action";
+    padding: var(--s2);
+    gap: var(--s2);
+  }
+  .al-swatch {
+    width: 40px;
+    height: 40px;
+    grid-area: swatch;
+  }
+  .al-body {
+    grid-area: body;
+  }
+  .al-action {
+    grid-area: action;
+  }
+  .al-lock {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .al-blurb {
+    display: none;
+  }
+  .al-name {
+    font-size: 16px;
+  }
+  .al-facts {
+    gap: var(--s3);
+  }
+  .al-broke {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .as-felt {
+    padding: var(--s2);
+    border-width: 8px;
+  }
+  .as-room {
+    gap: var(--s3);
+  }
+  .as-seat {
+    width: 88px;
+    padding: 5px;
+  }
+  .as-hand {
+    min-height: 34px;
+  }
+  .as-you-hand {
+    min-height: 66px;
+  }
+  .as-you-score {
+    font-size: 21px;
+  }
+  .lb-mine {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lb-row {
+    grid-template-columns: 30px 1.3fr 1.3fr 1fr;
+    font-size: 11.5px;
+    gap: var(--s2);
+  }
+  .lb-hands,
+  .lb-tab-s {
+    display: none;
+  }
+}
+
+
+.al-top--ladder {
+  grid-template-columns: auto auto 1fr auto;
+}
+.al-top--ladder .radio-slot {
+  justify-self: start;
+}
+.al-floor--shut {
+  grid-template-columns: 44px 1fr 190px;
+  padding: var(--s2) var(--s3);
+  /* Dimmed but still readable, the player should want these rooms and tell them apart */
+  filter: saturate(0.72) brightness(0.7);
+  opacity: 0.9;
+}
+.al-floor--shut:hover {
+  filter: saturate(0.95) brightness(0.85);
+  transform: translateX(3px);
+}
+.al-floor--shut .al-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+}
+.al-floor--shut .al-tier {
+  font-size: 19px;
+}
+.al-floor--shut .al-name {
+  font-size: 17px;
+}
+.al-shutline {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-family: var(--font-num);
+  letter-spacing: 0.03em;
+  opacity: 0.62;
+}
+.al-floor--shut .al-lock-need {
+  font-size: 16px;
+}
+.al-floor--shut .al-lock-hint {
+  font-size: 9.5px;
+}
+/* The room the player can enter is lit up so it stands out at a glance */
+.al-floor--open {
+  box-shadow: 0 14px 32px -14px rgba(0, 0, 0, 0.9), 0 0 0 2px var(--ar-accent), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.as-potbox {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: var(--s2) var(--s5);
+  border-radius: 999px;
+  background: radial-gradient(120% 140% at 50% 0%, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.72));
+  border: 2px dashed var(--ar-accent);
+  box-shadow: 0 0 26px var(--ar-glow), inset 0 0 22px rgba(0, 0, 0, 0.6);
+  transition: transform 0.3s var(--ease-pop), border-color 0.3s var(--ease-out);
+}
+.as-potlabel {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: var(--ar-accent);
+  opacity: 0.85;
+}
+.as-potnum {
+  font-family: var(--font-num);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--ar-accent-hi);
+  text-shadow: 0 0 20px var(--ar-glow);
+}
+.as-potcut {
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ar-ink);
+  opacity: 0.5;
+}
+.as-potbox.is-settled {
+  border-style: solid;
+}
+.as-potbox.is-yours {
+  border-color: var(--win);
+  transform: scale(1.06);
+  box-shadow: 0 0 34px rgba(70, 229, 140, 0.45), inset 0 0 22px rgba(0, 0, 0, 0.6);
+}
+.as-potbox.is-yours .as-potnum {
+  color: var(--win);
+  text-shadow: 0 0 22px rgba(70, 229, 140, 0.6);
+}
+.as-potbox.is-yours .as-potlabel {
+  color: var(--win);
+}
+
+.as-room {
+  align-items: stretch;
+  gap: var(--s4);
+}
+.as-group {
+  gap: 6px;
+}
+.as-group-label {
+  order: -1;
+}
+/* A clear line between seats that have played and seats still to come */
+/* So the two don't blur into one row */
+.as-split {
+  order: 0;
+  width: 2px;
+  align-self: stretch;
+  background: linear-gradient(180deg, transparent, var(--ar-accent) 22%, var(--ar-accent) 78%, transparent);
+  opacity: 0.4;
+}
+.as-group--after {
+  order: 1;
+}
+.as-group--after .as-group-label {
+  opacity: 0.5;
+}
+.as-seat--closer {
+  border-style: dashed;
+}
+
+.lb-gap {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 4px var(--s3);
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.lb-gap::before,
+.lb-gap::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 246, 224, 0.14);
+}
+
+@media (max-width: 900px) {
+  .al-top--ladder {
+    grid-template-columns: auto 1fr auto;
+  }
+  .al-top--ladder .radio-slot {
+    display: none;
+  }
+  .al-floor--shut {
+    grid-template-columns: 34px 1fr;
+  }
+  .al-shutline {
+    font-size: 10px;
+  }
+  .as-potnum {
+    font-size: 22px;
+  }
+  .as-potbox {
+    padding: 5px var(--s4);
+  }
+  .as-split {
+    display: none;
+  }
+}
+
+
+/* The minimum and the score to beat are often a point apart, so labels on one edge overlap */
+/* Minimum goes below and the target above, which is how you'd say it out loud */
+.am-meter {
+  padding: 16px 0 2px;
+}
+.am-mark--line span {
+  top: auto;
+  bottom: -15px;
+}
+.am-mark--lead span {
+  top: -16px;
+  bottom: auto;
+  font-weight: 800;
+}
+.am-read {
+  margin-top: 12px;
+}
+
+/* A seat that has played drops the dashed outline, whichever side of the table it's on */
+.as-seat.has-acted {
+  border-style: solid;
+}
+
+
+/* At eight seats a hand stacked three rows deep and pushed the call meter off the table */
+/* Wider seats so a hand wraps at three cards, and less padding, keep it all on the table */
+.as-seat {
+  width: 122px;
+}
+.as-hand {
+  min-height: 40px;
+  gap: 2px;
+}
+.as-felt {
+  padding: var(--s3) var(--s4);
+  gap: var(--s2);
+}
+.as-you-hand {
+  min-height: 72px;
+}
+.as-you {
+  gap: 2px;
+}
+.am-meter {
+  padding: 15px 0 0;
+}
+.am-read {
+  margin-top: 11px;
+}
+.as-potbox {
+  padding: 5px var(--s5);
+}
+.as-potnum {
+  font-size: 26px;
+}
+
+/* A hand long enough to wrap gets smaller cards, so a six card seat is no taller than a three */
+.as-seat .card--mini {
+  width: 26px;
+  height: 36px;
+}
+.as-seat .card--mini .corner {
+  display: none;
+}
+
+
+/* On narrow screens your own half always fits first, the room gets what's left and scrolls */
+/* At eight seats the opponents used to push your hand and the call meter off the table */
+@media (max-width: 900px) {
+  .al-top--ladder {
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "back title" "purse purse";
+    row-gap: var(--s2);
+  }
+  .al-top--ladder > .icon-btn {
+    grid-area: back;
+  }
+  .al-top--ladder .al-title {
+    grid-area: title;
+  }
+  .al-top--ladder .al-purse {
+    grid-area: purse;
+    justify-content: space-between;
+  }
+  .al-title h2 {
+    font-size: 20px;
+    white-space: nowrap;
+  }
+  .al-sub {
+    display: none;
+  }
+  .al-goal {
+    font-size: 11.5px;
+  }
+
+  /* On a phone a locked room is one line, its name and how far off it is */
+  .al-floor--shut {
+    grid-template-columns: 34px 1fr auto;
+    grid-template-areas: "swatch body action";
+    align-items: center;
+    gap: var(--s2);
+  }
+  .al-floor--shut .al-swatch {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+  .al-floor--shut .al-tier {
+    font-size: 15px;
+  }
+  .al-floor--shut .al-name {
+    font-size: 14px;
+  }
+  .al-floor--shut .al-where,
+  .al-floor--shut .al-lock-hint {
+    display: none;
+  }
+  .al-floor--shut .al-shutline {
+    font-size: 9.5px;
+  }
+  .al-floor--shut .al-lock {
+    align-items: flex-end;
+    text-align: right;
+  }
+  .al-floor--shut .al-lock-need {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* The match bar already shows the stack and the pot has its own badge on the table */
+  /* Showing it here too pushed the bar off the screen */
+  .as-pot {
+    display: none;
+  }
+  .as-felt {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: var(--s2) 6px;
+    gap: 6px;
+  }
+  /* The room gives way first and scrolls inside whatever space is left */
+  .as-room {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: flex-start;
+    gap: var(--s2);
+    width: 100%;
+  }
+  .as-group {
+    width: 100%;
+  }
+  .as-group-seats {
+    gap: 5px;
+  }
+  .as-seat {
+    width: 86px;
+    padding: 4px 5px;
+    gap: 2px;
+  }
+  .as-name {
+    font-size: 10px;
+  }
+  .as-ai {
+    font-size: 7px;
+    padding: 0 3px;
+  }
+  .as-seat .card--mini {
+    width: 22px;
+    height: 30px;
+    border-radius: 4px;
+  }
+  .as-seat .card--mini .face {
+    font-size: 13px;
+  }
+  .as-hand {
+    min-height: 30px;
+    gap: 2px;
+  }
+  .as-score {
+    font-size: 14px;
+  }
+  .as-seat .as-verdict {
+    font-size: 10px;
+  }
+  .as-wait {
+    font-size: 9px;
+  }
+  /* Your half never shrinks and never scrolls out of reach */
+  .as-potbox,
+  .as-you {
+    flex: 0 0 auto;
+  }
+  .as-potbox {
+    padding: 3px var(--s4);
+  }
+  .as-potnum {
+    font-size: 19px;
+  }
+  .as-potlabel,
+  .as-potcut {
+    font-size: 8.5px;
+  }
+  .as-you-hand {
+    min-height: 62px;
+    gap: 5px;
+  }
+  .as-you .card {
+    width: 38px;
+    height: 54px;
+  }
+  .am-meter {
+    padding: 14px 0 0;
+  }
+  .am-read {
+    font-size: 11px;
+    margin-top: 10px;
+  }
+  .as-dock .btn {
+    font-size: 15px;
+  }
+}
+
+
+/* A ladder room's long name pushed the help and exit buttons off the right edge on phones */
+/* The name can be shortened, the two buttons can't */
+@media (max-width: 900px) {
+  .screen--arena .matchbar {
+    min-width: 0;
+    gap: 6px;
+  }
+  .screen--arena .round-pill {
+    min-width: 0;
+    max-width: 46vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .screen--arena .bar-right {
+    flex: none;
+    gap: 6px;
+  }
+  .screen--arena .hs-stack {
+    font-size: 10px;
+  }
+  .screen--arena .hs-stack b {
+    font-size: 13px;
+  }
+}
+
+
+/* Ladder matches last nine rounds now, so each seat shows a running total */
+/* And a between rounds screen says what the last round did */
+
+.as-round {
+  padding: 4px var(--s3);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1.5px solid var(--ar-accent, var(--gold-lo));
+  color: var(--ar-accent-hi, var(--gold-hi));
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+.as-round b {
+  font-size: 13px;
+}
+
+/* Every seat shows its match total, over nine rounds that's the number that matters */
+.as-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.as-total span {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--ar-ink);
+  opacity: 0.45;
+}
+.as-total b {
+  font-family: var(--font-num);
+  font-size: 15px;
+  color: var(--ar-ink);
+}
+.as-seat.is-lead .as-total b {
+  color: var(--ar-accent-hi);
+  text-shadow: 0 0 10px var(--ar-glow);
+}
+.as-seat.is-lead {
+  border-color: var(--ar-accent);
+}
+
+.as-you-total {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ar-ink);
+  opacity: 0.72;
+}
+.as-you-total b {
+  font-family: var(--font-num);
+  font-size: 20px;
+  opacity: 1;
+  color: var(--ar-accent-hi);
+}
+
+/* Round one in the easy rooms is a warm up and the bots can't bust */
+/* It's said on screen, or a table where nobody busts looks broken */
+.as-warmup {
+  align-self: center;
+  padding: 3px var(--s4);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px dashed var(--ar-accent);
+  color: var(--ar-ink);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+.as-dock--round {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 3px;
+}
+.as-roundline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s4);
+}
+.as-roundno {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+.as-roundgot {
+  font-family: var(--font-num);
+  font-size: 27px;
+  line-height: 1;
+}
+.as-roundgot.pos {
+  color: var(--win);
+  text-shadow: 0 0 16px rgba(70, 229, 140, 0.5);
+}
+.as-roundgot.neg {
+  color: var(--bust);
+}
+.as-roundstand {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.as-roundstand b {
+  font-size: 17px;
+  color: var(--cream);
+}
+.as-roundnext {
+  font-size: 11px;
+  color: var(--faint);
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .as-round {
+    display: none; /* The dock shows the round between rounds, the bar has no room for it */
+  }
+  .as-total b {
+    font-size: 13px;
+  }
+  .as-you-total b {
+    font-size: 16px;
+  }
+  .as-warmup {
+    font-size: 9.5px;
+    padding: 2px var(--s3);
+  }
+  .as-roundgot {
+    font-size: 22px;
+  }
+  .as-roundline {
+    gap: var(--s3);
+  }
+}
+

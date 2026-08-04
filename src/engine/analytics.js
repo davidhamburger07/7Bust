@@ -61,6 +61,18 @@ export const trackHouseRound = (data) => emit("house_round", data);
 // How many rounds they stayed, what their chips did, top ups, and whether they left or went broke
 export const trackHouseSession = (data) => emit("house_session", data);
 
+// Single player rooms, one entry per settled hand
+// The score the player held at against the room's minimum, to check real players against the model
+export const trackArenaHand = (data) => emit("arena_hand", data);
+
+// A visit to one room, sent when leaving it
+// Wagered against returned is the room's real payout, the only true check on the simulator
+export const trackArenaSession = (data) => emit("arena_session", data);
+
+// A new room opening
+// Shows how many players reach the "Pub", how many ever see the "Yacht", and how long each took
+export const trackArenaUnlock = (data) => emit("arena_unlock", data);
+
 // Online games, with a games per day counter
 // The counter is in memory, the real count lives in the store
 const mpGamesByDay = new Map();

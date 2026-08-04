@@ -4,6 +4,9 @@ import { heatTriple } from "./heat.js";
 import { PLAYER_EMOTES } from "../engine/aiChatter.js";
 import { WHEEL, DAILY_BONUS } from "../engine/rewards.js";
 import { renderHouseTable, renderHouseRules } from "./houseTable.js";
+import { renderArenaSelect, pveChipStack } from "./arenaSelect.js";
+import { renderArenaTable, renderArenaRules } from "./arenaTable.js";
+import { renderLeaderboard } from "./leaderboard.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
@@ -323,6 +326,15 @@ function nameField(view, o) {
       <input class="mp-input" id="mp-name" maxlength="12" placeholder="Player" value="${escAttr(o.name || "")}" autocomplete="off" />`;
 }
 
+// New players get told what the mode is, returning ones see where they left off
+function ladderPitch(view) {
+  const p = view.pve;
+  if (!p || !p.hands) return "single-player · climb five rooms for a bigger pot";
+  if (p.broke) return `${p.highest.name} · you are under the buy-in`;
+  if (p.next) return `${p.highest.name} · ${Math.round(p.next.pct * 100)}% to ${p.next.arena.name}`;
+  return `${p.highest.name} · every room open`;
+}
+
 export function renderLobby(view) {
   return `
   <div class="screen screen--lobby">
@@ -333,11 +345,12 @@ export function renderLobby(view) {
 
       ${walletCard(view)}
 
-      <button class="btn btn--play" data-action="house-open">HOUSE TABLE<span class="sub">one hand against the dealer · fast</span></button>
+      <button class="btn btn--play btn--ladder" data-action="arena-open">THE LADDER<span class="sub">${ladderPitch(view)}</span></button>
       <button class="btn btn--play btn--seat" data-action="start">TAKE A SEAT<span class="sub">free practice · 9 rounds at a full table</span></button>
       <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">play your chips against real people</span></button>
       ${freeChips(view)}
       <div class="lobby-foot">
+        <a class="link" href="#" data-action="leaderboard">Standings</a><span>·</span>
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
         <a class="link" href="#" data-action="history">Match history</a><span>·</span>
         <a class="link" href="#" data-action="verify">Verify fair</a><span>·</span>
@@ -888,6 +901,14 @@ export function renderApp(view) {
   if (view.showSettings) return `<div class="stage">${renderSettings(view)}${renderWheel(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
+  // The single player ladder has its own chips, tables and board
+  // It's checked first because none of the party game's state applies there
+  if (view.showLeaderboard) return `<div class="stage">${renderLeaderboard(view)}${renderToast(view)}</div>`;
+  if (view.arena) {
+    if (view.showArenaRules) return `<div class="stage">${renderArenaRules(view)}</div>`;
+    return `<div class="stage">${renderArenaTable(view)}${renderToast(view)}</div>`;
+  }
+  if (view.ladder) return `<div class="stage">${renderArenaSelect(view)}${renderToast(view)}</div>`;
   // The house table is its own mode with no seats, match or online play
   if (view.house) {
     if (view.showHouseRules) return `<div class="stage">${renderHouseRules()}</div>`;
