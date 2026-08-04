@@ -3962,6 +3962,21 @@
   grid-template-columns: repeat(6, 1fr);
   gap: 5px;
 }
+.ladder-ledger {
+  margin: var(--s2) 0 var(--s3);
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 14px;
+}
+.ladder-ledger b {
+  color: var(--cream);
+}
+.ladder-ledger .pos {
+  color: var(--win);
+}
+.ladder-ledger .neg {
+  color: var(--bust);
+}
 .hs-head {
   display: flex;
   align-items: baseline;

@@ -374,8 +374,9 @@ export function renderMatch(view) {
       <span id="radio-slot" class="radio-slot"></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
-        <span class="balance-chip">${chipStack(view.soloBalance || 0)}</span>
+        <span class="balance-chip">${chipStack(view.ladderGame ? (view.pve ? view.pve.chips : 0) : view.soloBalance || 0)}</span>
         ${online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
+        ${view.ladderGame ? `<span class="room-chip">${view.ladderGame.arena.name.toUpperCase()}</span>` : ""}
         <span class="clock">◔ <span class="num" data-clock>${view.clockText || "00:00"}</span></span>
         ${view.mode === "online" && !view.pauseUsed ? `<button class="icon-btn" data-action="pause" aria-label="Ask for a pause" title="Ask for a 2-minute pause">⏸</button>` : ""}
         <button class="icon-btn${view.hintRules ? " pulse" : ""}" data-action="rules" aria-label="How to play" title="How to play">?</button>
@@ -435,6 +436,22 @@ export function renderOverlay(view) {
   if (s.phase === "match_end") {
     const winner = s.players[s.winner];
     const youWon = s.winner === s.you;
+    if (view.ladderGame) {
+      const t = s.tournament || {};
+      const wager = view.ladderGame.wager || 0;
+      const payout = t.youPayout || 0;
+      const net = t.youNet != null ? t.youNet : payout - wager;
+      const netTxt = net > 0 ? `<span class="pos">+${net.toLocaleString()}</span>` : net < 0 ? `<span class="neg">${net.toLocaleString()}</span>` : "±0";
+      return `
+      <div class="overlay"><div class="result result--win">
+        <div class="kicker">${view.ladderGame.arena.name}</div>
+        <h2 class="${youWon ? "big-win" : ""}">${youWon ? "YOU TAKE THE POT!" : winner.name.toUpperCase() + " TAKES IT"}</h2>
+        ${scoreboard(s)}
+        <div class="ladder-ledger">Buy-in <b class="num">${wager.toLocaleString()}</b> · won <b class="num">${payout.toLocaleString()}</b> · net ${netTxt}</div>
+        <button class="btn btn--play" data-action="ladder-again">PLAY AGAIN<span class="sub">${wager.toLocaleString()} buy-in</span></button>
+        <button class="btn btn--online" data-action="ladder-exit">BACK TO THE LADDER</button>
+      </div></div>`;
+    }
     if (s.online) {
       const isHost = view.online && view.online.lobby && view.online.lobby.isHost;
       const again = isHost

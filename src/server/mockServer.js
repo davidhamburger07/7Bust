@@ -20,7 +20,10 @@ export function createServer(config = {}) {
   const cashless = !!config.cashless;
   const online = !!config.online;
   const totalRounds = Math.min(9, Math.max(1, Math.round(config.rounds || DEFAULT_ROUNDS)));
-  const roomEntryFee = cashless && ENTRY_TIERS.includes(config.entryFee) ? config.entryFee : 0;
+  // Games without real chips only show a pot, no chips move here
+  // so the buy-in can be anything and "The Ladder" passes its own buy-ins and rake
+  const roomEntryFee = cashless && config.entryFee > 0 ? Math.round(config.entryFee) : 0;
+  const roomRake = Number.isFinite(config.rake) ? Math.max(0, Math.min(0.5, config.rake)) : HOUSE_RAKE;
   const session = createSession();
   const roster = config.players || [
     { name: "You", isAI: false },
@@ -375,7 +378,7 @@ export function createServer(config = {}) {
     if (cashless) {
       // Multiplayer keeps no wallets here. With a buy-in the pot is still worked out
       // and each player settles their own chips from it
-      tournament = roomEntryFee > 0 ? { ...buildPot(roomEntryFee, n), settled: false, payout: 0, winnerSeats: [] } : null;
+      tournament = roomEntryFee > 0 ? { ...buildPot(roomEntryFee, n, roomRake), settled: false, payout: 0, winnerSeats: [] } : null;
     } else {
       const fee = ENTRY_TIERS.includes(entryFee) ? entryFee : DEFAULT_ENTRY;
       if (session.balance < fee) {

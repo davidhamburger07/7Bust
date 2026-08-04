@@ -21,7 +21,8 @@ import {
 import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/houseGame.js";
 import { ARENAS, arenaById, potAt, ARENA_ROUNDS } from "./engine/arenas.js";
 import { createArenaMatch, openersAt, buildHouseDeck } from "./engine/arenaGame.js";
-import { pveSummary, setChips, recordHand, restake, peakNetWorth, roomsOpenedBetween, PVE_RESTAKE } from "./engine/pveWallet.js";
+import { pveSummary, setChips, getChips, recordHand, restake, peakNetWorth, roomsOpenedBetween, PVE_RESTAKE } from "./engine/pveWallet.js";
+import { PERSONALITIES } from "./engine/ai.js";
 import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
@@ -38,9 +39,9 @@ import { createNet } from "./net/netClient.js";
 import { cgInit, cgLoadingStart, cgLoadingStop, cgSetPlaying, cgHappytime, cgUpdateRoom, cgLeftRoom, cgGetInviteRoom, cgInviteLink, cgOnJoinRoom, cgInstantMultiplayer } from "./net/crazygames.js";
 import * as storage from "./net/storage.js";
 
-// Solo is free practice, the engine holds no money
-// Chips only move where the server can check them, so the browser can't make chips
-const server = createServer({ cashless: true });
+// Solo is free practice, the engine holds no money and can't make chips
+// Ladder rooms swap in their own engine, every action reads server live so that's all it takes
+let server = createServer({ cashless: true });
 const root = document.getElementById("app");
 const bootAt = Date.now();
 
@@ -494,6 +495,7 @@ function handleAnnouncements(s) {
   if (s.phase === "match_end" && prevPhase !== "match_end") {
     announce(s.winner === s.you ? "win" : "lose");
     if (s.winner === s.you) cgHappytime(); // Tells CrazyGames this is a happy moment
+    if (view.ladderGame && !view.ladderGame.settled) settleLadder(s);
     recordHistory(s);
   }
   prevPhase = s.phase;
@@ -1258,6 +1260,10 @@ async function confirmExitYes() {
     await mpLeave(); // Sends the leave message, a bot plays the seat on
     return;
   }
+  if (view.ladderGame) {
+    await exitLadderGame(); // Leaving mid-match loses the buy-in
+    return;
+  }
   if (aiTimer) {
     clearTimeout(aiTimer); // Stop any queued bot move before closing the match
     aiTimer = null;
@@ -1637,35 +1643,85 @@ function lbTab(tab) {
   render();
 }
 
+// Ladder rooms play the full party game, only the buy-in, regulars and payout are single player
+// The three house bots take turns across the seats
+const LADDER_BRAINS = [PERSONALITIES.rook, PERSONALITIES.nova, PERSONALITIES.pip];
+function ladderRoster(arena) {
+  const roster = [{ name: "You", isAI: false }];
+  for (let i = 0; i < arena.bots; i++) {
+    roster.push({ name: (arena.regulars && arena.regulars[i]) || `Seat ${i + 2}`, isAI: true, ai: LADDER_BRAINS[i % LADDER_BRAINS.length] });
+  }
+  return roster;
+}
+
 function arenaSit() {
   const arena = arenaById(this && this.id);
   if (!arena) return;
   const p = syncPve();
   if (p.peak < arena.unlockAt || p.chips < arena.buyIn) return;
+  startLadderMatch(arena);
+}
 
+// Opens a ladder table. The buy-in comes off the practice stack now, so leaving mid-match loses it
+async function startLadderMatch(arena) {
+  if (getChips() < arena.buyIn) return openLadder();
+  if (aiTimer) {
+    clearTimeout(aiTimer);
+    aiTimer = null;
+  }
+  clearArenaTimer();
+  clearPending();
+  setChips(getChips() - arena.buyIn);
+  syncPve(); // Refresh so the match bar shows the stack after the buy-in
+  server = createServer({ cashless: true, entryFee: arena.buyIn, rake: arena.rake, rounds: ARENA_ROUNDS, players: ladderRoster(arena) });
   view.ladder = false;
-  view.arena = {
-    arena,
-    stack: p.chips,
-    // The shuffle is async so the table opens waiting, never settled
-    // A settled table with no result would break the screen on the next clock tick
-    stage: "opening",
-    match: null,
-    state: emptyArenaState(arena),
-    shown: [],
-    risk: 0,
-    dealt: false,
-    dealing: false,
-    result: null,
-    streak: 0,
-    matches: 0,
-  };
-  // Same provably fair seeds as every other table, so a ladder match can be checked the same way
-  arenaSeeds = { serverSeed: randomSeedHex(), clientSeed: randomSeedHex(8) };
-  arenaNonce = 0;
-  arenaSession = { arena, startedAt: Date.now(), matches: 0, wagered: 0, returned: 0, wins: 0, rounds: 0, zeroRounds: 0, bestStreak: 0, startStack: p.chips };
+  view.arena = null;
+  view.house = null;
+  view.mode = "solo";
+  view.ladderGame = { arena, wager: arena.buyIn, settled: false };
   sfx("shuffle");
-  arenaStartMatch();
+  const res = await server.startMatch();
+  if (!res.ok) {
+    setChips(getChips() + arena.buyIn);
+    view.ladderGame = null;
+    server = createServer({ cashless: true });
+    return openLadder();
+  }
+  hasPlayed = true;
+  sfx("ding");
+  apply(res);
+}
+
+// A ladder match ended, pay the practice stack and move the career on
+// Only the payout is added here, the buy-in already came off at the deal
+function settleLadder(s) {
+  view.ladderGame.settled = true;
+  const t = s.tournament;
+  const payout = t ? t.youPayout || 0 : 0;
+  const before = peakNetWorth();
+  recordHand({ arena: view.ladderGame.arena, payout, wager: view.ladderGame.wager, won: s.winner === s.you, busted: false, potShare: payout });
+  const opened = roomsOpenedBetween(before, peakNetWorth());
+  syncPve();
+  if (opened.length) toast(`New room open: ${opened[opened.length - 1].name}!`);
+}
+
+function ladderAgain() {
+  const arena = view.ladderGame && view.ladderGame.arena;
+  if (arena) startLadderMatch(arena);
+}
+
+// Puts the practice engine back so "Take a Seat" still works
+async function exitLadderGame() {
+  if (aiTimer) {
+    clearTimeout(aiTimer);
+    aiTimer = null;
+  }
+  clearPending();
+  view.ladderGame = null;
+  view.confirmExit = false;
+  server = createServer({ cashless: true });
+  await refreshSolo();
+  openLadder();
 }
 
 // A match needs more than one deck, so it gets several shuffled shoes used one at a time
@@ -2062,6 +2118,8 @@ const ACTIONS = {
   "arena-open": openLadder,
   "arena-exit": arenaExit,
   "ladder-close": closeLadder, // Back from the ladder select goes all the way to the lobby
+  "ladder-again": ladderAgain,
+  "ladder-exit": exitLadderGame,
   "arena-hit": arenaHit,
   "arena-stay": arenaStay,
   "arena-again": arenaAgain,
