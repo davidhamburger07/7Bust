@@ -19,6 +19,7 @@ import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/hou
 import { ARENAS, arenaById, ARENA_ROUNDS } from "./engine/arenas.js";
 import { pveSummary, setChips, getChips, recordHand, restake, peakNetWorth, roomsOpenedBetween, PVE_RESTAKE } from "./engine/pveWallet.js";
 import { PERSONALITIES } from "./engine/ai.js";
+import { buy as buyCosmetic, equip as equipCosmetic, cardSkinById, avatarById } from "./engine/cosmetics.js";
 import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
@@ -1013,27 +1014,41 @@ async function acceptTos() {
   // How to Play waits behind the "?", which pulses until they've opened it
   view.hintRules = true;
   await start();
-  maybeCoach();
+  offerTutorial();
 }
 
-// The tour runs on the table during the first hand, CrazyGames allow one click before play
-// Shown once ever and can be skipped from the first step
-function maybeCoach() {
+// On a first run a small card over the first hand offers the tutorial, only ever once
+function markCoachSeen() {
+  try {
+    storage.setItem(COACH_KEY, String(Date.now()));
+  } catch {
+    // Storage isn't available, the game still works without it
+  }
+}
+function offerTutorial() {
   try {
     if (storage.getItem(COACH_KEY)) return;
   } catch {
     return;
   }
-  const seen = () => {
-    try {
-      storage.setItem(COACH_KEY, String(Date.now()));
-    } catch {
-      // Storage isn't available, the game still works without it
-    }
+  view.tutorialOffer = true;
+  render();
+}
+function tutorialYes() {
+  view.tutorialOffer = false;
+  markCoachSeen();
+  render();
+  const done = () => {
     view.hintRules = false; // They took the tour, stop pulsing the "?"
     render();
   };
-  setTimeout(() => startCoach(seen), 700); // Let the deal animation settle first
+  setTimeout(() => startCoach(done), 350); // Let the offer card clear first
+}
+function tutorialNo() {
+  view.tutorialOffer = false;
+  markCoachSeen();
+  view.hintRules = true; // No tour taken, keep the "?" pulsing
+  render();
 }
 
 function sendChat() {
@@ -1590,6 +1605,36 @@ function closeLadder() {
   render();
 }
 
+function openShop() {
+  syncPve();
+  view.shop = true;
+  sfx("click");
+  render();
+}
+function closeShop() {
+  view.shop = false;
+  sfx("click");
+  render();
+}
+function shopBuy(kind, id) {
+  const res = buyCosmetic(kind, id);
+  if (res.ok) {
+    sfx("chips");
+    const item = kind === "card" ? cardSkinById(id) : avatarById(id);
+    toast(`${item.name} unlocked, equipped!`);
+    syncPve();
+  } else if (res.reason === "poor") {
+    sfx("buzzer");
+    toast(`Not enough chips, ${res.short.toLocaleString()} short.`);
+  }
+  render();
+}
+function shopEquip(kind, id) {
+  equipCosmetic(kind, id);
+  sfx("click");
+  render();
+}
+
 function lbTab(tab) {
   view.lbTab = tab === "pvp" ? "pvp" : "pve";
   sfx("click");
@@ -1738,6 +1783,8 @@ const ACTIONS = {
   "history-back": closeHistory,
   "chat-send": sendChat,
   "tos-accept": acceptTos,
+  "tut-yes": tutorialYes,
+  "tut-no": tutorialNo,
   tos: () => {
     view.showTos = true;
     view.showSettings = false;
@@ -1778,6 +1825,8 @@ const ACTIONS = {
     render();
   },
   "arena-open": openLadder,
+  "shop-open": openShop,
+  "shop-close": closeShop,
   "ladder-close": closeLadder, // Back from the ladder select goes all the way to the lobby
   "ladder-again": ladderAgain,
   "ladder-exit": exitLadderGame,
@@ -1818,6 +1867,8 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "emote") return sendEmote(el.dataset.e);
   if (el.dataset.action === "house-bet") return houseBet(el.dataset.v);
   if (el.dataset.action === "arena-sit") return arenaSit.call({ id: el.dataset.id });
+  if (el.dataset.action === "shop-buy") return shopBuy(el.dataset.kind, el.dataset.id);
+  if (el.dataset.action === "shop-equip") return shopEquip(el.dataset.kind, el.dataset.id);
   if (el.dataset.action === "lb-tab") return lbTab(el.dataset.tab);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();

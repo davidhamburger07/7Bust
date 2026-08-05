@@ -7,9 +7,34 @@ import { renderHouseTable, renderHouseRules } from "./houseTable.js";
 import { renderArenaSelect, pveChipStack } from "./arenaSelect.js";
 import { renderLeaderboard } from "./leaderboard.js";
 import { matchSkin } from "../engine/arenas.js";
+import { renderShop } from "./shop.js";
+import { selectedCard, selectedAvatar, avatarById } from "../engine/cosmetics.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
+
+// Cosmetics are loaded once per render, not for every card or seat
+let SKIN = "classic";
+let AVATAR = "chip";
+function refreshCosmetics() {
+  SKIN = selectedCard();
+  AVATAR = selectedAvatar();
+}
+// You get your own avatar, house players get one from their name so they always look the same
+const SEAT_EMOJI = ["🎩", "🦊", "🐯", "🐼", "🦉", "🐺", "🐢", "🦈", "🐙", "🦁", "🐸", "🦅", "🐷", "🐨"];
+function hashName(name) {
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h;
+}
+function avatarBadge(isYou, name, cls = "") {
+  if (isYou) {
+    const a = avatarById(AVATAR);
+    return `<span class="avatar ${cls}" style="--av-bg:${a.bg}"><span class="avatar-emoji">${a.emoji}</span></span>`;
+  }
+  const e = SEAT_EMOJI[hashName(name) % SEAT_EMOJI.length];
+  return `<span class="avatar ${cls} avatar--npc"><span class="avatar-emoji">${e}</span></span>`;
+}
 
 function fmtTime(ms) {
   const s = Math.floor(ms / 1000);
@@ -31,7 +56,7 @@ function badge(turnState) {
 
 function numberCard(value, heat, { mini = false, isNew = false } = {}) {
   const cls = `card${mini ? " card--mini" : ""}${isNew ? " card--new" : ""}`;
-  return `<div class="${cls}" style="--glow:${heat}"><span class="corner">${value}</span><span class="face">${value}</span></div>`;
+  return `<div class="${cls}" style="--glow:${heat}" data-skin="${SKIN}"><span class="corner">${value}</span><span class="face">${value}</span></div>`;
 }
 function modChip(card, { mini = false } = {}) {
   const txt = card.op === "mult" ? "×2" : `+${card.amount}`;
@@ -97,7 +122,7 @@ function seat(p, newSeat, nextSeat) {
   const isNext = p.seat === nextSeat && !p.isCurrent;
   return `
   <div class="seat ${p.isCurrent ? "current" : ""}${isNext ? " next" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
-    <div class="seat-top"><span class="seat-name">${p.name}${aiTag(p)}${dealerChip(p)}</span>${isNext ? '<span class="badge badge--next">NEXT</span>' : badge(p.turnState)}</div>
+    <div class="seat-top"><span class="seat-name">${avatarBadge(false, p.name, "avatar--sm")}${p.name}${aiTag(p)}${dealerChip(p)}</span>${isNext ? '<span class="badge badge--next">NEXT</span>' : badge(p.turnState)}</div>
     <div class="seat-hand">${handCards(p, { mini: true, newSeat })}${p.secondChance ? '<span class="sc-dot">2nd</span>' : ""}</div>
     <div class="seat-foot"><span class="seat-hand-score num">${handScoreText(p)}</span><span class="seat-total">total ${p.totalScore}</span></div>
   </div>`;
@@ -111,7 +136,7 @@ function youSeat(p, view, nextSeat) {
   return `
   <div class="you-seat ${p.isCurrent ? "current" : ""}${isNext ? " next" : ""} ${p.turnState}${sc}" data-seat="${p.seat}">
     <div class="you-top">
-      <span class="you-name">YOU${view.snapshot && view.snapshot.yourHands > 1 ? `<span class="hand-ix">HAND ${(view.snapshot.yourSeats || []).indexOf(p.seat) + 1}/${view.snapshot.yourHands}</span>` : ""}${dealerChip(p)} ${isNext ? '<span class="badge badge--next">YOU\'RE NEXT</span>' : badge(p.turnState)}</span>
+      <span class="you-name">${avatarBadge(true, "You", "avatar--sm")}YOU${view.snapshot && view.snapshot.yourHands > 1 ? `<span class="hand-ix">HAND ${(view.snapshot.yourSeats || []).indexOf(p.seat) + 1}/${view.snapshot.yourHands}</span>` : ""}${dealerChip(p)} ${isNext ? '<span class="badge badge--next">YOU\'RE NEXT</span>' : badge(p.turnState)}</span>
       <span class="you-score num">hand <b>${handScoreText(p)}</b> · total <b>${p.totalScore}</b></span>
     </div>
     <div class="you-hand">${handCards(p, { newSeat, pending: view.pendingDraw })}${view.pendingDraw ? pendingCard() : ""}${p.secondChance ? '<span class="sc-dot big">2nd chance</span>' : ""}</div>
@@ -194,7 +219,7 @@ function leaderPanel(s) {
       return `
       <div class="lb-row ${st.seat === s.you ? "you" : ""}">
         <span class="lb-rank ${medal} num">${i + 1}</span>
-        <span class="lb-name">${st.seat === s.you ? "You" : st.name}${aiTag(p)}${i === 0 && st.totalScore > 0 ? " 👑" : ""}</span>
+        <span class="lb-name">${avatarBadge(st.seat === s.you, st.name, "avatar--xs")}${st.seat === s.you ? "You" : st.name}${aiTag(p)}${i === 0 && st.totalScore > 0 ? " 👑" : ""}</span>
         <span class="lb-state${p.turnState === "busted" ? " bust" : ""}">${p.turnState === "busted" ? "✕" : p.roundDelta > 0 ? `+${p.roundDelta}` : ""}</span>
         <span class="lb-score num">${st.totalScore}</span>
       </div>`;
@@ -329,7 +354,7 @@ function nameField(view, o) {
 // New players get told what the mode is, returning ones see where they left off
 function ladderPitch(view) {
   const p = view.pve;
-  if (!p || !p.hands) return "single-player · climb five rooms for a bigger pot";
+  if (!p || !p.hands) return "single-player · climb twelve rooms for a bigger pot";
   if (p.broke) return `${p.highest.name} · you are under the buy-in`;
   if (p.next) return `${p.highest.name} · ${Math.round(p.next.pct * 100)}% to ${p.next.arena.name}`;
   return `${p.highest.name} · every room open`;
@@ -349,6 +374,7 @@ export function renderLobby(view) {
       <button class="btn btn--play btn--seat" data-action="start">TAKE A SEAT<span class="sub">free practice · 9 rounds at a full table</span></button>
       <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">play your chips against real people</span></button>
       ${freeChips(view)}
+      <button class="btn btn--shop" data-action="shop-open">THE SHOP<span class="sub">card skins &amp; avatars for your practice chips</span></button>
       <div class="lobby-foot">
         <a class="link" href="#" data-action="leaderboard">Standings</a><span>·</span>
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
@@ -914,10 +940,12 @@ export function renderOnline(view) {
 }
 
 export function renderApp(view) {
+  refreshCosmetics(); // Loads the equipped skin and avatar once for the whole render
   if (view.showTos) return `<div class="stage">${renderTos()}</div>`;
   if (view.showSettings) return `<div class="stage">${renderSettings(view)}${renderWheel(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
+  if (view.shop) return `<div class="stage">${renderShop(view)}${renderToast(view)}</div>`;
   // The single player ladder has its own chips, tables and board
   // It's checked first because none of the party game's state applies there
   if (view.showLeaderboard) return `<div class="stage">${renderLeaderboard(view)}${renderToast(view)}</div>`;
@@ -943,5 +971,23 @@ export function renderApp(view) {
   const screen = inMatch ? renderMatch(view) : renderLobby(view);
   const overlay = inMatch ? renderOverlay(view) : "";
   const confirm = inMatch && view.confirmExit ? renderExitConfirm(view) : "";
-  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${renderToast(view)}</div>`;
+  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${renderTutorialOffer(view)}${renderToast(view)}</div>`;
+}
+
+// Offers the walkthrough over the first hand
+// It doesn't block anything, it only decides if the tips run
+function renderTutorialOffer(view) {
+  if (!view.tutorialOffer) return "";
+  return `
+  <div class="overlay tut-offer">
+    <div class="result tut-card">
+      <div class="kicker">Welcome to 7Bust</div>
+      <h2>New here?</h2>
+      <p class="tut-sub">Want a quick walkthrough of how a hand works? It takes about twenty seconds.</p>
+      <div class="tut-actions">
+        <button class="btn btn--play" data-action="tut-yes">YES, SHOW ME<span class="sub">a guided first hand</span></button>
+        <button class="btn btn--online" data-action="tut-no">NO THANKS<span class="sub">I'll figure it out</span></button>
+      </div>
+    </div>
+  </div>`;
 }

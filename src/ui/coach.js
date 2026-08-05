@@ -5,22 +5,32 @@ const STEPS = [
   {
     sel: '[data-action="hit"]',
     title: "Flip a card",
-    body: "Every card you turn adds to this round's score. Keep going while you dare.",
+    body: "Tap HIT to turn a card. Every card you flip adds its number to this round's score.",
+  },
+  {
+    sel: ".you-score",
+    title: "Watch your score climb",
+    body: "This is what you've built this round. The bigger it gets, the more there is to lose.",
   },
   {
     sel: ".you-seat .progress",
-    title: "Don't repeat yourself",
-    body: "Turn a number you already have and you BUST, the whole round's points are gone.",
+    title: "Never repeat a number",
+    body: "Flip a number you already hold and you BUST, the whole round scores ZERO. That's the risk you're pushing.",
   },
   {
-    sel: '[data-action="stay"]',
-    title: "Bank before that happens",
-    body: "Banking locks this round's points in and sits you out until the next one.",
+    sel: ".dock",
+    title: "Bank before it's gone",
+    body: "Stop while you're ahead: BANK locks this round's points into your total, safe from a bust.",
   },
   {
     sel: ".you-seat .pips",
-    title: "Seven different numbers",
-    body: "Fill all seven and it's a CLEAN 7, a big bonus, and the round ends on the spot.",
+    title: "Chase the CLEAN 7",
+    body: "Collect seven DIFFERENT numbers for a CLEAN 7, a big bonus that ends the round instantly in your favour.",
+  },
+  {
+    sel: ".round-pill",
+    title: "Nine rounds, one winner",
+    body: "You'll play nine rounds and your scores add up. The highest total at the end takes the pot. Good luck!",
   },
 ];
 

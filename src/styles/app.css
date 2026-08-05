@@ -3966,6 +3966,25 @@
 .ladder-ledger .neg {
   color: var(--bust);
 }
+/* Tutorial offer shown over the player's first hand */
+.tut-card {
+  max-width: 440px;
+}
+.tut-sub {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+  margin: var(--s2) auto var(--s5);
+  max-width: 34ch;
+}
+.tut-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.tut-actions .btn {
+  width: 100%;
+}
 .hs-head {
   display: flex;
   align-items: baseline;
@@ -4991,3 +5010,69 @@
 /* Every seat shows its match total, over nine rounds that's the number that matters */
 /* Round one in the easy rooms is a warm up and the bots can't bust */
 /* It's said on screen, or a table where nobody busts looks broken */
+
+/* Cosmetics from the shop */
+.card[data-skin="ruby"] { background: linear-gradient(160deg, #7a1020, #3a0810); border-color: #a3324a; }
+.card[data-skin="ruby"] .face { color: #ffdede; }
+.card[data-skin="ruby"] .corner { color: #ff9db0; }
+.card[data-skin="sapphire"] { background: linear-gradient(160deg, #123a7a, #08183a); border-color: #3a5aa0; }
+.card[data-skin="sapphire"] .face { color: #dbe8ff; }
+.card[data-skin="sapphire"] .corner { color: #9db8ff; }
+.card[data-skin="emerald"] { background: linear-gradient(160deg, #0f6a3d, #053a20); border-color: #2a9a5a; }
+.card[data-skin="emerald"] .face { color: #dbffe9; }
+.card[data-skin="emerald"] .corner { color: #9dffc0; }
+.card[data-skin="midnight"] { background: linear-gradient(160deg, #12161f, #05070c); border-color: #2a3550; }
+.card[data-skin="midnight"] .face { color: #6fe0ff; }
+.card[data-skin="midnight"] .corner { color: #ff7ad0; }
+.card[data-skin="neon"] { background: linear-gradient(160deg, #1a0a24, #05010a); border-color: #ff2d95; box-shadow: var(--shadow-card), 0 0 12px -2px rgba(34, 231, 255, 0.5); }
+.card[data-skin="neon"] .face { color: #22e7ff; text-shadow: 0 0 8px rgba(34, 231, 255, 0.7); }
+.card[data-skin="neon"] .corner { color: #ff2d95; }
+.card[data-skin="goldfoil"] { background: linear-gradient(160deg, #ffe9a8, #c8932f); border-color: #8a5e10; }
+.card[data-skin="goldfoil"] .face { color: #3a2606; }
+.card[data-skin="goldfoil"] .corner { color: #7a4a10; }
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 50%;
+  background: var(--av-bg, linear-gradient(160deg, #4a4a4a, #2a2a2a));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 1px 3px rgba(0, 0, 0, 0.5);
+  vertical-align: -0.32em;
+  margin-right: 5px;
+  flex: 0 0 auto;
+}
+.avatar-emoji { font-size: 0.92em; line-height: 1; }
+.avatar--npc { --av-bg: linear-gradient(160deg, var(--rail-hi), var(--rail)); }
+.avatar--xs { width: 1.35em; height: 1.35em; margin-right: 4px; vertical-align: -0.28em; }
+.avatar--sm { width: 1.5em; height: 1.5em; }
+.avatar--lg { width: 60px; height: 60px; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.55); }
+.avatar--lg .avatar-emoji { font-size: 32px; }
+
+.screen--shop { min-height: 100dvh; overflow-y: auto; padding: var(--s5) var(--s4) var(--s7); }
+.shop-wrap { max-width: 960px; margin: 0 auto; }
+.shop-top { display: flex; align-items: center; gap: var(--s4); margin-bottom: var(--s5); }
+.shop-titlebox { flex: 1; }
+.shop-title { font-family: var(--font-display); font-size: 34px; color: var(--gold); text-shadow: 0 2px 0 var(--gold-lo); }
+.shop-sub { display: block; color: var(--faint); font-weight: 700; font-size: 13px; }
+.shop-bal { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-num); color: var(--gold-hi); font-size: 18px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--rail-hi); border-radius: 999px; padding: 6px 14px; }
+.shop-chip { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe9a8, #d9a327); border: 1.5px dashed rgba(255, 255, 255, 0.5); flex: 0 0 auto; }
+.shop-head { font-family: var(--font-num); font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); margin: var(--s5) 0 var(--s3); display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
+.shop-headnote { font-family: var(--font-body); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--faint); font-weight: 700; }
+.shop-grid { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.shop-grid--av { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+.shop-item { display: flex; flex-direction: column; align-items: center; gap: var(--s2); background: linear-gradient(180deg, #2c1a0c, #1c1006); border: 1.5px solid #4a2b16; border-radius: 16px; padding: var(--s4) var(--s3); text-align: center; }
+.shop-item.is-on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-lo), 0 6px 16px -6px rgba(0, 0, 0, 0.6); }
+.shop-preview { display: grid; place-items: center; height: 74px; }
+.shop-preview .card { width: 40px; height: 58px; }
+.shop-name { font-weight: 800; color: var(--cream); font-size: 14px; }
+.shop-blurb { color: var(--faint); font-size: 11px; line-height: 1.35; font-weight: 700; min-height: 2.6em; }
+.shop-btn { padding: 7px 14px; font-size: 13px; width: 100%; max-width: 132px; }
+.shop-price { display: inline-flex; align-items: center; gap: 5px; }
+.shop-tag { font-family: var(--font-num); font-size: 12px; letter-spacing: 0.08em; color: var(--win); padding: 7px 0; }
+.shop-foot { color: var(--faint); font-size: 12px; text-align: center; margin-top: var(--s5); line-height: 1.5; }
+
+/* Violet so the shop button stands out from the gold, blue and green ones */
+.btn--shop { background: linear-gradient(180deg, #b98bff, #7d4fd6 55%, #4a2a8a); border: 1px solid #3a2070; color: #fff; box-shadow: 0 4px 0 #3a2070, 0 8px 16px -6px rgba(0, 0, 0, 0.6); }
+.btn--shop .sub { color: rgba(255, 255, 255, 0.82); }
