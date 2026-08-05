@@ -100,11 +100,11 @@ function memoryStore() {
     // Same shape as the Redis store so local testing works the same
     async walletGet(key) {
       const w = wallets.get(key);
-      return w ? { ...w } : { balance: 0, daily: "", adDay: "", adCount: 0, created: "" };
+      return w ? { ...w } : { balance: 0, daily: "", adDay: "", adCount: 0, created: "", cos: "" };
     },
     async walletInit(key, balance) {
       if (wallets.has(key)) return false;
-      wallets.set(key, { balance: Math.round(balance), daily: "", adDay: "", adCount: 0, created: new Date().toISOString() });
+      wallets.set(key, { balance: Math.round(balance), daily: "", adDay: "", adCount: 0, created: new Date().toISOString(), cos: "" });
       return true;
     },
     async walletAdd(key, delta) {
@@ -295,7 +295,7 @@ function redisStore(url) {
     // Increments are atomic so two requests at once can't spend or pay twice
     async walletGet(key) {
       const h = (await redis.hgetall(WALLET(key))) || {};
-      return { balance: Number(h.balance || 0), daily: h.daily || "", adDay: h.adDay || "", adCount: Number(h.adCount || 0), created: h.created || "" };
+      return { balance: Number(h.balance || 0), daily: h.daily || "", adDay: h.adDay || "", adCount: Number(h.adCount || 0), created: h.created || "", cos: h.cos || "" };
     },
     async walletInit(key, balance) {
       // Only writes if the wallet is new, so a returning player is never reset

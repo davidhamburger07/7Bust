@@ -5076,3 +5076,716 @@
 /* Violet so the shop button stands out from the gold, blue and green ones */
 .btn--shop { background: linear-gradient(180deg, #b98bff, #7d4fd6 55%, #4a2a8a); border: 1px solid #3a2070; color: #fff; box-shadow: 0 4px 0 #3a2070, 0 8px 16px -6px rgba(0, 0, 0, 0.6); }
 .btn--shop .sub { color: rgba(255, 255, 255, 0.82); }
+
+/* Room select, a sideways deck of cards, one per room */
+/* The old ladder rules above are kept so that screen can be put back */
+
+.screen--rooms {
+  --card-w: 372px;
+  --card-h: 528px;
+  gap: var(--s3);
+}
+
+.lr-deck {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+.lr-rail {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  height: 100%;
+  padding-block: 20px;
+  overflow: auto hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+}
+.lr-rail::-webkit-scrollbar {
+  display: none;
+}
+/* Half card spacers so the first and last rooms can sit in the centre too */
+/* Padding at the end of a flex scroller isn't reliable, real flex items always show */
+.lr-rail::before,
+.lr-rail::after {
+  content: "";
+  flex: 0 0 calc(50% - var(--card-w) / 2 - 7px);
+}
+.lr-rail.is-dragging {
+  cursor: grabbing;
+  scroll-behavior: auto;
+}
+
+.lr-card {
+  position: relative;
+  flex: 0 0 var(--card-w);
+  height: min(100%, var(--card-h));
+  align-self: center;
+  scroll-snap-align: center;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 3px solid var(--ar-rail-hi);
+  background: linear-gradient(168deg, var(--ar-felt-hi), var(--ar-felt) 44%, var(--ar-felt-lo));
+  color: var(--ar-ink);
+  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.95);
+  /* Cards off centre sit back and the centred one comes forward */
+  /* Scaling from the centre keeps the snap point, so it can't fight the scroll */
+  transform: scale(0.92);
+  opacity: 0.66;
+  transition: transform 0.3s var(--ease-out), opacity 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out),
+    filter 0.3s var(--ease-out);
+}
+.lr-card.is-focus {
+  transform: scale(1);
+  opacity: 1;
+  box-shadow: 0 30px 64px -26px rgba(0, 0, 0, 1), 0 0 0 2px var(--ar-accent), 0 0 52px -10px var(--ar-glow);
+}
+/* A locked room keeps its colours so the player still wants it */
+/* It just looks like it's behind glass until the player scrolls to it */
+.lr-card.is-shut {
+  filter: saturate(0.72) brightness(0.8);
+}
+.lr-card.is-shut.is-focus {
+  filter: saturate(0.95) brightness(0.96);
+  box-shadow: 0 30px 64px -26px rgba(0, 0, 0, 1), 0 0 0 2px rgba(255, 246, 224, 0.28);
+}
+.lr-card:hover:not(.is-focus) {
+  opacity: 0.82;
+}
+
+/* The room's texture, with the light on top of it */
+.lr-tex {
+  position: absolute;
+  inset: 0;
+}
+.lr-tex::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 24%),
+    radial-gradient(130% 62% at 50% 112%, rgba(0, 0, 0, 0.62), transparent 62%);
+}
+/* Thin line just inside the rail so the edge looks like a frame */
+.lr-card::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 21px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  pointer-events: none;
+}
+
+.lr-face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 20px 18px 18px;
+}
+
+.lr-head {
+  padding-right: 44px; /* Leaves room for the tier badge */
+}
+.lr-where {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.lr-name {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 0.94;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+  margin-top: 5px;
+  color: var(--ar-accent-hi);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 26px var(--ar-glow);
+}
+.lr-tier {
+  position: absolute;
+  top: 18px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 15px;
+  color: var(--ink);
+  background: radial-gradient(circle at 36% 28%, var(--ar-accent-hi), var(--ar-accent) 62%, var(--ar-rail));
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 16px var(--ar-glow), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.lr-blurb {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 700;
+  opacity: 0.78;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Who's already sitting in the room, each room has its own fixed cast */
+/* It makes each new room feel new, and the quiet middle of the card is the room itself */
+.lr-cast {
+  display: grid;
+  gap: 3px;
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.lr-cast-k {
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+.lr-cast-v {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  opacity: 0.72;
+}
+
+/* The two numbers that decide it side by side, what a seat costs and what's in the pot */
+.lr-plate {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.26));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -8px 18px -12px rgba(0, 0, 0, 0.9);
+}
+.lr-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.lr-stat--prize {
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+.lr-stat-k {
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.lr-stat-v {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ar-ink);
+}
+.lr-stat--prize .lr-stat-v {
+  color: var(--ar-accent-hi);
+  text-shadow: 0 0 18px var(--ar-glow);
+}
+.lr-fine {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.5;
+}
+
+/* Play button, or the reason it's missing */
+.lr-foot {
+  margin-top: 4px;
+}
+.lr-play {
+  width: 100%;
+  font-size: 21px;
+  padding: 10px var(--s4);
+}
+.lr-foot--short,
+.lr-foot--shut {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px dashed rgba(255, 246, 224, 0.22);
+  text-align: center;
+}
+.lr-short {
+  font-size: 12px;
+  color: var(--amber);
+}
+.lr-short b {
+  font-size: 17px;
+}
+.lr-hint {
+  font-size: 10px;
+  line-height: 1.35;
+  font-weight: 700;
+  opacity: 0.55;
+}
+.lr-gate {
+  display: grid;
+  gap: 6px;
+}
+.lr-gate-k {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  opacity: 0.72;
+}
+.lr-gate-k b {
+  font-size: 12px;
+  color: var(--ar-accent-hi);
+}
+.lr-gate-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.lr-gate-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ar-accent), var(--ar-accent-hi));
+}
+.lr-gate-need {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.lr-gate-need b {
+  font-size: 14px;
+  color: var(--bone);
+}
+
+/* Arrows for the room deck, only on devices with a mouse */
+.lr-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 42px;
+  height: 42px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  border: 2px solid var(--gold-lo);
+  background: rgba(20, 12, 5, 0.82);
+  color: var(--gold-hi);
+  font-size: 26px;
+  line-height: 0;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.9);
+  transition: transform 0.16s var(--ease-pop), background-color 0.16s var(--ease-out), border-color 0.16s var(--ease-out);
+}
+.lr-arrow--prev {
+  left: -4px;
+}
+.lr-arrow--next {
+  right: -4px;
+}
+.lr-arrow:hover {
+  background: rgba(255, 210, 74, 0.18);
+  border-color: var(--gold);
+  transform: translateY(-50%) scale(1.08);
+}
+.lr-arrow:active {
+  transform: translateY(-50%) scale(0.94);
+}
+.lr-arrow:focus-visible {
+  outline: 3px solid var(--gold-hi);
+  outline-offset: 2px;
+}
+@media (hover: none) {
+  .lr-arrow {
+    display: none;
+  }
+}
+
+/* Log scaled since the unlock amounts are far apart, it fills to the player's peak net worth */
+/* The lit notch is the room on screen, tapping a notch jumps to that room */
+.lr-climb {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 0 var(--s2) var(--s2);
+}
+.lr-climb-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.lr-climb-label {
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.lr-climb-label b {
+  margin-left: 6px;
+  font-size: 14px;
+  letter-spacing: 0;
+  color: var(--gold-hi);
+}
+.lr-goal {
+  color: var(--muted);
+}
+.lr-goal b {
+  color: var(--gold-hi);
+}
+.lr-goal--done {
+  color: var(--win);
+}
+.lr-climb-track {
+  position: relative;
+  height: 7px;
+  margin-bottom: 15px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.35));
+  border: 1px solid rgba(255, 210, 74, 0.18);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+.lr-climb-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #a9781a, var(--gold) 70%, var(--gold-hi));
+  box-shadow: 0 0 14px rgba(255, 210, 74, 0.5);
+  transition: width 0.6s var(--ease-out);
+}
+.lr-climb-you {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #fff6e0, var(--gold) 60%, #c98a12);
+  box-shadow: 0 0 12px rgba(255, 210, 74, 0.8), 0 2px 6px rgba(0, 0, 0, 0.7);
+  transition: left 0.6s var(--ease-out);
+}
+.lr-notch {
+  position: absolute;
+  top: -5px;
+  width: 3px;
+  height: 17px;
+  padding: 0;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: rgba(255, 246, 224, 0.34);
+  transition: background-color 0.2s var(--ease-out), transform 0.2s var(--ease-pop);
+}
+.lr-notch::before {
+  /* Bigger invisible tap area, the notch itself is too thin to tap */
+  content: "";
+  position: absolute;
+  inset: -8px -11px -14px;
+}
+.lr-notch.is-open {
+  background: var(--win);
+}
+.lr-notch.is-here {
+  background: var(--gold-hi);
+  transform: translateX(-50%) scaleY(1.45);
+  box-shadow: 0 0 10px rgba(255, 237, 176, 0.9);
+}
+.lr-notch-v {
+  position: absolute;
+  top: 19px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.lr-notch.is-open .lr-notch-v {
+  color: rgba(70, 229, 140, 0.85);
+}
+.lr-notch.is-here .lr-notch-v {
+  color: var(--gold-hi);
+}
+.lr-notch:focus-visible {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 4px;
+}
+
+@media (max-width: 900px) {
+  /* On phones the card is sized off the screen, leaving a peek of the next room on each side */
+  /* Its height follows the width but never goes past the deck */
+  .screen--rooms {
+    --card-w: clamp(272px, 76vw, 400px);
+    --card-h: min(calc(var(--card-w) * 1.58), 74vh);
+  }
+  .lr-rail {
+    gap: 10px;
+    padding-block: 14px;
+  }
+  .lr-rail::before,
+  .lr-rail::after {
+    flex-basis: calc(50% - var(--card-w) / 2 - 5px);
+  }
+  .lr-name {
+    font-size: 28px;
+  }
+  .lr-face {
+    padding: 17px 15px 15px;
+  }
+  .lr-climb-head {
+    font-size: 10px;
+    gap: var(--s2);
+  }
+  .lr-climb-label,
+  .lr-goal {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lr-climb-label b {
+    font-size: 12px;
+  }
+  /* All the unlock labels won't fit on a phone */
+  /* Only the next unlock and the room on screen keep theirs */
+  .lr-notch-v {
+    display: none;
+  }
+  .lr-notch.is-here .lr-notch-v {
+    display: block;
+  }
+}
+
+/* Phone on its side */
+/* No portrait card fits a phone on its side, so the card turns with it */
+/* Same content in two columns, the room on the left and the cost and button on the right */
+@media (max-height: 560px) {
+  .screen--rooms {
+    --card-w: min(88vw, 520px);
+    --card-h: 100%;
+  }
+  .lr-rail {
+    padding-block: 8px;
+  }
+  .lr-face {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "head plate"
+      "head fine"
+      "cast foot";
+    align-content: center;
+    gap: 4px 16px;
+    padding: 14px 15px;
+  }
+  .lr-head {
+    grid-area: head;
+  }
+  .lr-cast {
+    grid-area: cast;
+    align-self: end;
+  }
+  .lr-plate {
+    grid-area: plate;
+    padding: 9px 12px;
+  }
+  .lr-fine {
+    grid-area: fine;
+    margin-top: 4px;
+  }
+  .lr-foot {
+    grid-area: foot;
+    align-self: end;
+  }
+  .lr-blurb {
+    display: none;
+  }
+  .lr-name {
+    font-size: 25px;
+  }
+  /* The plate takes the medallion's usual corner here */
+  .lr-head {
+    padding: 0 0 0 40px;
+  }
+  .lr-tier {
+    top: 13px;
+    right: auto;
+    left: 14px;
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+  .lr-stat-v {
+    font-size: 18px;
+  }
+  .lr-play {
+    font-size: 18px;
+    padding: 8px var(--s3);
+  }
+  .lr-foot--short,
+  .lr-foot--shut {
+    padding: 8px 10px;
+    gap: 3px;
+  }
+  .lr-climb {
+    gap: 6px;
+  }
+  .lr-climb-track {
+    margin-bottom: 13px;
+  }
+}
+/* Sideways there's width for a one row header, and the deck needs the height */
+@media (max-height: 560px) and (min-width: 620px) {
+  .al-top--ladder {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "back title purse";
+  }
+  .al-top--ladder .al-purse {
+    grid-area: purse;
+    justify-content: flex-end;
+  }
+}
+
+/* Each room's look, drawn only with gradients */
+/* They use the colours each room already has, so a colour change carries over */
+
+/* "The Back Alley", a street lamp on wet asphalt */
+.lr-card[data-room="alley"] .lr-tex {
+  background: radial-gradient(62% 46% at 24% -6%, rgba(255, 155, 33, 0.52), transparent 72%),
+    repeating-linear-gradient(118deg, rgba(0, 0, 0, 0.3) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 15px);
+}
+
+/* "The Corner Store", a strip light and cheap floor tiles */
+.lr-card[data-room="corner"] .lr-tex {
+  background: linear-gradient(180deg, rgba(255, 245, 214, 0.2), transparent 16%),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.24) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.24) 0 1px, transparent 1px 28px),
+    radial-gradient(80% 30% at 50% 0%, rgba(255, 217, 138, 0.18), transparent 70%);
+}
+
+/* "The Local Pub", a brass lamp over varnished wood */
+.lr-card[data-room="pub"] .lr-tex {
+  background: radial-gradient(66% 34% at 50% -4%, rgba(232, 180, 92, 0.34), transparent 68%),
+    repeating-linear-gradient(87deg, rgba(0, 0, 0, 0.2) 0 3px, rgba(255, 255, 255, 0.022) 3px 11px),
+    radial-gradient(120% 70% at 50% 120%, rgba(0, 0, 0, 0.4), transparent 60%);
+}
+
+/* "The Snooker Hall", two lamps over green baize */
+.lr-card[data-room="snooker"] .lr-tex {
+  background: radial-gradient(36% 24% at 27% 18%, rgba(244, 221, 148, 0.4), transparent 72%),
+    radial-gradient(36% 24% at 73% 52%, rgba(244, 221, 148, 0.26), transparent 72%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.06) 0 2px, transparent 2px 5px);
+}
+
+/* "The Underground Club", two neon tubes and the lines of a bad screen */
+.lr-card[data-room="club"] .lr-tex {
+  background: radial-gradient(52% 34% at 16% 6%, rgba(255, 45, 149, 0.46), transparent 70%),
+    radial-gradient(52% 34% at 88% 80%, rgba(34, 231, 255, 0.36), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0 1px, transparent 1px 3px);
+}
+.lr-card[data-room="club"].is-focus {
+  box-shadow: 0 30px 64px -26px rgba(0, 0, 0, 1), 0 0 0 2px #ff2d95, 0 0 40px -6px rgba(255, 45, 149, 0.75),
+    0 0 70px -10px rgba(34, 231, 255, 0.5);
+}
+
+/* "The Speakeasy", an art deco sunburst behind the panel */
+.lr-card[data-room="speakeasy"] .lr-tex {
+  background: repeating-conic-gradient(from 92deg at 50% 124%, rgba(230, 195, 92, 0.1) 0 4deg, transparent 4deg 15deg),
+    radial-gradient(58% 40% at 50% 116%, rgba(230, 195, 92, 0.26), transparent 72%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 40%);
+}
+
+/* "The VIP Casino", gold spokes over a lit table */
+.lr-card[data-room="casino"] .lr-tex {
+  background: repeating-conic-gradient(from 0deg at 50% 24%, rgba(255, 210, 74, 0.055) 0 3deg, transparent 3deg 12deg),
+    radial-gradient(56% 44% at 50% 24%, rgba(255, 237, 176, 0.2), transparent 66%),
+    radial-gradient(120% 70% at 50% 118%, rgba(0, 0, 0, 0.45), transparent 62%);
+}
+
+/* "The Penthouse", the city through tall windows */
+.lr-card[data-room="penthouse"] .lr-tex {
+  background: linear-gradient(0deg, rgba(127, 191, 255, 0.2), transparent 46%),
+    repeating-linear-gradient(90deg, rgba(207, 230, 255, 0.07) 0 1px, transparent 1px 38px),
+    repeating-linear-gradient(0deg, rgba(207, 230, 255, 0.06) 0 1px, transparent 1px 52px),
+    radial-gradient(70% 30% at 50% 100%, rgba(127, 191, 255, 0.22), transparent 70%);
+}
+
+/* "The Monaco Yacht", brushed gold and a sunset on the water */
+.lr-card[data-room="yacht"] .lr-tex {
+  background: linear-gradient(112deg, transparent 26%, rgba(255, 226, 168, 0.26) 44%, rgba(255, 255, 255, 0.34) 49.5%,
+      rgba(255, 226, 168, 0.24) 55%, transparent 74%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 7px),
+    radial-gradient(80% 34% at 50% 104%, rgba(255, 122, 77, 0.36), transparent 72%);
+}
+
+/* "The Private Island", light rippling on shallow turquoise water */
+.lr-card[data-room="island"] .lr-tex {
+  background: radial-gradient(30% 16% at 22% 78%, rgba(255, 255, 255, 0.16), transparent 72%),
+    radial-gradient(24% 13% at 64% 88%, rgba(255, 255, 255, 0.13), transparent 72%),
+    radial-gradient(20% 11% at 40% 94%, rgba(255, 255, 255, 0.1), transparent 72%),
+    repeating-linear-gradient(76deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 14px),
+    radial-gradient(70% 34% at 50% -6%, rgba(255, 208, 176, 0.2), transparent 70%);
+}
+
+/* "The Sky Lounge", clouds passing under the wing */
+.lr-card[data-room="sky"] .lr-tex {
+  background: linear-gradient(180deg, rgba(200, 139, 255, 0.34), transparent 52%),
+    radial-gradient(64% 9% at 34% 66%, rgba(255, 255, 255, 0.13), transparent 74%),
+    radial-gradient(52% 7% at 70% 78%, rgba(255, 255, 255, 0.1), transparent 74%),
+    radial-gradient(90% 20% at 50% 108%, rgba(230, 201, 255, 0.16), transparent 70%);
+}
+
+/* "The Vault", a heavy steel door lit from one side */
+.lr-card[data-room="vault"] .lr-tex {
+  background: repeating-radial-gradient(circle at 50% 40%, rgba(255, 210, 74, 0.1) 0 2px, transparent 2px 19px),
+    conic-gradient(from 200deg at 50% 40%, rgba(255, 255, 255, 0.075), transparent 22%, rgba(255, 255, 255, 0.055) 50%,
+      transparent 76%, rgba(255, 255, 255, 0.07)),
+    radial-gradient(46% 34% at 50% 40%, rgba(255, 210, 74, 0.16), transparent 70%);
+}
+
+/* Currency icons, a green $ for money and a casino chip for chips */
+.cur { display: inline-grid; place-items: center; width: 1.2em; height: 1.2em; border-radius: 50%; font-size: 0.82em; font-weight: 900; line-height: 1; vertical-align: -0.18em; margin-right: 3px; flex: 0 0 auto; }
+.cur--money { background: linear-gradient(160deg, #39d353, #1a7a30); color: #04250f; border: 1px solid #0f5a20; }
+.cur--chips { background: radial-gradient(circle at 35% 30%, #ff6b8a, #a3103a); border: 2px dashed rgba(255, 255, 255, 0.6); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
+/* Single player money badge, used on the ladder purse and the match bar */
+.cash-badge { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: linear-gradient(160deg, #39d353, #1a7a30); color: #04250f; font-family: var(--font-num); font-size: 0.8em; border: 1.5px solid #0f5a20; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 3px rgba(0, 0, 0, 0.5); vertical-align: -0.3em; margin-right: 5px; }
+.chip-amount--cash { color: #7ef29a; }
+
+.card[data-skin="holo"] { background: linear-gradient(135deg, #7af7ff, #c78bff 45%, #ff9ad2 75%, #ffe08a); border-color: #c9a8ff; }
+.card[data-skin="holo"] .face { color: #2a1050; text-shadow: 0 0 6px rgba(255, 255, 255, 0.6); }
+.card[data-skin="holo"] .corner { color: #7a2aa0; }
+.card[data-skin="obsidian"] { background: linear-gradient(160deg, #201c16, #000); border-color: #8a6a2a; box-shadow: var(--shadow-card), 0 0 10px -3px rgba(255, 210, 74, 0.5); }
+.card[data-skin="obsidian"] .face { color: #ffd24a; }
+.card[data-skin="obsidian"] .corner { color: #c99a3a; }
+
+.card-back[data-back="crosshatch"], .shoe-pile[data-back="crosshatch"] { background: repeating-linear-gradient(45deg, #155a3a 0 4px, #0a3320 4px 8px); }
+.card-back[data-back="damask"], .shoe-pile[data-back="damask"] { background: radial-gradient(circle at 50% 35%, #9a2030, #4a0f18); }
+.card-back[data-back="circuit"], .shoe-pile[data-back="circuit"] { background: linear-gradient(160deg, #0a2018, #04100a); box-shadow: inset 0 0 0 1px rgba(46, 231, 180, 0.3), inset 0 0 12px rgba(46, 231, 180, 0.12); }
+.card-back[data-back="artdeco"], .shoe-pile[data-back="artdeco"] { background: repeating-linear-gradient(90deg, #12233f 0 5px, #1a2e52 5px 7px); }
+.card-back[data-back="royal"], .shoe-pile[data-back="royal"] { background: radial-gradient(circle at 50% 40%, #2a58c8, #0e2160); }
+.shoe-pile[data-back="royal"] { border-color: #3a6ad8; }
+.shoe-pile[data-back="circuit"] { border-color: #1f8a6a; }
+
+.shop-wallets { display: flex; gap: 8px; flex-wrap: wrap; }
+.shop-bal--money b { color: #7ef29a; }
+.shop-bal--chips b { color: var(--ice); }
+.felt-swatch { display: block; width: 66px; height: 46px; border-radius: 8px; border: 2px solid var(--rail-hi); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.45); }
+.emote-preview { display: flex; gap: 5px; font-size: 22px; line-height: 1; }
+.shop-prem { font-size: 9px; font-weight: 900; letter-spacing: 0.08em; color: #2a1a02; background: linear-gradient(160deg, #ffe08a, #c99a20); padding: 1px 5px; border-radius: 5px; vertical-align: 2px; }
+.shop-price { display: inline-flex; align-items: center; gap: 4px; }

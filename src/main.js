@@ -3,6 +3,7 @@
 import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
 import { morph } from "./ui/morph.js";
+import { mountLadderDeck } from "./ui/arenaSelect.js";
 import { startCoach, place as placeCoach, coachRunning } from "./ui/coach.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
@@ -19,7 +20,8 @@ import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/hou
 import { ARENAS, arenaById, ARENA_ROUNDS } from "./engine/arenas.js";
 import { pveSummary, setChips, getChips, recordHand, restake, peakNetWorth, roomsOpenedBetween, PVE_RESTAKE } from "./engine/pveWallet.js";
 import { PERSONALITIES } from "./engine/ai.js";
-import { buy as buyCosmetic, equip as equipCosmetic, cardSkinById, avatarById } from "./engine/cosmetics.js";
+import { buy as buyCosmetic, equip as equipCosmetic } from "./engine/cosmetics.js";
+import { itemById, MONEY } from "./engine/cosmeticsData.js";
 import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
 import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
@@ -241,6 +243,7 @@ function render() {
   })();
   morph(root, renderApp(view));
   placeRadio();
+  mountLadderDeck(); // The ladder's room list needs its scroll set up again after a patch
   if (coachRunning()) placeCoach(); // What it points at moves as cards are dealt
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
@@ -1616,21 +1619,24 @@ function closeShop() {
   sfx("click");
   render();
 }
-function shopBuy(kind, id) {
-  const res = buyCosmetic(kind, id);
+async function shopBuy(id) {
+  const res = await buyCosmetic(id);
   if (res.ok) {
     sfx("chips");
-    const item = kind === "card" ? cardSkinById(id) : avatarById(id);
-    toast(`${item.name} unlocked, equipped!`);
-    syncPve();
+    toast(`${itemById(id).name} unlocked, equipped!`);
+    if (res.cur === MONEY) syncPve();
+    else if (typeof res.balance === "number") view.soloBalance = res.balance;
   } else if (res.reason === "poor") {
     sfx("buzzer");
-    toast(`Not enough chips, ${res.short.toLocaleString()} short.`);
+    const isMoney = res.cur === MONEY;
+    toast(`Not enough ${isMoney ? "Money" : "Chips"}, ${isMoney ? "$" : ""}${(res.short || 0).toLocaleString()} short.`);
+  } else if (res.reason !== "owned") {
+    toast("Couldn't complete that purchase, try again.");
   }
   render();
 }
-function shopEquip(kind, id) {
-  equipCosmetic(kind, id);
+function shopEquip(id) {
+  equipCosmetic(id);
   sfx("click");
   render();
 }
@@ -1726,7 +1732,7 @@ function arenaRestake() {
   restake();
   syncPve();
   sfx("chips");
-  toast(`+${PVE_RESTAKE} practice chips, on the house`);
+  toast(`+$${PVE_RESTAKE} street money, on the house`);
   render();
 }
 
@@ -1867,8 +1873,8 @@ root.addEventListener("click", (e) => {
   if (el.dataset.action === "emote") return sendEmote(el.dataset.e);
   if (el.dataset.action === "house-bet") return houseBet(el.dataset.v);
   if (el.dataset.action === "arena-sit") return arenaSit.call({ id: el.dataset.id });
-  if (el.dataset.action === "shop-buy") return shopBuy(el.dataset.kind, el.dataset.id);
-  if (el.dataset.action === "shop-equip") return shopEquip(el.dataset.kind, el.dataset.id);
+  if (el.dataset.action === "shop-buy") return shopBuy(el.dataset.id);
+  if (el.dataset.action === "shop-equip") return shopEquip(el.dataset.id);
   if (el.dataset.action === "lb-tab") return lbTab(el.dataset.tab);
   const fn = ACTIONS[el.dataset.action];
   if (fn) fn();

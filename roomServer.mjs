@@ -4,8 +4,9 @@
 import { WebSocketServer } from "ws";
 import { createServer as createGame } from "./src/server/mockServer.js";
 import { PERSONALITIES } from "./src/engine/ai.js";
-import { aiReactions, reactionDelayMs, PLAYER_EMOTES } from "./src/engine/aiChatter.js";
+import { aiReactions, reactionDelayMs } from "./src/engine/aiChatter.js";
 import { botHandle } from "./src/engine/botNames.js";
+import { ALL_EMOTES } from "./src/engine/cosmeticsData.js";
 import { trackMultiplayerGame, setAnalyticsSink, countersFor } from "./src/engine/analytics.js";
 import { PROTOCOL_VERSION } from "./src/engine/protocol.js";
 import { createStore } from "./store.mjs";
@@ -998,7 +999,7 @@ async function handle(ws, msg) {
       // A short bubble over the sender's seat, passed on and never saved
       const now = Date.now();
       if (ws.lastEmoteAt && now - ws.lastEmoteAt < 1200) return;
-      if (!PLAYER_EMOTES.includes(msg.emoji)) return;
+      if (!ALL_EMOTES.includes(msg.emoji)) return; // Any base or pack emote, the game decides which ones you see
       const code = ws.roomCode;
       if (!code) return;
       ws.lastEmoteAt = now;

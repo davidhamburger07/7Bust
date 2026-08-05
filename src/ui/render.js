@@ -8,17 +8,24 @@ import { renderArenaSelect, pveChipStack } from "./arenaSelect.js";
 import { renderLeaderboard } from "./leaderboard.js";
 import { matchSkin } from "../engine/arenas.js";
 import { renderShop } from "./shop.js";
-import { selectedCard, selectedAvatar, avatarById } from "../engine/cosmetics.js";
+import { selectedFace, selectedBack, selectedAvatar, selectedFelt, ownedEmotes } from "../engine/cosmetics.js";
+import { avatarById, feltById } from "../engine/cosmeticsData.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
 
 // Cosmetics are loaded once per render, not for every card or seat
 let SKIN = "classic";
+let BACK = "classic";
 let AVATAR = "chip";
+let FELT = "default";
+let EMOTES = null;
 function refreshCosmetics() {
-  SKIN = selectedCard();
+  SKIN = selectedFace();
+  BACK = selectedBack();
   AVATAR = selectedAvatar();
+  FELT = selectedFelt();
+  EMOTES = ownedEmotes();
 }
 // You get your own avatar, house players get one from their name so they always look the same
 const SEAT_EMOJI = ["🎩", "🦊", "🐯", "🐼", "🦉", "🐺", "🐢", "🦈", "🐙", "🦁", "🐸", "🦅", "🐷", "🐨"];
@@ -34,6 +41,11 @@ function avatarBadge(isYou, name, cls = "") {
   }
   const e = SEAT_EMOJI[hashName(name) % SEAT_EMOJI.length];
   return `<span class="avatar ${cls} avatar--npc"><span class="avatar-emoji">${e}</span></span>`;
+}
+// A felt cosmetic sets the felt and rail colours on the online table
+function feltVars(id) {
+  const f = feltById(id);
+  return f && f.vars ? Object.entries(f.vars).map(([k, v]) => `${k}:${v}`).join(";") : "";
 }
 
 function fmtTime(ms) {
@@ -68,7 +80,7 @@ function dupCard(value, { mini = false } = {}) {
 // Online the deck lives on the server, so the card is dealt face down straight away
 // and flips when the server says what it is
 function pendingCard() {
-  return `<div class="card card--pending" aria-label="Dealing"><span class="card-back"></span></div>`;
+  return `<div class="card card--pending" aria-label="Dealing"><span class="card-back" data-back="${BACK}"></span></div>`;
 }
 function handCards(p, { mini = false, newSeat = -1, pending = false } = {}) {
   const heat = heatTriple(p.uniqueCount);
@@ -96,7 +108,7 @@ function deckPile(s) {
   sh.push("var(--shadow-card)");
   return `
   <div class="shoe">
-    <div class="shoe-pile" style="box-shadow:${sh.join(",")}"></div>
+    <div class="shoe-pile" data-back="${BACK}" style="box-shadow:${sh.join(",")}"></div>
     <div class="shoe-labels">
       <span>Deck <b class="num">${s.shoe.remaining}</b></span>
       <span class="muted">out <b class="num">${s.shoe.discard}</b></span>
@@ -249,7 +261,7 @@ export function chatLines(list) {
 }
 
 function chatPanel(view) {
-  const emotes = PLAYER_EMOTES.map((e) => `<button class="emote-btn" data-action="emote" data-e="${e}" aria-label="Send ${e}">${e}</button>`).join("");
+  const emotes = (EMOTES || PLAYER_EMOTES).map((e) => `<button class="emote-btn" data-action="emote" data-e="${e}" aria-label="Send ${e}">${e}</button>`).join("");
   return `
   <div class="chatpanel" id="chatpanel">
     <div class="logpanel-title">All chat</div>
@@ -374,7 +386,7 @@ export function renderLobby(view) {
       <button class="btn btn--play btn--seat" data-action="start">TAKE A SEAT<span class="sub">free practice · 9 rounds at a full table</span></button>
       <button class="btn btn--online" data-action="mp-open">PLAY ONLINE<span class="sub">play your chips against real people</span></button>
       ${freeChips(view)}
-      <button class="btn btn--shop" data-action="shop-open">THE SHOP<span class="sub">card skins &amp; avatars for your practice chips</span></button>
+      <button class="btn btn--shop" data-action="shop-open">THE SHOP<span class="sub">skins, backs, felts &amp; emotes, spend Money or Chips</span></button>
       <div class="lobby-foot">
         <a class="link" href="#" data-action="leaderboard">Standings</a><span>·</span>
         <a class="link" href="#" data-action="rules">How to play</a><span>·</span>
@@ -393,14 +405,17 @@ export function renderMatch(view) {
   const newSeat = s.lastEvent ? s.lastEvent.seat : -1;
   const nextSeat = upNext(s);
   const opps = s.players.filter((p) => p.seat !== s.you).map((p) => seat(p, newSeat, nextSeat)).join("");
+  // Ladder games use their room's colour, online tables use the player's felt
+  // Solo "Take-a-Seat" stays green
+  const feltStyle = view.ladderGame ? matchSkin(view.ladderGame.arena) : online ? feltVars(FELT) : "";
   return `
-  <div class="screen screen--match${s.players.length >= 5 ? " crowded" : ""}"${view.ladderGame ? ` style="${matchSkin(view.ladderGame.arena)}"` : ""}>
+  <div class="screen screen--match${s.players.length >= 5 ? " crowded" : ""}"${feltStyle ? ` style="${feltStyle}"` : ""}>
     <div class="matchbar">
       <span class="round-pill">Round <b class="num">${s.round.number}</b>/<span class="num">${s.round.total}</span></span>
       <span id="radio-slot" class="radio-slot"></span>
       <span class="dealer-note">${s.players[s.dealer].name} deals</span>
       <span class="bar-right">
-        <span class="balance-chip">${chipStack(view.ladderGame ? (view.pve ? view.pve.chips : 0) : view.soloBalance || 0)}</span>
+        <span class="balance-chip">${view.ladderGame ? pveChipStack(view.pve ? view.pve.chips : 0) : chipStack(view.soloBalance || 0)}</span>
         ${online ? `<span class="room-chip">ROOM <b>${online.code}</b></span>` : ""}
         ${view.ladderGame ? `<span class="room-chip">${view.ladderGame.arena.name.toUpperCase()}</span>` : ""}
         <span class="clock">◔ <span class="num" data-clock>${view.clockText || "00:00"}</span></span>
@@ -417,7 +432,7 @@ export function renderMatch(view) {
       ${arc()}
       ${pauseBanner(view)}
       <div class="opponents">${opps}</div>
-      <div class="dealer-zone">${deckPile(s)}${s.tournament ? `<div class="pot-chip">POT <b class="num">${s.tournament.pot}</b> · pays <b class="num">${s.tournament.prizePool}</b></div>` : ""}</div>
+      <div class="dealer-zone">${deckPile(s)}${s.tournament ? `<div class="pot-chip">POT <b class="num">${view.ladderGame ? "$" : ""}${s.tournament.pot}</b> · pays <b class="num">${view.ladderGame ? "$" : ""}${s.tournament.prizePool}</b></div>` : ""}</div>
       ${youSeat(me, view, nextSeat)}
     </div>
 
@@ -467,13 +482,13 @@ export function renderOverlay(view) {
       const wager = view.ladderGame.wager || 0;
       const payout = t.youPayout || 0;
       const net = t.youNet != null ? t.youNet : payout - wager;
-      const netTxt = net > 0 ? `<span class="pos">+${net.toLocaleString()}</span>` : net < 0 ? `<span class="neg">${net.toLocaleString()}</span>` : "±0";
+      const netTxt = net > 0 ? `<span class="pos">+$${net.toLocaleString()}</span>` : net < 0 ? `<span class="neg">-$${Math.abs(net).toLocaleString()}</span>` : "±$0";
       return `
       <div class="overlay"><div class="result result--win">
         <div class="kicker">${view.ladderGame.arena.name}</div>
         <h2 class="${youWon ? "big-win" : ""}">${youWon ? "YOU TAKE THE POT!" : winner.name.toUpperCase() + " TAKES IT"}</h2>
         ${scoreboard(s)}
-        <div class="ladder-ledger">Buy-in <b class="num">${wager.toLocaleString()}</b> · won <b class="num">${payout.toLocaleString()}</b> · net ${netTxt}</div>
+        <div class="ladder-ledger">Buy-in <b class="num">$${wager.toLocaleString()}</b> · won <b class="num">$${payout.toLocaleString()}</b> · net ${netTxt}</div>
         <button class="btn btn--play" data-action="ladder-again">PLAY AGAIN<span class="sub">${wager.toLocaleString()} buy-in</span></button>
         <button class="btn btn--online" data-action="ladder-exit">BACK TO THE LADDER</button>
       </div></div>`;

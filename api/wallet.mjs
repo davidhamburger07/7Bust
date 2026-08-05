@@ -4,6 +4,10 @@ import { createStore } from "../store.mjs";
 import { resolveIdentity } from "../src/server/identity.mjs";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "../src/engine/rewards.js";
 import { trackReward } from "../src/engine/analytics.js";
+import { itemById, CHIPS } from "../src/engine/cosmeticsData.js";
+
+// Owned chip cosmetics are saved as a comma separated list of ids
+const cosList = (w) => (w && w.cos ? String(w.cos).split(",").filter(Boolean) : []);
 
 const STARTING_BALANCE = 1000;
 const MAX_AD_GRANTS_PER_DAY = 20; // We can't check the ad really played, so cap the payout
@@ -45,7 +49,20 @@ export default async function handler(req, res) {
 
     switch (body.action) {
       case "balance":
-        return res.status(200).json({ ok: true, balance: w.balance, username: user.username, newWallet: created, dailyClaimed: w.daily === day });
+        return res.status(200).json({ ok: true, balance: w.balance, username: user.username, newWallet: created, dailyClaimed: w.daily === day, cos: cosList(w) });
+
+      case "purchase": {
+        // Buys a cosmetic with chips. The price comes from the catalogue here, never the game
+        const item = itemById(String(body.item || ""));
+        if (!item || item.cur !== CHIPS) return res.status(400).json({ ok: false, error: "not a chips item" });
+        const owned = cosList(w);
+        if (owned.includes(item.id)) return res.status(200).json({ ok: true, balance: w.balance, owned, already: true });
+        const balance = await store.walletDebit(key, item.price);
+        if (balance === null) return res.status(200).json({ ok: false, reason: "poor", balance: w.balance, short: item.price - w.balance });
+        const next = [...owned, item.id];
+        await store.walletSetField(key, "cos", next.join(","));
+        return res.status(200).json({ ok: true, balance, owned: next });
+      }
 
       case "daily": {
         if (w.daily === day) return res.status(200).json({ ok: true, balance: w.balance, granted: 0, reason: "already-claimed" });

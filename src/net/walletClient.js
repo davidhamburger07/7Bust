@@ -12,6 +12,7 @@ let mode = "local"; // Local for guests, server for signed in players
 let balance = STARTING_BALANCE;
 let username = null;
 let dailyClaimed = null; // Whether today's bonus is taken, from the server. Null for guests
+let serverCos = []; // Empty for guests
 
 const readLocal = () => {
   try {
@@ -79,6 +80,7 @@ export async function initWallet() {
   balance = res.balance;
   username = res.username || null;
   dailyClaimed = !!res.dailyClaimed;
+  serverCos = Array.isArray(res.cos) ? res.cos : [];
   // First time this account has played, move the guest's chips over
   if (res.newWallet && local > STARTING_BALANCE) {
     const m = await post("migrate", { amount: local });
@@ -134,6 +136,31 @@ export async function refreshBalance() {
   if (res) {
     balance = res.balance;
     dailyClaimed = !!res.dailyClaimed;
+    if (Array.isArray(res.cos)) serverCos = res.cos;
   }
   return balance;
+}
+
+// Comes from the server, chips cosmetics can't be given out locally
+export const walletCosmetics = () => serverCos;
+
+// The server holds the price and takes the chips, we only send the item
+export async function purchaseWithChips(itemId) {
+  const cred = await walletCredential();
+  if (!cred) return { ok: false, reason: "guest" }; // No account, the caller uses local chips
+  try {
+    const res = await fetch(`${backendHttpOrigin()}/api/wallet`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ platform: cred.platform, token: cred.token, action: "purchase", item: itemId }),
+    });
+    const j = await res.json();
+    if (j && j.ok) {
+      if (typeof j.balance === "number") balance = j.balance;
+      if (Array.isArray(j.owned)) serverCos = j.owned;
+    }
+    return j || { ok: false, reason: "network" };
+  } catch {
+    return { ok: false, reason: "network" };
+  }
 }
