@@ -10,6 +10,7 @@ import { matchSkin } from "../engine/arenas.js";
 import { renderShop } from "./shop.js";
 import { selectedFace, selectedBack, selectedAvatar, selectedFelt, ownedEmotes } from "../engine/cosmetics.js";
 import { avatarById, feltById } from "../engine/cosmeticsData.js";
+import { getChips as getMoney } from "../engine/pveWallet.js";
 
 const TARGET = 7;
 const escAttr = (s) => String(s).replace(/"/g, "&quot;");
@@ -298,7 +299,18 @@ function walletCard(view) {
         : `<div class="wallet-note">Saved in this browser.</div>`;
   return `
   <div class="buyin">
-    <div class="buyin-head"><span class="label">Your chips</span><span class="balance">${chipStack(view.soloBalance || 0)}</span></div>
+    <div class="wallet-pair">
+      <div class="wallet-bal wallet-bal--money">
+        <span class="wallet-bal-k"><span class="cur cur--money">$</span> Money</span>
+        <span class="wallet-bal-v num">$${getMoney().toLocaleString()}</span>
+        <span class="wallet-bal-note">single-player street games</span>
+      </div>
+      <div class="wallet-bal wallet-bal--chips">
+        <span class="wallet-bal-k"><span class="cur cur--chips" aria-hidden="true"></span> Chips</span>
+        <span class="wallet-bal-v num">${(view.soloBalance || 0).toLocaleString()}</span>
+        <span class="wallet-bal-note">official multiplayer casino</span>
+      </div>
+    </div>
     ${note}
   </div>`;
 }

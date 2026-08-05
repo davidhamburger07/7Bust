@@ -5789,3 +5789,14 @@
 .emote-preview { display: flex; gap: 5px; font-size: 22px; line-height: 1; }
 .shop-prem { font-size: 9px; font-weight: 900; letter-spacing: 0.08em; color: #2a1a02; background: linear-gradient(160deg, #ffe08a, #c99a20); padding: 1px 5px; border-radius: 5px; vertical-align: 2px; }
 .shop-price { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Money and chips wallets side by side on the home screen */
+.wallet-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.wallet-bal { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--s3) var(--s2); border-radius: 12px; background: rgba(0, 0, 0, 0.28); border: 1.5px solid var(--rail-hi); }
+.wallet-bal-k { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); display: inline-flex; align-items: center; gap: 4px; }
+.wallet-bal-v { font-family: var(--font-num); font-size: 22px; line-height: 1.05; }
+.wallet-bal-note { font-size: 10px; color: var(--faint); font-weight: 700; text-align: center; }
+.wallet-bal--money { border-color: rgba(57, 211, 83, 0.4); }
+.wallet-bal--money .wallet-bal-v { color: #7ef29a; }
+.wallet-bal--chips { border-color: rgba(111, 210, 255, 0.35); }
+.wallet-bal--chips .wallet-bal-v { color: var(--ice); }
