@@ -208,6 +208,7 @@ export function renderHouseTable(view) {
         <span class="hs-stack">STACK <b class="num">${h.stack}</b></span>
         <span class="clock">◔ <span class="num" data-clock>${view.clockText || "00:00"}</span></span>
         <button class="icon-btn" data-action="house-rules" aria-label="How the house table works" title="How the house table works">?</button>
+        <button class="icon-btn" data-action="settings" aria-label="Settings" title="Settings">⚙</button>
         <button class="exit-btn" data-action="house-exit" aria-label="Leave the house table">EXIT</button>
       </span>
     </div>

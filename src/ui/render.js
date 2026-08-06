@@ -442,6 +442,7 @@ export function renderMatch(view) {
         <span class="clock">◔ <span class="num" data-clock>${view.clockText || "00:00"}</span></span>
         ${view.mode === "online" && !view.pauseUsed ? `<button class="icon-btn" data-action="pause" aria-label="Ask for a pause" title="Ask for a 2-minute pause">⏸</button>` : ""}
         <button class="icon-btn${view.hintRules ? " pulse" : ""}" data-action="rules" aria-label="How to play" title="How to play">?</button>
+        <button class="icon-btn" data-action="settings" aria-label="Settings" title="Settings">⚙</button>
         <button class="exit-btn" data-action="exit" aria-label="Exit to the main menu">EXIT</button>
       </span>
     </div>
