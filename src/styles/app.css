@@ -914,7 +914,9 @@
   gap: 4px;
   align-content: start;
 }
-.lb-row {
+/* Scoped to the in match leaderboard because the standings screen reuses these classes */
+/* It uses a different grid and no name colour, and coming later it was hiding the names */
+.leaderpanel .lb-row {
   display: grid;
   grid-template-columns: 26px 1fr auto auto;
   gap: var(--s2);
@@ -923,11 +925,11 @@
   border-radius: 10px;
   font-size: 14px;
 }
-.lb-row.you {
+.leaderpanel .lb-row.you {
   background: rgba(255, 210, 74, 0.12);
   box-shadow: inset 0 0 0 1.5px rgba(255, 210, 74, 0.35);
 }
-.lb-rank {
+.leaderpanel .lb-rank {
   width: 24px;
   height: 24px;
   display: grid;
@@ -937,34 +939,38 @@
   background: rgba(255, 255, 255, 0.08);
   color: var(--muted);
 }
-.lb-rank.gold {
+.leaderpanel .lb-rank.gold {
   background: radial-gradient(circle at 35% 30%, #ffe89a, #d09a1a);
   color: #4a3208;
 }
-.lb-rank.silver {
+.leaderpanel .lb-rank.silver {
   background: radial-gradient(circle at 35% 30%, #f3f3f3, #9aa0ad);
   color: #2b2f36;
 }
-.lb-rank.bronze {
+.leaderpanel .lb-rank.bronze {
   background: radial-gradient(circle at 35% 30%, #ffc9a0, #a9642a);
   color: #3d2008;
 }
-.lb-name {
+.leaderpanel .lb-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   font-weight: 900;
   color: var(--cream);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lb-state {
+.leaderpanel .lb-state {
   font-family: var(--font-num);
   font-size: 11px;
   color: var(--win);
 }
-.lb-state.bust {
+.leaderpanel .lb-state.bust {
   color: var(--bust);
 }
-.lb-score {
+.leaderpanel .lb-score {
   font-size: 16px;
   color: var(--gold-hi);
   text-align: right;
@@ -3599,16 +3605,16 @@
   .logpanel-title {
     font-size: 12px;
   }
-  .lb-row {
+  .leaderpanel .lb-row {
     font-size: 15px;
     grid-template-columns: 30px 1fr auto auto;
   }
-  .lb-rank {
+  .leaderpanel .lb-rank {
     width: 27px;
     height: 27px;
     font-size: 13px;
   }
-  .lb-score {
+  .leaderpanel .lb-score {
     font-size: 18px;
   }
   .emote-btn {
