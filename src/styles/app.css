@@ -5762,7 +5762,8 @@
 /* Currency icons, a green $ for money and a casino chip for chips */
 .cur { display: inline-grid; place-items: center; width: 1.2em; height: 1.2em; border-radius: 50%; font-size: 0.82em; font-weight: 900; line-height: 1; vertical-align: -0.18em; margin-right: 3px; flex: 0 0 auto; }
 .cur--money { background: linear-gradient(160deg, #39d353, #1a7a30); color: #04250f; border: 1px solid #0f5a20; }
-.cur--chips { background: radial-gradient(circle at 35% 30%, #ff6b8a, #a3103a); border: 2px dashed rgba(255, 255, 255, 0.6); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
+/* Same gold chip as on the online balance */
+.cur--chips { background: radial-gradient(circle at 35% 30%, #ffe89a, #b8860b); border: 2px dashed rgba(255, 255, 255, 0.7); box-shadow: var(--shadow-card); }
 /* Single player money badge, used on the ladder purse and the match bar */
 .cash-badge { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: linear-gradient(160deg, #39d353, #1a7a30); color: #04250f; font-family: var(--font-num); font-size: 0.8em; border: 1.5px solid #0f5a20; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 3px rgba(0, 0, 0, 0.5); vertical-align: -0.3em; margin-right: 5px; }
 .chip-amount--cash { color: #7ef29a; }
@@ -5800,3 +5801,27 @@
 .wallet-bal--money .wallet-bal-v { color: #7ef29a; }
 .wallet-bal--chips { border-color: rgba(111, 210, 255, 0.35); }
 .wallet-bal--chips .wallet-bal-v { color: var(--ice); }
+
+.card[data-skin="amber"] { background: linear-gradient(160deg, #e0a840, #8a5e14); border-color: #a3781a; }
+.card[data-skin="amber"] .face { color: #3a2606; }
+.card[data-skin="amber"] .corner { color: #7a4a10; }
+.card[data-skin="frost"] { background: linear-gradient(160deg, #eaf6ff, #b8d4e8); border-color: #8fb8d6; }
+.card[data-skin="frost"] .face { color: #1a3a52; }
+.card[data-skin="frost"] .corner { color: #2a6a9a; }
+.card[data-skin="jade"] { background: linear-gradient(160deg, #1f8a5a, #0c3a26); border-color: #2aa06a; }
+.card[data-skin="jade"] .face { color: #dbffe9; }
+.card[data-skin="jade"] .corner { color: #9dffc0; }
+.card[data-skin="blood"] { background: linear-gradient(160deg, #5a0a12, #1a0305); border-color: #8a1a24; }
+.card[data-skin="blood"] .face { color: #ffb3ba; }
+.card[data-skin="blood"] .corner { color: #ff6b7a; }
+.card[data-skin="royalface"] { background: linear-gradient(160deg, #4a2088, #1e0a44); border-color: #ffd24a; }
+.card[data-skin="royalface"] .face { color: #ffe08a; }
+.card[data-skin="royalface"] .corner { color: #c99aff; }
+
+.card-back[data-back="waves"], .shoe-pile[data-back="waves"] { background: repeating-linear-gradient(45deg, #0e6a7a 0 4px, #083a44 4px 8px); }
+.card-back[data-back="honeycomb"], .shoe-pile[data-back="honeycomb"] { background: radial-gradient(circle at 50% 40%, #6a5210, #241a08); }
+.card-back[data-back="galaxy"], .shoe-pile[data-back="galaxy"] { background: radial-gradient(circle at 40% 35%, #3a2a6a, #0a0518); }
+.card-back[data-back="vipback"], .shoe-pile[data-back="vipback"] { background: linear-gradient(160deg, #1a1712, #000); }
+.shoe-pile[data-back="vipback"] { border-color: var(--gold); }
+.shoe-pile[data-back="galaxy"] { border-color: #4a3a8a; }
+.shoe-pile[data-back="waves"] { border-color: #1a7a8a; }

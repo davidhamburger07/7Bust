@@ -3,8 +3,23 @@
 
 import { ARENAS } from "../engine/arenas.js";
 import { pveChipStack } from "./arenaSelect.js";
+import { selectedAvatar } from "../engine/cosmetics.js";
+import { avatarById } from "../engine/cosmeticsData.js";
 
 const money = (n) => Math.round(n).toLocaleString("en-US");
+const cash = (n) => `$${money(n)}`; // Single player amounts are money
+
+// You get your own avatar, house players always get the same emoji from their name
+const ROW_EMOJI = ["🎩", "🦊", "🐯", "🐼", "🦉", "🐺", "🐢", "🦈", "🐙", "🦁", "🐸", "🦅", "🐷", "🐨"];
+function avatarFor(r) {
+  if (r.isYou) {
+    const a = avatarById(selectedAvatar());
+    return `<span class="avatar avatar--sm" style="--av-bg:${a.bg}"><span class="avatar-emoji">${a.emoji}</span></span>`;
+  }
+  let h = 0;
+  for (let i = 0; i < r.name.length; i++) h = (h * 31 + r.name.charCodeAt(i)) >>> 0;
+  return `<span class="avatar avatar--sm avatar--npc"><span class="avatar-emoji">${ROW_EMOJI[h % ROW_EMOJI.length]}</span></span>`;
+}
 
 // A house player's stats come from their name, so the board is the same every visit
 function hashName(s) {
@@ -62,11 +77,11 @@ function pveBoard(view) {
   const line = (r, i) => `
       <div class="lb-row${r.isYou ? " is-you" : ""}">
         <span class="lb-rank num">${i + 1}</span>
-        <span class="lb-name">${r.name}${r.isAI ? '<span class="lb-ai" title="A house player, not a person">HOUSE AI</span>' : ""}</span>
+        <span class="lb-name">${avatarFor(r)}${r.name}${r.isAI ? '<span class="lb-ai" title="A house player, not a person">HOUSE AI</span>' : ""}</span>
         <span class="lb-arena" style="--lb-accent:${r.arena.theme["--ar-accent"]}">
           <i class="lb-dot"></i>${r.arena.name}
         </span>
-        <span class="lb-figure num">${money(r.winnings)}</span>
+        <span class="lb-figure num">${cash(r.winnings)}</span>
         <span class="lb-hands num">${money(r.hands)}</span>
       </div>`;
 
@@ -97,11 +112,11 @@ function pveBoard(view) {
       </div>
       <div class="lb-mine-cell">
         <span class="lb-k">Career winnings</span>
-        <b class="lb-v num">${money(p.winnings)}</b>
+        <b class="lb-v num">${cash(p.winnings)}</b>
       </div>
       <div class="lb-mine-cell">
         <span class="lb-k">Peak net worth</span>
-        <b class="lb-v num">${money(p.peak)}</b>
+        <b class="lb-v num">${cash(p.peak)}</b>
       </div>
     </div>
     <p class="lb-note">Ranked by the highest room you have opened, then by career winnings. Every other name here is a house player the game deals you, they are AI, and their records are the house's own.</p>
@@ -176,8 +191,8 @@ export function renderLeaderboard(view) {
     </div>
 
     <div class="lb-tabs" role="tablist">
-      ${t("pve", "SINGLE-PLAYER", "practice chips · the ladder")}
-      ${t("pvp", "MULTIPLAYER", "real chips · this week")}
+      ${t("pve", "SINGLE-PLAYER", "Money · the ladder")}
+      ${t("pvp", "MULTIPLAYER", "Chips · this week")}
     </div>
 
     ${tab === "pve" ? pveBoard(view) : pvpBoard(view)}
