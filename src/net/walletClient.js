@@ -4,6 +4,7 @@
 import { backendHttpOrigin } from "./netClient.js";
 import { walletCredential } from "./credential.js";
 import { MIN_TABLE_BUYIN } from "../engine/rewards.js";
+import { CHIPS } from "../engine/cosmeticsData.js";
 import * as storage from "./storage.js";
 
 const LOCAL_KEY = "7bust:chips";
@@ -110,19 +111,21 @@ export async function claimBailout() {
 }
 
 // Signed in, the server spins and pays and the wheel just shows where it landed
-// Guests spin locally
+// Guests spin locally. A money win goes to the single player stack, chips stay the same
 export async function spinPrizeWheel(localSpin) {
   if (mode === "server") {
     const res = await post("wheel");
     if (res) {
-      balance = res.balance;
-      return { index: res.index, amount: res.granted, balance, limited: res.reason === "daily-ad-limit" };
+      balance = res.balance; // Stays the same when the slice paid money
+      return { index: res.index, amount: res.granted, cur: res.cur, jackpot: res.jackpot, balance, limited: res.reason === "daily-ad-limit" };
     }
   }
-  const { index, amount } = localSpin();
-  balance = readLocal() + amount;
-  writeLocal(balance);
-  return { index, amount, balance };
+  const spin = localSpin();
+  if (spin.cur === CHIPS) {
+    balance = readLocal() + spin.amount;
+    writeLocal(balance);
+  }
+  return { ...spin, balance };
 }
 
 // Guests only. Signed in players get buy-ins and payouts from the server

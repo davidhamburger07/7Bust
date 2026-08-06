@@ -3381,16 +3381,18 @@
   border-radius: 50%;
   border: 8px solid var(--rail);
   box-shadow: 0 0 0 4px var(--gold), 0 0 40px -6px rgba(255, 210, 74, 0.6), var(--shadow-big);
+  /* Slice colours follow the wheel order in rewards.js, gold is chips and green is money */
+  /* The two brighter slices are the chips and money jackpots */
   background: conic-gradient(
     from 0deg,
-    #12864a 0 45deg,
-    #0b5c33 45deg 90deg,
-    #12864a 90deg 135deg,
-    #0b5c33 135deg 180deg,
-    #e0b022 180deg 225deg,
-    #0b5c33 225deg 270deg,
-    #12864a 270deg 315deg,
-    #0b5c33 315deg 360deg
+    #cf9418 0 45deg,
+    #12864a 45deg 90deg,
+    #cf9418 90deg 135deg,
+    #12864a 135deg 180deg,
+    #f4c430 180deg 225deg,
+    #12864a 225deg 270deg,
+    #cf9418 270deg 315deg,
+    #17b35f 315deg 360deg
   );
 }
 .wheel.spinning {
@@ -3420,12 +3422,13 @@
   margin-top: 16px;
   font-family: var(--font-num);
   font-size: clamp(14px, 4.4vw, 19px);
-  color: var(--cream);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
+.wheel-label.chips span { color: #3a2705; }
+.wheel-label.money span { color: #eafff2; }
 .wheel-label.jackpot span {
-  color: #3d2a05;
   font-size: clamp(15px, 4.8vw, 21px);
+  font-weight: 900;
 }
 .wheel-hub {
   position: absolute;
@@ -3449,6 +3452,7 @@
   color: var(--gold-hi);
   font-size: 30px;
 }
+.wheel-result.money b { color: #5ef08a; }
 .wheel-spinmsg {
   color: var(--muted);
   font-weight: 800;

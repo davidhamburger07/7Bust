@@ -2,7 +2,7 @@
 // The game can ask for an action but never says how much, the server decides every amount
 import { createStore } from "../store.mjs";
 import { resolveIdentity } from "../src/server/identity.mjs";
-import { JACKPOT, MIN_TABLE_BUYIN, spinWheel, today } from "../src/engine/rewards.js";
+import { MIN_TABLE_BUYIN, spinWheel, today } from "../src/engine/rewards.js";
 import { trackReward } from "../src/engine/analytics.js";
 import { itemById, CHIPS, LOGON_IDS, STREAK_DAY7_CHIPS, STREAK_DAY7_BACKUP } from "../src/engine/cosmeticsData.js";
 
@@ -100,12 +100,14 @@ export default async function handler(req, res) {
           return res.status(200).json({ ok: true, balance: w.balance, granted: 0, reason: "daily-ad-limit" });
         }
         // The server spins, the game is only told what it won
-        const { index, amount } = spinWheel();
+        const { index, amount, cur, jackpot } = spinWheel();
         if (w.adDay !== day) await store.walletSetField(key, "adDay", day);
         await store.walletSetField(key, "adCount", count + 1);
-        const balance = await store.walletAdd(key, amount);
-        trackReward({ kind: "wheel", amount, jackpot: amount >= JACKPOT, server: true });
-        return res.status(200).json({ ok: true, balance, granted: amount, index, jackpot: amount >= JACKPOT });
+        // Chips live on the server so they're added here
+        // Money is only on the player's device, so the server just reports the win
+        const balance = cur === CHIPS ? await store.walletAdd(key, amount) : w.balance;
+        trackReward({ kind: "wheel", amount, cur, jackpot, server: true });
+        return res.status(200).json({ ok: true, balance, granted: amount, index, cur, jackpot });
       }
 
       case "migrate": {

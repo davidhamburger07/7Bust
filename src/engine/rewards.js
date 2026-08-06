@@ -1,22 +1,23 @@
 // Free chips for the casual build, a prize wheel you watch an ad for and the "Bankrupt Bailout"
 
-export const JACKPOT = 2500;
+import { MONEY, CHIPS } from "./cosmeticsData.js";
 
 // Buy-ins a room's host can pick, the free one is a friendly table with nothing at stake
 // "Bankrupt Bailout" tops a broke player up to the cheapest one, the server uses the same number
 export const MP_BUYIN_TIERS = [0, 50, 100, 250];
 export const MIN_TABLE_BUYIN = MP_BUYIN_TIERS.find((f) => f > 0);
 
-// Weights add up to 100 so each one is a percent chance, the jackpot is rare
+// Each slice pays money or chips, cur says which wallet it lands in
+// The order matches the wheel colours in app.css, keep them in step
 export const WHEEL = [
-  { amount: 200, weight: 24 },
-  { amount: 300, weight: 16 },
-  { amount: 500, weight: 10 },
-  { amount: 250, weight: 20 },
-  { amount: 2500, weight: 1 }, // Jackpot, opposite the other big slice so the wheel looks balanced
-  { amount: 200, weight: 24 },
-  { amount: 750, weight: 4 },
-  { amount: 1000, weight: 1 },
+  { amount: 200, cur: CHIPS, weight: 20 },
+  { amount: 500, cur: MONEY, weight: 18 },
+  { amount: 250, cur: CHIPS, weight: 14 },
+  { amount: 1000, cur: MONEY, weight: 14 },
+  { amount: 2500, cur: CHIPS, weight: 4, jackpot: true },
+  { amount: 2500, cur: MONEY, weight: 10 },
+  { amount: 500, cur: CHIPS, weight: 12 },
+  { amount: 5000, cur: MONEY, weight: 8, jackpot: true },
 ];
 
 export const WHEEL_MIN = Math.min(...WHEEL.map((s) => s.amount));
@@ -27,9 +28,10 @@ export function spinWheel(rng = Math.random) {
   let r = rng() * total;
   for (let i = 0; i < WHEEL.length; i++) {
     r -= WHEEL[i].weight;
-    if (r < 0) return { index: i, amount: WHEEL[i].amount };
+    if (r < 0) return { index: i, amount: WHEEL[i].amount, cur: WHEEL[i].cur, jackpot: !!WHEEL[i].jackpot };
   }
-  return { index: WHEEL.length - 1, amount: WHEEL[WHEEL.length - 1].amount };
+  const last = WHEEL.length - 1;
+  return { index: last, amount: WHEEL[last].amount, cur: WHEEL[last].cur, jackpot: !!WHEEL[last].jackpot };
 }
 
 // The player's local day, not UTC

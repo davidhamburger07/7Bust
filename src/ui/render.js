@@ -11,7 +11,7 @@ import { renderShop } from "./shop.js";
 import { renderDailyLogin } from "./dailyLogin.js";
 import { chipsIcon } from "./icons.js";
 import { selectedFace, selectedBack, selectedAvatar, selectedFelt, ownedEmotes } from "../engine/cosmetics.js";
-import { avatarById, feltById } from "../engine/cosmeticsData.js";
+import { avatarById, feltById, MONEY } from "../engine/cosmeticsData.js";
 import { getChips as getMoney } from "../engine/pveWallet.js";
 
 const TARGET = 7;
@@ -346,8 +346,9 @@ export function renderWheel(view) {
   // Lands the winning slice under the pointer after a few full spins
   const target = 360 * 5 - (w.index * slice + slice / 2);
   const labels = WHEEL.map((seg, i) => {
-    const jackpot = seg.amount === Math.max(...WHEEL.map((x) => x.amount));
-    return `<div class="wheel-label${jackpot ? " jackpot" : ""}" style="transform:rotate(${i * slice + slice / 2}deg)"><span>${seg.amount}</span></div>`;
+    const money = seg.cur === MONEY;
+    const cls = `wheel-label ${money ? "money" : "chips"}${seg.jackpot ? " jackpot" : ""}`;
+    return `<div class="${cls}" style="transform:rotate(${i * slice + slice / 2}deg)"><span>${money ? "$" + seg.amount : seg.amount}</span></div>`;
   }).join("");
   const spinning = w.phase === "spin";
   // Spinning uses a keyframe since the wheel is rebuilt each render
@@ -358,13 +359,13 @@ export function renderWheel(view) {
   return `
   <div class="overlay wheel-overlay">
     <div class="wheel-box">
-      <div class="wheel-title">${w.phase === "done" ? (w.amount >= 2500 ? "JACKPOT!" : "YOU WON!") : "SPIN THE WHEEL"}</div>
+      <div class="wheel-title">${w.phase === "done" ? (w.jackpot ? "JACKPOT!" : "YOU WON!") : "SPIN THE WHEEL"}</div>
       <div class="wheel-wrap">
         <div class="wheel-pointer"></div>
         ${wheelEl}
         <div class="wheel-hub"></div>
       </div>
-      ${w.phase === "done" ? `<div class="wheel-result">+<b class="num">${w.amount}</b> chips</div><button class="btn btn--play" data-action="wheel-collect">COLLECT</button>` : `<div class="wheel-spinmsg">Good luck…</div>`}
+      ${w.phase === "done" ? `<div class="wheel-result ${w.cur === MONEY ? "money" : "chips"}">+<b class="num">${w.cur === MONEY ? "$" + w.amount.toLocaleString() : w.amount.toLocaleString()}</b> ${w.cur === MONEY ? "Money" : "Chips"}</div><button class="btn btn--play" data-action="wheel-collect">COLLECT</button>` : `<div class="wheel-spinmsg">Good luck…</div>`}
     </div>
   </div>`;
 }

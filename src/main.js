@@ -7,7 +7,7 @@ import { mountLadderDeck } from "./ui/arenaSelect.js";
 import { ftueStart, ftueSync, hasCompletedTutorial } from "./ui/ftue.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
-import { JACKPOT, spinWheel } from "./engine/rewards.js";
+import { spinWheel } from "./engine/rewards.js";
 import {
   setAnalyticsSink,
   trackReward,
@@ -1167,16 +1167,22 @@ async function watchAdForChips() {
     render();
     return;
   }
-  const { index, amount } = res;
-  view.wheel = { phase: "spin", index, amount };
+  const { index, amount, cur, jackpot } = res;
+  view.wheel = { phase: "spin", index, amount, cur, jackpot };
   sfx("shuffle");
   render();
   setTimeout(async () => {
     if (!view.wheel) return;
     view.wheel.phase = "done";
+    // Money only lives in the browser, so a money slice pays the single player stack now
+    // Chips were already paid by the server or the guest wallet
+    if (cur === MONEY) {
+      setChips(getChips() + amount);
+      syncPve();
+    }
     syncWallet();
-    trackReward({ kind: "wheel", amount, jackpot: amount >= JACKPOT });
-    if (amount >= JACKPOT) {
+    trackReward({ kind: "wheel", amount, cur, jackpot });
+    if (jackpot) {
       sfx("jackpot");
       cgHappytime(); // Tells CrazyGames this is a happy moment
     } else {
