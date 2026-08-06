@@ -713,7 +713,7 @@ function renderOnlineMenu(o, view) {
   const openTables = list.filter((r) => (r.openSeats || 0) > 0).length;
   const presence = openTables
     ? `<div class="mp-presence"><span class="mp-live-dot"></span>${openTables} open table${openTables === 1 ? "" : "s"} to join right now</div>`
-    : `<div class="mp-presence muted">No open tables this second, Play Now opens one and seats the house AI so you play immediately.</div>`;
+    : `<div class="mp-presence muted">No open tables this second, create one and invite friends, or check back soon.</div>`;
   return `
   <div class="screen screen--online">
     <div class="mp-card">
@@ -722,9 +722,8 @@ function renderOnlineMenu(o, view) {
       <p class="tagline">Jump straight into a game. Real players when they're around, the house AI when they're not.</p>
       ${nameField(view, o)}
       ${onlineError(o)}
-      <button class="btn btn--play" data-action="mp-quick">PLAY NOW<span class="sub">seats you at a table in seconds, the house AI fills any gaps</span></button>
       ${presence}
-      <button class="btn btn--online" data-action="mp-browse">FIND A MATCH<span class="sub">browse open tables</span></button>
+      <button class="btn btn--play" data-action="mp-browse">FIND A MATCH<span class="sub">browse open tables</span></button>
       <button class="btn btn--online" data-action="mp-create">CREATE A ROOM<span class="sub">private table, invite friends</span></button>
       <button class="btn btn--online" data-action="mp-join-screen">JOIN WITH A CODE</button>
       ${bailoutBtn(view)}
@@ -907,7 +906,7 @@ function renderOnlineBrowse(o, view) {
     .join("");
   const empty = b.loading && !b.list.length
     ? `<div class="browse-empty"><span class="spinner"></span> Looking for tables…</div>`
-    : `<div class="browse-empty">No open tables this second.<br /><small>Hit Play Now, we'll open a table and seat the house AI so you're dealt in immediately, and the next player can join you.</small><br /><button class="btn btn--play browse-playnow" data-action="mp-quick">PLAY NOW</button></div>`;
+    : `<div class="browse-empty">No open tables this second.<br /><small>Open your own table and invite friends, anyone can join with the room code.</small><br /><button class="btn btn--play browse-playnow" data-action="mp-create">CREATE A ROOM</button></div>`;
   return `
   <div class="screen screen--online">
     <div class="mp-card mp-card--wide">

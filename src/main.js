@@ -653,19 +653,15 @@ function ensureNet() {
         view.online.screen = "buyin";
         view.online.buyin = msg.buyin || null;
         view.online.maxHands = msg.maxHands || 1;
-      } else if (view.quick) {
-        view.online.screen = "connecting"; // Stay on the table list while Quick Match seats bots and deals
       } else {
         view.online.screen = "waiting";
         view.online.buyin = null;
         view.online.myHands = null;
       }
-      if (view.quick) continueQuick(msg);
       render();
     },
     onState(snapshot, extra) {
       if (!view.online) return;
-      view.quick = null;
       reconnectTries = 0;
       hideConnLost(); // Getting state again, hide any connection lost panel
       // Once the server answers, a face down card, bank or hold stops waiting
@@ -692,7 +688,6 @@ function ensureNet() {
       view.browse = view.browse || { list: [], loading: false, filters: { seats: "any", entry: "any", rounds: "any", multi: "any", joinable: true } };
       view.browse.list = list;
       view.browse.loading = false;
-      if (view.quick && view.quick.phase === "browsing") return decideQuick(list); // Quick Match is waiting on this list
       if (view.online && (view.online.screen === "browse" || view.online.screen === "menu")) render(); // The menu shows a live table count
     },
     onChat(list) {
@@ -717,8 +712,6 @@ function ensureNet() {
     onError(msg) {
       if (!view.online) return;
       const err = msg.error || "Something went wrong.";
-      // Quick Match lost the race for that table, so just open our own instead of showing an error
-      if (view.quick && view.quick.phase === "joining" && !msg.soft) return quickCreate();
       if (msg.soft) {
         toast(err);
         return;
@@ -777,7 +770,6 @@ const readName = () => {
 function openOnline() {
   const saved = loadNet();
   view.mode = "online";
-  view.quick = null;
   view.online = { screen: "menu", name: (saved && saved.name) || savedName() || "", error: null, lobby: null };
   ensureNet();
   net.browse(); // Real count of open tables for the menu, no made up numbers
@@ -785,7 +777,6 @@ function openOnline() {
 }
 function onlineMenu() {
   if (!view.online) return openOnline();
-  view.quick = null;
   view.online.screen = "menu";
   view.online.error = null;
   stopBrowsePoll();
@@ -853,61 +844,7 @@ function joinListed(code) {
   render();
   net.join(code, view.online.name, clientId());
 }
-// Quick Match joins the busiest free public table, or opens its own with bots and deals at once
-// Its table is public, so the next player's Quick Match can join it and real games get going
-let quickTimer = null;
-function quickMatch() {
-  ensureNet();
-  if (!view.online) openOnline();
-  view.online.name = readName();
-  view.online.screen = "connecting";
-  view.online.error = null;
-  view.online.connMsg = "Finding you a table…";
-  view.quick = { phase: "browsing" };
-  stopBrowsePoll();
-  net.browse();
-  render();
-  clearTimeout(quickTimer); // If browse is slow, open our own table instead of waiting
-  quickTimer = setTimeout(() => {
-    if (view.quick && view.quick.phase === "browsing") quickCreate();
-  }, 2500);
-}
-function decideQuick(list) {
-  clearTimeout(quickTimer);
-  if (!view.quick) return;
-  // Busiest free table first, bots never sit at a table with real chips
-  const open = (list || []).filter((r) => (r.openSeats || 0) > 0 && (r.entry || 0) === 0).sort((a, b) => (b.filled || 0) - (a.filled || 0));
-  if (open.length) {
-    view.quick.phase = "joining";
-    net.join(open[0].code, view.online.name, clientId());
-  } else {
-    quickCreate();
-  }
-}
-function quickCreate() {
-  if (!view.quick) return;
-  view.quick.phase = "creating";
-  net.create(view.online.name, clientId());
-}
-// Once we host the new room, seat a few bots and deal
-// Only runs once, the config messages coming back don't start it again
-function continueQuick(msg) {
-  if (!view.quick) return;
-  if (msg.status === "playing" || msg.status === "buyin") {
-    view.quick = null;
-    return;
-  }
-  if (view.quick.phase === "creating" && msg.isHost) {
-    view.quick.phase = "starting";
-    net.config({ isPublic: true }); // Public so the next player's quick match can join it
-    const ais = ["nova", "rook", "pip"];
-    const size = msg.size || 4;
-    for (let i = 1, seated = 0; i < size && seated < 3; i++, seated++) {
-      net.config({ slot: { index: i, type: "ai", ai: ais[seated % ais.length] } });
-    }
-    net.start();
-  }
-}
+// Quick Match was taken out of the UI, the bot seating it used is still here
 function mpPublic(on) {
   sfx("click");
   net && net.config({ isPublic: !!on });
@@ -1825,7 +1762,6 @@ const ACTIONS = {
   "mp-dealnow": mpDealNow,
   "mp-open": openOnline,
   "mp-menu": onlineMenu,
-  "mp-quick": quickMatch,
   "mp-browse": openBrowse,
   "mp-browse-refresh": refreshBrowse,
   "mp-create": mpCreate,
