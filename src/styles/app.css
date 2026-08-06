@@ -3295,27 +3295,43 @@
   font-size: 15px;
   padding: var(--s2) var(--s3);
 }
-.btn--daily {
-  background: linear-gradient(180deg, #86f4a8, #21c25c);
-  color: #06331a;
-}
 .btn--ad {
   background: linear-gradient(180deg, #cdb4ff, #8a5cf0);
   color: #1b0a45;
 }
-.daily-done {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--faint);
-  border: 2px dashed rgba(255, 210, 74, 0.2);
-  border-radius: 999px;
-  padding: 8px 10px;
-  text-align: center;
+/* The ladder's re-stake button, green like the money it pays */
+.btn--restake {
+  background: linear-gradient(180deg, #86f4a8, #21c25c);
+  color: #06331a;
 }
+/* "Bankrupt Bailout" is greyed out while the player still has money */
+/* When they're broke it turns gold and pulses so they can't miss it */
+.btn--bailout {
+  background: linear-gradient(180deg, #86f4a8, #21c25c);
+  color: #06331a;
+}
+.btn--bailout:disabled {
+  background: linear-gradient(180deg, #2b382f, #1b241e);
+  color: var(--faint);
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: saturate(0.35);
+  opacity: 0.7;
+}
+.btn--bailout.is-live {
+  background: linear-gradient(180deg, #ffe89a, #f0a81e);
+  color: #3a2400;
+  animation: bailoutPulse 1.8s ease-in-out infinite;
+}
+@keyframes bailoutPulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(240, 168, 30, 0.35); }
+  50% { box-shadow: 0 0 24px rgba(255, 214, 102, 0.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn--bailout.is-live { animation: none; }
+}
+/* In the online menu "Bankrupt Bailout" gets a full row instead of sitting beside free chips */
+.screen--online .btn--bailout { width: 100%; margin-top: var(--s2); }
 
 .wheel-overlay {
   z-index: 60;

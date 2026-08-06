@@ -7,7 +7,7 @@ import { mountLadderDeck } from "./ui/arenaSelect.js";
 import { startCoach, place as placeCoach, coachRunning } from "./ui/coach.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
-import { DAILY_BONUS, JACKPOT, spinWheel, today } from "./engine/rewards.js";
+import { JACKPOT, spinWheel } from "./engine/rewards.js";
 import {
   setAnalyticsSink,
   trackReward,
@@ -25,7 +25,7 @@ import { itemById, MONEY } from "./engine/cosmeticsData.js";
 import { streakStatus, recordClaim, MONEY_REWARDS, DAY7_CHIPS, DAY7_BACKUP } from "./engine/dailyStreak.js";
 import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
-import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode, claimStreak7 } from "./net/walletClient.js";
+import { initWallet, walletUser, getBalance, claimBailout, isBankrupt, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, walletMode, claimStreak7 } from "./net/walletClient.js";
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { gdBoot } from "./net/gamedistribution.js";
@@ -49,7 +49,6 @@ const AI_DELAY = 850;
 const SAVE_KEY = "7bust:save:v3"; // The deck changed, older saves can't resume
 const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
 const HISTORY_KEY = "7bust:history";
-const DAILY_KEY = "7bust:daily"; // Last day the login bonus was claimed
 const COACH_KEY = "7bust:coach:v1"; // Set once the first run tour has been seen
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
@@ -116,7 +115,6 @@ const view = {
   browse: null,
   wheel: null,
   adPending: false,
-  dailyAvailable: false,
   adsAvailable: false,
   house: null,
   showHouseRules: false,
@@ -205,7 +203,6 @@ function dockRadio() {
 
 function render() {
   view.lastEvent = view.snapshot ? view.snapshot.lastEvent : null;
-  view.dailyAvailable = dailyState().available;
   view.adsAvailable = adsAvailable(); // No ad button where no network can serve one
   // Keep the log's scroll, follow the bottom unless the player scrolled up
   const oldLog = document.getElementById("log");
@@ -1163,47 +1160,21 @@ async function signIn() {
   toast(view.soloBalance > before ? `Signed in, your chips came with you.` : `Signed in. Your chips are saved.`);
 }
 
-// Signed in, only the server knows if today's bonus is used, so a second device can't claim it
-// Guests keep their own claim date in the browser
-function dailyState() {
-  const server = dailyClaimedToday();
-  if (server !== null) return { available: !server, last: server ? today() : "" };
-  let last = "";
-  try {
-    last = storage.getItem(DAILY_KEY) || "";
-  } catch {
-    // Analytics failing never affects the game
-  }
-  return { available: last !== today(), last };
-}
-// Only for guests, signed in players get their chips from the server
-function grantLocal(amount) {
-  adjustLocal(amount);
-  syncWallet();
-  return amount;
-}
-async function claimDaily() {
-  if (!view.dailyAvailable) return;
-  const res = await claimDailyBonus(() => {
-    try {
-      storage.setItem(DAILY_KEY, today());
-    } catch {
-      // Analytics failing never affects the game
-    }
-    return grantLocal(DAILY_BONUS);
-  });
-  syncWallet();
-  view.dailyAvailable = dailyState().available;
-  if (!res.granted) {
-    view.dailyAvailable = false;
-    toast("Daily bonus already claimed today.");
-    render();
+// "Bankrupt Bailout" gives a broke player just enough chips for the cheapest table
+// Signed in, the server pays it so it can't be farmed. Guests get it on their local balance
+async function bailout() {
+  if (!isBankrupt()) return; // The button is off when they have enough, but check anyway
+  const res = await claimBailout();
+  if (!res.ok) {
+    toast("Couldn't stake you right now, try again.");
     return;
   }
-  trackReward({ kind: "daily", amount: res.granted });
+  syncWallet();
+  if (!res.granted) return; // They already have enough chips, nothing to do
+  trackReward({ kind: "bailout", amount: res.granted });
   sfx("chips");
   playVoice("win");
-  toast(`Daily bonus! +${res.granted} chips`);
+  toast(`Staked +${res.granted} chips, one last shot at the tables. Make it count!`);
   render();
 }
 // Watch a rewarded ad then spin the wheel. Only pays out if the ad plays to the end
@@ -1855,7 +1826,7 @@ const ACTIONS = {
   verify: verifyFair,
   rules: showRules,
   "rules-back": hideRules,
-  daily: claimDaily,
+  bailout,
   "sign-in": signIn,
   "watch-ad": watchAdForChips,
   "wheel-collect": closeWheel,

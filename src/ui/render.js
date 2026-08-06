@@ -2,7 +2,7 @@
 
 import { heatTriple } from "./heat.js";
 import { PLAYER_EMOTES } from "../engine/aiChatter.js";
-import { WHEEL, DAILY_BONUS } from "../engine/rewards.js";
+import { WHEEL, MP_BUYIN_TIERS, MIN_TABLE_BUYIN } from "../engine/rewards.js";
 import { renderHouseTable, renderHouseRules } from "./houseTable.js";
 import { renderArenaSelect, pveChipStack } from "./arenaSelect.js";
 import { renderLeaderboard } from "./leaderboard.js";
@@ -316,17 +316,24 @@ function walletCard(view) {
   </div>`;
 }
 
+// "Bankrupt Bailout" gives a broke player free chips up to the cheapest buy-in
+// Only works below that buy-in, otherwise the button stays greyed out
+function bailoutBtn(view) {
+  const balance = view.soloBalance || 0;
+  if (balance >= MIN_TABLE_BUYIN) {
+    return `<button class="btn btn--bailout" data-action="bailout" disabled title="Unlocks if your chips drop below the ${MIN_TABLE_BUYIN}-chip buy-in">BAILOUT<span class="sub">for when you can't cover a buy-in</span></button>`;
+  }
+  return `<button class="btn btn--bailout is-live" data-action="bailout">BAILOUT<span class="sub">out of chips, get staked to ${MIN_TABLE_BUYIN} for one more game</span></button>`;
+}
+
 // The ad wheel only shows where ads work, not on Discord or our own site
 function freeChips(view) {
-  const daily = view.dailyAvailable
-    ? `<button class="btn btn--daily" data-action="daily">DAILY BONUS<span class="sub">+${DAILY_BONUS} free chips</span></button>`
-    : `<div class="daily-done">✓ Daily bonus claimed, come back tomorrow</div>`;
   const ad = !view.adsAvailable
     ? ""
     : view.adPending
       ? `<button class="btn btn--ad" disabled>LOADING AD…<span class="sub">hang tight</span></button>`
       : `<button class="btn btn--ad" data-action="watch-ad">FREE CHIPS<span class="sub">📺 watch an ad &amp; spin the wheel</span></button>`;
-  return `<div class="freechips">${daily}${ad}</div>`;
+  return `<div class="freechips">${bailoutBtn(view)}${ad}</div>`;
 }
 
 // Prize wheel with weighted slices, spins to the winner then shows the prize
@@ -528,7 +535,7 @@ export function renderOverlay(view) {
       ${scoreboard(s)}
       <button class="btn btn--play" data-action="again">PLAY AGAIN</button>
       <button class="btn btn--online" data-action="mp-open">PLAY FOR CHIPS<span class="sub">real people, real stakes</span></button>
-      <div>${view.dailyAvailable ? '<a class="ghost link" href="#" data-action="daily">Claim daily bonus</a> · ' : ""}<a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
+      <div><a class="ghost link" href="#" data-action="verify">Verify fair</a></div>
     </div></div>`;
   }
   return "";
@@ -660,7 +667,7 @@ export function renderSettings(view) {
       </section>
       <section class="rule-card"><h3>Chips</h3>
         <div class="set-row"><span class="mp-label">Your balance</span><span class="balance">${chipStack(view.soloBalance || 0)}</span></div>
-        <div class="set-row"><span class="mp-label">Low on chips? Claim your daily bonus or watch an ad on the menu for more.</span></div>
+        <div class="set-row"><span class="mp-label">Out of chips? The <b>Bailout</b> stakes you back to the ${MIN_TABLE_BUYIN}-chip buy-in, or watch an ad on the menu for more.</span></div>
       </section>
       <section class="rule-card"><h3>More</h3>
         <div class="set-links">
@@ -717,6 +724,7 @@ function renderOnlineMenu(o, view) {
       <button class="btn btn--online" data-action="mp-browse">FIND A MATCH<span class="sub">browse open tables</span></button>
       <button class="btn btn--online" data-action="mp-create">CREATE A ROOM<span class="sub">private table, invite friends</span></button>
       <button class="btn btn--online" data-action="mp-join-screen">JOIN WITH A CODE</button>
+      ${bailoutBtn(view)}
     </div>
   </div>`;
 }
@@ -801,7 +809,7 @@ function renderOnlineWaiting(o, view) {
     ? `<div class="mp-sizerow"><span class="mp-label">Table size</span><span class="slot-pills">${[3, 4, 5, 6, 7, 8]
         .map((n) => `<button class="spill ${n === L.size ? "on" : ""}" data-action="mp-size" data-size="${n}">${n}</button>`)
         .join("")}</span></div>
-      <div class="mp-sizerow"><span class="mp-label">Buy-in${signedIn ? "" : ' <small class="mp-hint">chip tables need everyone signed in</small>'}</span><span class="slot-pills">${[0, 50, 100, 250]
+      <div class="mp-sizerow"><span class="mp-label">Buy-in${signedIn ? "" : ' <small class="mp-hint">chip tables need everyone signed in</small>'}</span><span class="slot-pills">${MP_BUYIN_TIERS
         .map((f) => `<button class="spill ${f === entry ? "on" : ""}" data-action="mp-entry" data-fee="${f}">${f === 0 ? "FREE" : f}</button>`)
         .join("")}</span></div>
       <div class="mp-sizerow"><span class="mp-label">Rounds</span><span class="slot-pills">${[1, 2, 3, 4, 5, 6, 7, 8, 9]

@@ -1,9 +1,11 @@
-// Free chips for the casual build, a daily bonus and a prize wheel you watch an ad for
+// Free chips for the casual build, a prize wheel you watch an ad for and the "Bankrupt Bailout"
 
-// Free chips once a day. With no ads on the basic launch this is the only way to get free chips
-// The server uses the same number so it pays what the game shows
-export const DAILY_BONUS = 1000;
 export const JACKPOT = 2500;
+
+// Buy-ins a room's host can pick, the free one is a friendly table with nothing at stake
+// "Bankrupt Bailout" tops a broke player up to the cheapest one, the server uses the same number
+export const MP_BUYIN_TIERS = [0, 50, 100, 250];
+export const MIN_TABLE_BUYIN = MP_BUYIN_TIERS.find((f) => f > 0);
 
 // Weights add up to 100 so each one is a percent chance, the jackpot is rare
 export const WHEEL = [

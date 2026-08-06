@@ -2,7 +2,7 @@
 // The game can ask for an action but never says how much, the server decides every amount
 import { createStore } from "../store.mjs";
 import { resolveIdentity } from "../src/server/identity.mjs";
-import { DAILY_BONUS, JACKPOT, spinWheel, today } from "../src/engine/rewards.js";
+import { JACKPOT, MIN_TABLE_BUYIN, spinWheel, today } from "../src/engine/rewards.js";
 import { trackReward } from "../src/engine/analytics.js";
 import { itemById, CHIPS, LOGON_IDS, STREAK_DAY7_CHIPS, STREAK_DAY7_BACKUP } from "../src/engine/cosmeticsData.js";
 
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
     switch (body.action) {
       case "balance":
-        return res.status(200).json({ ok: true, balance: w.balance, username: user.username, newWallet: created, dailyClaimed: w.daily === day, cos: cosList(w) });
+        return res.status(200).json({ ok: true, balance: w.balance, username: user.username, newWallet: created, cos: cosList(w) });
 
       case "purchase": {
         // Buys a cosmetic with chips. The price comes from the catalogue here, never the game
@@ -84,12 +84,14 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, cosmetic: null, chips: STREAK_DAY7_BACKUP, backup: true, balance, owned });
       }
 
-      case "daily": {
-        if (w.daily === day) return res.status(200).json({ ok: true, balance: w.balance, granted: 0, reason: "already-claimed" });
-        await store.walletSetField(key, "daily", day);
-        const balance = await store.walletAdd(key, DAILY_BONUS);
-        trackReward({ kind: "daily", amount: DAILY_BONUS, server: true });
-        return res.status(200).json({ ok: true, balance, granted: DAILY_BONUS });
+      case "bailout": {
+        // "Bankrupt Bailout" tops a broke player up to the cheapest buy-in, never more
+        // Only works while they're below it, so it can't be farmed
+        if (w.balance >= MIN_TABLE_BUYIN) return res.status(200).json({ ok: true, balance: w.balance, granted: 0, reason: "solvent" });
+        const granted = MIN_TABLE_BUYIN - w.balance;
+        const balance = await store.walletAdd(key, granted);
+        trackReward({ kind: "bailout", amount: granted, server: true });
+        return res.status(200).json({ ok: true, balance, granted });
       }
 
       case "wheel": {

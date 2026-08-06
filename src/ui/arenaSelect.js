@@ -163,7 +163,7 @@ function brokeBar(p) {
   return `
   <div class="al-broke">
     <span class="al-broke-msg"><b>You are under the ${money(ARENAS[0].buyIn)} buy-in.</b> The house will re-stake you.</span>
-    <button class="btn btn--daily" data-action="arena-restake">TAKE A RE-STAKE<span class="sub">+$500 street money</span></button>
+    <button class="btn btn--restake" data-action="arena-restake">TAKE A RE-STAKE<span class="sub">+$500 street money</span></button>
   </div>`;
 }
 

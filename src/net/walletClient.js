@@ -3,6 +3,7 @@
 
 import { backendHttpOrigin } from "./netClient.js";
 import { walletCredential } from "./credential.js";
+import { MIN_TABLE_BUYIN } from "../engine/rewards.js";
 import * as storage from "./storage.js";
 
 const LOCAL_KEY = "7bust:chips";
@@ -11,7 +12,6 @@ const STARTING_BALANCE = 1000;
 let mode = "local"; // Local for guests, server for signed in players
 let balance = STARTING_BALANCE;
 let username = null;
-let dailyClaimed = null; // Whether today's bonus is taken, from the server. Null for guests
 let serverCos = []; // Empty for guests
 
 const readLocal = () => {
@@ -65,8 +65,10 @@ export function seedLocalIfUnset(amount) {
 export const walletMode = () => mode;
 export const walletUser = () => username;
 export const getBalance = () => balance;
-// Null means no answer from the server, the caller uses its own local copy
-export const dailyClaimedToday = () => (mode === "server" ? dailyClaimed : null);
+
+// The "Bankrupt Bailout" button checks these to know if it can be used
+export const MIN_BUYIN = MIN_TABLE_BUYIN;
+export const isBankrupt = () => balance < MIN_TABLE_BUYIN;
 
 // Connects to the CrazyGames, Discord or Newgrounds account if there is one
 // Guests keep the local wallet and nothing is sent
@@ -79,7 +81,6 @@ export async function initWallet() {
   mode = "server";
   balance = res.balance;
   username = res.username || null;
-  dailyClaimed = !!res.dailyClaimed;
   serverCos = Array.isArray(res.cos) ? res.cos : [];
   // First time this account has played, move the guest's chips over
   if (res.newWallet && local > STARTING_BALANCE) {
@@ -89,19 +90,23 @@ export async function initWallet() {
   return { mode, balance, migrated: !!res.newWallet };
 }
 
-// The server decides if the daily bonus is due and how much
-export async function claimDailyBonus(localFallback) {
+// "Bankrupt Bailout" tops the player up to the cheapest buy-in, only when they're below it
+// Signed in, the server checks it so it can't be farmed
+export async function claimBailout() {
+  if (balance >= MIN_TABLE_BUYIN) return { ok: true, granted: 0, balance, reason: "solvent" };
   if (mode === "server") {
-    const res = await post("daily");
+    const res = await post("bailout");
     if (res) {
       balance = res.balance;
-      dailyClaimed = true; // Given or already taken, either way it's gone for today
-      return { granted: res.granted, balance, reason: res.reason };
+      return { ok: true, granted: res.granted, balance, reason: res.reason };
     }
+    return { ok: false, reason: "network", balance };
   }
-  const granted = localFallback();
-  balance = readLocal();
-  return { granted, balance };
+  // Guests get topped up locally to exactly the buy-in
+  const granted = MIN_TABLE_BUYIN - balance;
+  balance = MIN_TABLE_BUYIN;
+  writeLocal(balance);
+  return { ok: true, granted, balance };
 }
 
 // Signed in, the server spins and pays and the wheel just shows where it landed
@@ -135,7 +140,6 @@ export async function refreshBalance() {
   const res = await post("balance");
   if (res) {
     balance = res.balance;
-    dailyClaimed = !!res.dailyClaimed;
     if (Array.isArray(res.cos)) serverCos = res.cos;
   }
   return balance;

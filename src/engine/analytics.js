@@ -142,9 +142,12 @@ export function countersFor(rec) {
     if (rec.bustedOut) add("house_bustouts");
     if ((rec.rounds || 0) >= 10) add("house_sessions_10plus"); // Stayed past trying it out
   } else if (rec.event === "reward") {
-    if (rec.kind === "daily") {
-      add("daily_claims");
-      add("daily_chips", rec.amount || 0);
+    if (rec.kind === "bailout") {
+      add("bailout_claims");
+      add("bailout_chips", rec.amount || 0);
+    } else if (rec.kind === "streak") {
+      add("streak_claims");
+      if (rec.day === 7) add("streak_day7_claims");
     } else if (rec.kind === "wheel") {
       add("ads_watched");
       add("wheel_spins");
