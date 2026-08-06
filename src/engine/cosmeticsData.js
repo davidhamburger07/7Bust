@@ -18,7 +18,7 @@ export const CARD_FACES = [
   { id: "blood", name: "Blood Moon", price: 400000, cur: MONEY, blurb: "Deep arterial red under a black rim.", swatch: "linear-gradient(160deg,#5a0a12,#1a0305)" },
   { id: "holo", name: "Holographic", price: 1500000, cur: MONEY, blurb: "Oil-slick shimmer that shifts as it moves.", swatch: "linear-gradient(135deg,#7af7ff,#c78bff 45%,#ff9ad2 75%,#ffe08a)" },
   { id: "obsidian", name: "Obsidian", price: 12000000, cur: MONEY, blurb: "Carved volcanic glass with a gold rim. Whale-tier.", swatch: "linear-gradient(160deg,#1a1712,#000)" },
-  { id: "royalface", name: "Royal Flush", price: 600, cur: CHIPS, blurb: "Purple velvet and gilt. Chips only.", swatch: "linear-gradient(160deg,#5a2a9a,#2a105a)" },
+  { id: "royalface", name: "Royal Flush", price: 30000, cur: CHIPS, blurb: "Purple velvet and gilt. Chips only.", swatch: "linear-gradient(160deg,#5a2a9a,#2a105a)" },
 ];
 
 export const CARD_BACKS = [
@@ -30,8 +30,8 @@ export const CARD_BACKS = [
   { id: "honeycomb", name: "Honeycomb", price: 18000, cur: MONEY, blurb: "Gold hex on black.", swatch: "linear-gradient(160deg,#6a5210,#241a08)" },
   { id: "artdeco", name: "Art Deco", price: 800000, cur: MONEY, blurb: "Gatsby gold fans on midnight blue.", swatch: "linear-gradient(160deg,#12233f,#0a1428)" },
   { id: "galaxy", name: "Galaxy", price: 3000000, cur: MONEY, blurb: "Deep space and stardust.", swatch: "radial-gradient(circle at 40% 35%,#3a2a6a,#0a0518)" },
-  { id: "royal", name: "Royal Casino", price: 800, cur: CHIPS, blurb: "The official casino back. Chips only.", swatch: "radial-gradient(circle at 50% 40%,#2a58c8,#0e2160)" },
-  { id: "vipback", name: "VIP Black", price: 1500, cur: CHIPS, blurb: "Matte black, gold monogram. Chips only.", swatch: "linear-gradient(160deg,#1a1712,#000)" },
+  { id: "royal", name: "Royal Casino", price: 8000, cur: CHIPS, blurb: "The official casino back. Chips only.", swatch: "radial-gradient(circle at 50% 40%,#2a58c8,#0e2160)" },
+  { id: "vipback", name: "VIP Black", price: 15000, cur: CHIPS, blurb: "Matte black, gold monogram. Chips only.", swatch: "linear-gradient(160deg,#1a1712,#000)" },
 ];
 
 export const AVATARS = [
@@ -53,8 +53,8 @@ export const AVATARS = [
   { id: "moneybag", name: "Loaded", emoji: "💰", price: 600, cur: CHIPS, bg: "linear-gradient(160deg,#ffe08a,#9a6a10)" },
   { id: "champagne", name: "Bottle Service", emoji: "🍾", price: 1200, cur: CHIPS, bg: "linear-gradient(160deg,#ffe08a,#9a6a10)" },
   { id: "gem", name: "Gem", emoji: "💠", price: 2000, cur: CHIPS, bg: "linear-gradient(160deg,#6fd2ff,#1f6a99)" },
-  { id: "crown", name: "High Roller", emoji: "👑", price: 3000, cur: CHIPS, bg: "linear-gradient(160deg,#ffe08a,#9a6a10)" },
-  { id: "trophy", name: "Champion", emoji: "🏆", price: 8000, cur: CHIPS, bg: "linear-gradient(160deg,#ffd24a,#8a5a10)" },
+  { id: "crown", name: "High Roller", emoji: "👑", price: 30000, cur: CHIPS, bg: "linear-gradient(160deg,#ffe08a,#9a6a10)" },
+  { id: "trophy", name: "Champion", emoji: "🏆", price: 80000, cur: CHIPS, bg: "linear-gradient(160deg,#ffd24a,#8a5a10)" },
 ];
 
 // Multiplayer only, a felt swaps the same table colours the ladder rooms use
@@ -77,8 +77,8 @@ export const EMOTE_PACKS = [
   { id: "tabletalk", name: "Table Talk", price: 12000, cur: MONEY, emojis: ["🤝", "👋", "🫡", "🎲", "🤞"] },
   { id: "hearts", name: "Feeling It", price: 6000, cur: MONEY, emojis: ["❤️", "😍", "🥰", "💔", "😤"] },
   { id: "villain", name: "Table Villain", price: 90000, cur: MONEY, emojis: ["😈", "🤡", "👿", "🃏", "🕶️"] },
-  { id: "vip", name: "VIP Lounge", price: 1500, cur: CHIPS, emojis: ["🤑", "💰", "🍾", "🥂", "💸"] },
-  { id: "party", name: "Big Win", price: 800, cur: CHIPS, emojis: ["🎉", "🏆", "🤩", "🎊", "🙌"] },
+  { id: "vip", name: "VIP Lounge", price: 15000, cur: CHIPS, emojis: ["🤑", "💰", "🍾", "🥂", "💸"] },
+  { id: "party", name: "Big Win", price: 35000, cur: CHIPS, emojis: ["🎉", "🏆", "🤩", "🎊", "🙌"] },
 ];
 
 // The server accepts any emote someone could own, or a paid one wouldn't go through

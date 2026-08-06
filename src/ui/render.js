@@ -461,7 +461,7 @@ function scoreboard(s) {
     .map((p) => {
       let did = p.roundDelta > 0 ? `+${p.roundDelta}` : p.turnState === "busted" ? "bust" : "-";
       const star = p.roundDelta > 0 && p.roundDelta === maxDelta ? " ★" : "";
-      return `<div class="sb-row ${p.seat === s.you ? "you" : ""}"><span class="sb-name">${p.name}${star}</span><span class="sb-round num">${did}</span><span class="sb-total num">${p.totalScore}</span></div>`;
+      return `<div class="sb-row ${p.seat === s.you ? "you" : ""}"><span class="sb-name">${avatarBadge(p.seat === s.you, p.name, "avatar--xs")}${p.name}${star}</span><span class="sb-round num">${did}</span><span class="sb-total num">${p.totalScore}</span></div>`;
     })
     .join("");
   return `<div class="scoreboard"><div class="sb-row sb-head"><span>Player</span><span>Round</span><span>Total</span></div>${rows}</div>`;

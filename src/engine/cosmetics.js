@@ -109,6 +109,10 @@ export async function buy(id) {
 function decorate(sel) {
   return (i) => ({ ...i, owned: owns(i.id), equipped: i.kind === "emote" ? owns(i.id) : sel[i.kind] === i.id });
 }
+// Money items first then chips, cheapest first in each, so the free default comes first
+const byOrder = (a, b) => (a.cur === b.cur ? a.price - b.price : a.cur === MONEY ? -1 : 1);
+const ordered = (list, d) => list.slice().sort(byOrder).map(d);
+
 export function shopSummary() {
   const sel = readSel();
   const d = decorate(sel);
@@ -116,10 +120,10 @@ export function shopSummary() {
     money: getMoney(),
     chips: getChipBalance(),
     signedIn: walletMode() === "server",
-    faces: CARD_FACES.map(d),
-    backs: CARD_BACKS.map(d),
-    avatars: AVATARS.map(d),
-    felts: FELTS.map(d),
-    emotes: EMOTE_PACKS.map(d),
+    faces: ordered(CARD_FACES, d),
+    backs: ordered(CARD_BACKS, d),
+    avatars: ordered(AVATARS, d),
+    felts: ordered(FELTS, d),
+    emotes: ordered(EMOTE_PACKS, d),
   };
 }

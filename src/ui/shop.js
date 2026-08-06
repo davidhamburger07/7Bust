@@ -29,7 +29,7 @@ function item(preview, it, extraClass = "") {
 }
 
 const faceItem = (f) => item(`<div class="card card--mini" data-skin="${f.id}"><span class="corner">7</span><span class="face">7</span></div>`, f);
-const backItem = (b) => item(`<div class="card card--mini card--pending" data-back="${b.id}"><span class="card-back"></span></div>`, b);
+const backItem = (b) => item(`<div class="card card--mini card--pending"><span class="card-back" data-back="${b.id}"></span></div>`, b);
 const avatarItem = (a) => item(`<span class="avatar avatar--lg" style="--av-bg:${a.bg}"><span class="avatar-emoji">${a.emoji}</span></span>`, a);
 const feltItem = (f) => item(`<span class="felt-swatch" style="background:${f.swatch}"></span>`, f);
 const emoteItem = (p) => item(`<span class="emote-preview">${p.emojis.slice(0, 5).map((e) => `<span>${e}</span>`).join("")}</span>`, p, "shop-item--wide");
