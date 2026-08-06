@@ -4,10 +4,11 @@ import { createStore } from "../store.mjs";
 import { resolveIdentity } from "../src/server/identity.mjs";
 import { DAILY_BONUS, JACKPOT, spinWheel, today } from "../src/engine/rewards.js";
 import { trackReward } from "../src/engine/analytics.js";
-import { itemById, CHIPS } from "../src/engine/cosmeticsData.js";
+import { itemById, CHIPS, LOGON_IDS, STREAK_DAY7_CHIPS, STREAK_DAY7_BACKUP } from "../src/engine/cosmeticsData.js";
 
 // Owned chip cosmetics are saved as a comma separated list of ids
 const cosList = (w) => (w && w.cos ? String(w.cos).split(",").filter(Boolean) : []);
+const dayIx = (s) => (s ? Math.floor(new Date(s + "T00:00:00Z").getTime() / 86400000) : -99999);
 
 const STARTING_BALANCE = 1000;
 const MAX_AD_GRANTS_PER_DAY = 20; // We can't check the ad really played, so cap the payout
@@ -62,6 +63,25 @@ export default async function handler(req, res) {
         const next = [...owned, item.id];
         await store.walletSetField(key, "cos", next.join(","));
         return res.status(200).json({ ok: true, balance, owned: next });
+      }
+
+      case "streak": {
+        // Day 7 of the login streak gives an exclusive cosmetic and chips, or more chips if all are owned
+        // At most once every 7 days, checked here so a faked streak can't farm it
+        if (w.streakAt && dayIx(day) - dayIx(w.streakAt) < 6) {
+          return res.status(200).json({ ok: false, reason: "too-soon", balance: w.balance });
+        }
+        await store.walletSetField(key, "streakAt", day);
+        const owned = cosList(w);
+        const unowned = LOGON_IDS.filter((id) => !owned.includes(id));
+        if (unowned.length) {
+          const pick = unowned[Math.floor(Math.random() * unowned.length)];
+          await store.walletSetField(key, "cos", [...owned, pick].join(","));
+          const balance = await store.walletAdd(key, STREAK_DAY7_CHIPS);
+          return res.status(200).json({ ok: true, cosmetic: pick, chips: STREAK_DAY7_CHIPS, balance, owned: [...owned, pick] });
+        }
+        const balance = await store.walletAdd(key, STREAK_DAY7_BACKUP);
+        return res.status(200).json({ ok: true, cosmetic: null, chips: STREAK_DAY7_BACKUP, backup: true, balance, owned });
       }
 
       case "daily": {

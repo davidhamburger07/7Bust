@@ -4,7 +4,7 @@
 import * as storage from "../net/storage.js";
 import { getChips as getMoney, setChips as setMoney } from "./pveWallet.js";
 import { walletMode, getBalance as getChipBalance, adjustLocal, purchaseWithChips, walletCosmetics } from "../net/walletClient.js";
-import { MONEY, CHIPS, CARD_FACES, CARD_BACKS, AVATARS, FELTS, EMOTE_PACKS, BASE_EMOTES, DEFAULTS, itemById } from "./cosmeticsData.js";
+import { MONEY, CHIPS, CARD_FACES, CARD_BACKS, AVATARS, FELTS, EMOTE_PACKS, BASE_EMOTES, DEFAULTS, itemById, LOGON_IDS } from "./cosmeticsData.js";
 
 const OWNED_KEY = "7bust:cosmetics:owned:v1"; // All money items and a guest's chips items
 const SEL_KEY = "7bust:cosmetics:sel:v1";
@@ -110,8 +110,21 @@ function decorate(sel) {
   return (i) => ({ ...i, owned: owns(i.id), equipped: i.kind === "emote" ? owns(i.id) : sel[i.kind] === i.id });
 }
 // Money items first then chips, cheapest first in each, so the free default comes first
+// Login only items are left out, they can't be bought
 const byOrder = (a, b) => (a.cur === b.cur ? a.price - b.price : a.cur === MONEY ? -1 : 1);
-const ordered = (list, d) => list.slice().sort(byOrder).map(d);
+const ordered = (list, d) => list.filter((i) => !i.exclusive).slice().sort(byOrder).map(d);
+
+// Gives a cosmetic straight to the player and equips it, used for the guest day 7 reward
+// Signed in players get theirs saved on the server instead
+export function grantLocal(id) {
+  addLocalOwned(id);
+  equip(id);
+}
+// Login items the player doesn't own yet, the day 7 reward picks from these
+export function unownedLogon() {
+  return LOGON_IDS.filter((id) => !owns(id));
+}
+export const ownsAllLogon = () => unownedLogon().length === 0;
 
 export function shopSummary() {
   const sel = readSel();

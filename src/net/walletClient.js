@@ -164,3 +164,24 @@ export async function purchaseWithChips(itemId) {
     return { ok: false, reason: "network" };
   }
 }
+
+// Day 7 streak reward. The server picks the cosmetic and only allows it once a week
+export async function claimStreak7() {
+  const cred = await walletCredential();
+  if (!cred) return { ok: false, reason: "guest" };
+  try {
+    const res = await fetch(`${backendHttpOrigin()}/api/wallet`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ platform: cred.platform, token: cred.token, action: "streak" }),
+    });
+    const j = await res.json();
+    if (j && j.ok) {
+      if (typeof j.balance === "number") balance = j.balance;
+      if (Array.isArray(j.owned)) serverCos = j.owned;
+    }
+    return j || { ok: false, reason: "network" };
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+}

@@ -8,6 +8,7 @@ import { renderArenaSelect, pveChipStack } from "./arenaSelect.js";
 import { renderLeaderboard } from "./leaderboard.js";
 import { matchSkin } from "../engine/arenas.js";
 import { renderShop } from "./shop.js";
+import { renderDailyLogin } from "./dailyLogin.js";
 import { selectedFace, selectedBack, selectedAvatar, selectedFelt, ownedEmotes } from "../engine/cosmetics.js";
 import { avatarById, feltById } from "../engine/cosmeticsData.js";
 import { getChips as getMoney } from "../engine/pveWallet.js";
@@ -998,7 +999,8 @@ export function renderApp(view) {
   const screen = inMatch ? renderMatch(view) : renderLobby(view);
   const overlay = inMatch ? renderOverlay(view) : "";
   const confirm = inMatch && view.confirmExit ? renderExitConfirm(view) : "";
-  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${renderTutorialOffer(view)}${renderToast(view)}</div>`;
+  const daily = inMatch ? "" : renderDailyLogin(view); // The login streak shows in the lobby, never mid hand
+  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${daily}${renderTutorialOffer(view)}${renderToast(view)}</div>`;
 }
 
 // Offers the walkthrough over the first hand

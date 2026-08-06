@@ -20,11 +20,12 @@ import { createHouseGame, shuffleHouseDeck, HOUSE_DECK_SIZE } from "./engine/hou
 import { ARENAS, arenaById, ARENA_ROUNDS } from "./engine/arenas.js";
 import { pveSummary, setChips, getChips, recordHand, restake, peakNetWorth, roomsOpenedBetween, PVE_RESTAKE } from "./engine/pveWallet.js";
 import { PERSONALITIES } from "./engine/ai.js";
-import { buy as buyCosmetic, equip as equipCosmetic } from "./engine/cosmetics.js";
+import { buy as buyCosmetic, equip as equipCosmetic, grantLocal as grantCosmeticLocal, unownedLogon } from "./engine/cosmetics.js";
 import { itemById, MONEY } from "./engine/cosmeticsData.js";
+import { streakStatus, recordClaim, MONEY_REWARDS, DAY7_CHIPS, DAY7_BACKUP } from "./engine/dailyStreak.js";
 import { randomSeedHex } from "./engine/rng.js";
 import { analyticsSink, installAnalyticsFlush } from "./net/analyticsClient.js";
-import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode } from "./net/walletClient.js";
+import { initWallet, walletUser, getBalance, claimDailyBonus, spinPrizeWheel, adjustLocal, refreshBalance, seedLocalIfUnset, dailyClaimedToday, walletMode, claimStreak7 } from "./net/walletClient.js";
 import { cgAccountsAvailable, cgAccountsKnown, cgSignIn, cgOnAuth, cgSettings, cgOnSettings } from "./net/crazygames.js";
 import { discordAvailable, discordBoot, discordReady, discordInstanceId, roomCodeFor, discordSetActivity } from "./net/discord.js";
 import { gdBoot } from "./net/gamedistribution.js";
@@ -1641,6 +1642,82 @@ function shopEquip(id) {
   render();
 }
 
+// Days 1 to 6 pay money, which only lives in the browser anyway
+// Day 7 pays chips and a cosmetic, the server pays signed in players so it can't be farmed
+function showDailyLoginIfDue() {
+  const st = streakStatus();
+  if (!st.claimable) return;
+  view.dailyLogin = { day: st.day, claimable: true, result: null };
+}
+async function claimStreakDay() {
+  const dl = view.dailyLogin;
+  if (!dl || !dl.claimable || dl.result) return;
+  const day = dl.day;
+
+  if (day < 7) {
+    const amount = MONEY_REWARDS[day - 1];
+    setChips(getChips() + amount); // Money is the single player practice stack
+    recordClaim(day);
+    syncPve();
+    sfx("chips");
+    playVoice("win");
+    trackReward({ kind: "streak", day, amount });
+    dl.result = { day, money: amount };
+    dl.claimable = false;
+    render();
+    return;
+  }
+
+  if (walletMode() === "server") {
+    const res = await claimStreak7(); // The server picks and saves the cosmetic and gives the chips
+    if (!res || !res.ok) {
+      // Already claimed this cycle, maybe the storage was cleared
+      // Move the tracker on and say so, don't pay twice
+      recordClaim(7);
+      dl.claimable = false;
+      toast(res && res.reason === "too-soon" ? "Day 7 reward already claimed this week." : "Couldn't reach the vault, try again.");
+      render();
+      return;
+    }
+    if (res.cosmetic) equipCosmetic(res.cosmetic); // Emote packs are always on, only avatars get equipped
+    view.soloBalance = typeof res.balance === "number" ? res.balance : view.soloBalance;
+    recordClaim(7);
+    sfx("jackpot");
+    cgHappytime();
+    trackReward({ kind: "streak", day: 7, amount: res.chips, cosmetic: res.cosmetic || "backup" });
+    dl.result = { day: 7, cosmetic: res.cosmetic, chips: res.chips, backup: !!res.backup };
+    dl.claimable = false;
+    render();
+    return;
+  }
+
+  const pool = unownedLogon();
+  if (pool.length) {
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    grantCosmeticLocal(pick);
+    adjustLocal(DAY7_CHIPS);
+    syncWallet();
+    recordClaim(7);
+    sfx("jackpot");
+    trackReward({ kind: "streak", day: 7, amount: DAY7_CHIPS, cosmetic: pick });
+    dl.result = { day: 7, cosmetic: pick, chips: DAY7_CHIPS, backup: false };
+  } else {
+    adjustLocal(DAY7_BACKUP);
+    syncWallet();
+    recordClaim(7);
+    sfx("jackpot");
+    trackReward({ kind: "streak", day: 7, amount: DAY7_BACKUP, cosmetic: "backup" });
+    dl.result = { day: 7, cosmetic: null, chips: DAY7_BACKUP, backup: true };
+  }
+  dl.claimable = false;
+  render();
+}
+function closeDailyLogin() {
+  view.dailyLogin = null;
+  sfx("click");
+  render();
+}
+
 function lbTab(tab) {
   view.lbTab = tab === "pvp" ? "pvp" : "pve";
   sfx("click");
@@ -1833,6 +1910,8 @@ const ACTIONS = {
   "arena-open": openLadder,
   "shop-open": openShop,
   "shop-close": closeShop,
+  "daily-login-claim": claimStreakDay,
+  "daily-login-close": closeDailyLogin,
   "ladder-close": closeLadder, // Back from the ladder select goes all the way to the lobby
   "ladder-again": ladderAgain,
   "ladder-exit": exitLadderGame,
@@ -2011,6 +2090,9 @@ root.addEventListener("keydown", (e) => {
   prevReshuffles = view.snapshot.shoe.reshuffles || 0;
   const le = view.snapshot.lastEvent;
   lastSig = le ? `${le.kind}:${le.seat}:${le.card ? le.card.value : ""}` : "";
+  // The streak shows on the first load of a new day
+  // First time players are busy with terms and the tutorial, so they see it next visit
+  if (!view.showTos) showDailyLoginIfDue();
   render();
   save();
   setInterval(tickClock, 1000);

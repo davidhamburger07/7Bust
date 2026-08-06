@@ -81,6 +81,31 @@ export const EMOTE_PACKS = [
   { id: "party", name: "Big Win", price: 35000, cur: CHIPS, emojis: ["🎉", "🏆", "🤩", "🎊", "🙌"] },
 ];
 
+// Only given by the day 7 login streak, never sold
+// They sit in the lists above so they still show once owned
+const LOGON_AVATARS = [
+  { id: "logon_halo", name: "Guardian", emoji: "😇", exclusive: true, bg: "linear-gradient(160deg,#fff2b0,#c9a84a)" },
+  { id: "logon_oni", name: "Oni", emoji: "👹", exclusive: true, bg: "linear-gradient(160deg,#e0453a,#6a1010)" },
+  { id: "logon_ninja", name: "Shadow", emoji: "🥷", exclusive: true, bg: "linear-gradient(160deg,#3a4048,#0e1114)" },
+  { id: "logon_wizard", name: "Archmage", emoji: "🧙", exclusive: true, bg: "linear-gradient(160deg,#6f5aff,#2a1a7a)" },
+  { id: "logon_unicorn", name: "Unicorn", emoji: "🦄", exclusive: true, bg: "linear-gradient(160deg,#ff9ad2,#7a4ac9)" },
+  { id: "logon_alien", name: "Visitor", emoji: "👾", exclusive: true, bg: "linear-gradient(160deg,#7af7c0,#1a8a6a)" },
+];
+const LOGON_EMOTES = [
+  { id: "logon_royalty", name: "Royalty", exclusive: true, emojis: ["🤴", "👸", "🫅", "💂", "🗝️"] },
+  { id: "logon_mythic", name: "Mythic", exclusive: true, emojis: ["🐲", "🔮", "⚡", "🗡️", "🏰"] },
+];
+AVATARS.push(...LOGON_AVATARS);
+EMOTE_PACKS.push(...LOGON_EMOTES);
+
+export const LOGON_POOL = [...LOGON_AVATARS, ...LOGON_EMOTES];
+export const LOGON_IDS = LOGON_POOL.map((i) => i.id);
+export const isLogon = (id) => LOGON_IDS.includes(id);
+
+// The server pays these out too, so they live here
+export const STREAK_DAY7_CHIPS = 2500; // Comes with an exclusive cosmetic
+export const STREAK_DAY7_BACKUP = 20000; // Paid instead once every exclusive is owned
+
 // The server accepts any emote someone could own, or a paid one wouldn't go through
 export const ALL_EMOTES = [...new Set([...BASE_EMOTES, ...EMOTE_PACKS.flatMap((p) => p.emojis)])];
 

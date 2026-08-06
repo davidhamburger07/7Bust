@@ -5825,3 +5825,201 @@
 .shoe-pile[data-back="vipback"] { border-color: var(--gold); }
 .shoe-pile[data-back="galaxy"] { border-color: #4a3a8a; }
 .shoe-pile[data-back="waves"] { border-color: #1a7a8a; }
+
+/* Seven day login streak */
+.dl-overlay { z-index: 60; } /* Above the wheel and the tutorial offer */
+.dl-card { max-width: 640px; }
+.dl-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  font-size: 20px;
+  line-height: 1;
+}
+.dl-kick {
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-hi);
+  font-weight: 900;
+}
+.dl-title {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 4vw, 32px);
+  letter-spacing: -0.01em;
+  margin: 2px 0 6px;
+  color: var(--cream);
+}
+.dl-sub {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 0 auto var(--s4);
+  max-width: 42ch;
+}
+
+.dl-track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+}
+@media (min-width: 560px) {
+  .dl-track { grid-template-columns: repeat(6, 1fr); }
+}
+.dl-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 10px 6px 12px;
+  border-radius: 12px;
+  background: rgba(4, 32, 18, 0.55);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  min-height: 92px;
+}
+.dl-daynum {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 900;
+  color: var(--muted);
+}
+.dl-tile-reward {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.dl-amt { font-weight: 900; font-size: 15px; color: var(--cream); white-space: nowrap; }
+.dl-amt--chips { font-size: 17px; color: var(--gold-hi); }
+
+.dl-day--claimed { opacity: 0.62; border-color: rgba(57, 211, 83, 0.35); }
+.dl-day--claimed .dl-daynum { color: #39d353; }
+.dl-check {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  color: #39d353;
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.dl-day--today {
+  border-color: var(--gold);
+  background: radial-gradient(120% 100% at 50% 0%, rgba(255, 214, 102, 0.16), rgba(4, 32, 18, 0.7));
+  box-shadow: 0 0 0 2px var(--gold), 0 6px 18px rgba(0, 0, 0, 0.4);
+  animation: dlPulse 1.9s ease-in-out infinite;
+}
+.dl-day--today .dl-daynum { color: var(--gold-hi); }
+@keyframes dlPulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--gold), 0 6px 18px rgba(0, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 0 2px var(--gold-hi), 0 0 22px rgba(255, 214, 102, 0.5); }
+}
+.dl-day--locked { opacity: 0.9; }
+
+.dl-day--prize {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: var(--s3);
+  min-height: 0;
+  padding: 14px 16px;
+  background: linear-gradient(150deg, #4a2a8a 0%, #2a1360 55%, #1a0c44 100%);
+  border: 2px solid var(--gold);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+.dl-day--prize .dl-daynum { color: var(--gold-hi); font-size: 12px; }
+.dl-day--prize .dl-tile-reward { flex-direction: row; align-items: center; gap: var(--s3); margin-top: 0; }
+.dl-gift { font-size: 30px; line-height: 1; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5)); }
+.dl-extra {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffd9f2;
+}
+.dl-prizebadge {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: linear-gradient(160deg, #ffe89a, #b8860b);
+  color: #2a1600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+.dl-day--prize.dl-day--today { animation: dlPulse 1.9s ease-in-out infinite; }
+
+/* The "can't be bought" note and the claim button */
+.dl-note {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  background: rgba(255, 214, 102, 0.08);
+  border: 1px solid rgba(255, 214, 102, 0.28);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 0 0 var(--s4);
+}
+.dl-note b { color: var(--gold-hi); }
+.dl-cta { display: flex; flex-direction: column; gap: var(--s2); }
+.dl-claim { width: 100%; }
+.dl-done { color: var(--muted); font-weight: 800; font-size: 13px; margin-bottom: 2px; }
+
+.dl-reveal { display: flex; flex-direction: column; align-items: center; gap: var(--s2); padding-top: var(--s2); }
+.dl-reveal-kick {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 900;
+  color: var(--gold-hi);
+}
+.dl-reveal-big {
+  font-family: var(--font-display);
+  font-size: clamp(34px, 7vw, 52px);
+  line-height: 1;
+  color: var(--cream);
+  margin: 2px 0;
+}
+.dl-reveal-big--sm { font-size: clamp(24px, 5vw, 34px); }
+.dl-reveal-prize { margin: var(--s2) 0 4px; animation: pop 0.5s var(--ease-pop) both; }
+.avatar--xl { width: 104px; height: 104px; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 8px 26px rgba(0, 0, 0, 0.6); }
+.avatar--xl .avatar-emoji { font-size: 56px; }
+.dl-emote-reveal { display: inline-flex; gap: 8px; font-size: 34px; line-height: 1; }
+.dl-reveal-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--cream);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dl-reveal-tag {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-hi);
+  border: 1px solid rgba(255, 214, 102, 0.5);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.dl-reveal-sub {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+  max-width: 40ch;
+  margin: 4px 0 var(--s3);
+}
+.dl-reveal .btn { width: 100%; max-width: 300px; }
