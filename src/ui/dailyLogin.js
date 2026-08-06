@@ -3,10 +3,11 @@
 
 import { MONEY_REWARDS, DAY7_CHIPS } from "../engine/dailyStreak.js";
 import { itemById } from "../engine/cosmeticsData.js";
+import { chipsIcon } from "./icons.js";
 
 const num = (n) => Math.round(n).toLocaleString("en-US");
 const money = (n) => `<span class="cur cur--money">$</span>${num(n)}`;
-const chips = (n) => `<span class="cur cur--chips" aria-hidden="true"></span>${num(n)}`;
+const chips = (n) => `${chipsIcon()}${num(n)}`;
 
 function tileReward(day) {
   if (day < 7) return `<span class="dl-amt">${money(MONEY_REWARDS[day - 1])}</span>`;

@@ -3,9 +3,10 @@
 
 import { shopSummary } from "../engine/cosmetics.js";
 import { MONEY } from "../engine/cosmeticsData.js";
+import { chipsIcon } from "./icons.js";
 
 const num = (n) => Math.round(n).toLocaleString("en-US");
-const curIcon = (cur) => (cur === MONEY ? `<span class="cur cur--money">$</span>` : `<span class="cur cur--chips" aria-hidden="true"></span>`);
+const curIcon = (cur) => (cur === MONEY ? `<span class="cur cur--money">$</span>` : chipsIcon());
 
 function control(item) {
   if (item.kind === "emote") {
@@ -53,7 +54,7 @@ export function renderShop(view) {
         </div>
         <div class="shop-wallets">
           <span class="shop-bal shop-bal--money" title="Money: earned in single-player"><span class="cur cur--money">$</span><b class="num">${num(s.money)}</b></span>
-          <span class="shop-bal shop-bal--chips" title="Chips: earned in multiplayer"><span class="cur cur--chips" aria-hidden="true"></span><b class="num">${num(s.chips)}</b></span>
+          <span class="shop-bal shop-bal--chips" title="Chips: earned in multiplayer">${chipsIcon()}<b class="num">${num(s.chips)}</b></span>
         </div>
       </div>
 
@@ -65,7 +66,7 @@ export function renderShop(view) {
 
       <p class="shop-foot">
         <span class="cur cur--money">$</span> <b>Money</b> is earned in the single-player street games &nbsp;·&nbsp;
-        <span class="cur cur--chips" aria-hidden="true"></span> <b>Chips</b> in official multiplayer.
+        ${chipsIcon()} <b>Chips</b> in official multiplayer.
         ${s.signedIn ? "" : "Sign in to buy Chips items on your account (guests spend their local Chips)."}
         Cosmetics change how the table looks, never how it plays.
       </p>

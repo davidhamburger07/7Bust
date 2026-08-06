@@ -9,6 +9,7 @@ import { renderLeaderboard } from "./leaderboard.js";
 import { matchSkin } from "../engine/arenas.js";
 import { renderShop } from "./shop.js";
 import { renderDailyLogin } from "./dailyLogin.js";
+import { chipsIcon } from "./icons.js";
 import { selectedFace, selectedBack, selectedAvatar, selectedFelt, ownedEmotes } from "../engine/cosmetics.js";
 import { avatarById, feltById } from "../engine/cosmeticsData.js";
 import { getChips as getMoney } from "../engine/pveWallet.js";
@@ -307,7 +308,7 @@ function walletCard(view) {
         <span class="wallet-bal-note">single-player street games</span>
       </div>
       <div class="wallet-bal wallet-bal--chips">
-        <span class="wallet-bal-k"><span class="cur cur--chips" aria-hidden="true"></span> Chips</span>
+        <span class="wallet-bal-k">${chipsIcon()} Chips</span>
         <span class="wallet-bal-v num">${(view.soloBalance || 0).toLocaleString()}</span>
         <span class="wallet-bal-note">official multiplayer casino</span>
       </div>
