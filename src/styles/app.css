@@ -3676,7 +3676,8 @@
 }
 
 /* With nobody hosting this button is the way out, so the list is never a dead end */
-.browse-host {
+/* Its own class, sharing the row's class turned the button text cream */
+.browse-host-btn {
   margin-top: var(--s2);
 }
 

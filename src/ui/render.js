@@ -906,7 +906,7 @@ function renderOnlineBrowse(o, view) {
     .join("");
   const empty = b.loading && !b.list.length
     ? `<div class="browse-empty"><span class="spinner"></span> Looking for tables…</div>`
-    : `<div class="browse-empty">No open tables this second.<br /><small>Open your own table and invite friends, anyone can join with the room code.</small><br /><button class="btn btn--play browse-playnow" data-action="mp-create">CREATE A ROOM</button></div>`;
+    : `<div class="browse-empty">No open tables this second.<br /><small>Host your own below, invite friends with the room code, and empty seats fill with the house AI.</small></div>`;
   return `
   <div class="screen screen--online">
     <div class="mp-card mp-card--wide">
@@ -919,7 +919,7 @@ function renderOnlineBrowse(o, view) {
         <button class="link" data-action="mp-browse-refresh">${b.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
       <div class="browse-list">${rows || empty}</div>
-      <button class="btn btn--play browse-host" data-action="mp-create">HOST A TABLE<span class="sub">empty seats fill with the house AI</span></button>
+      <button class="btn btn--play browse-host-btn" data-action="mp-create">HOST A TABLE<span class="sub">empty seats fill with the house AI</span></button>
       ${onlineError(o)}
     </div>
   </div>`;
