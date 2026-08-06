@@ -1008,23 +1008,5 @@ export function renderApp(view) {
   const overlay = inMatch ? renderOverlay(view) : "";
   const confirm = inMatch && view.confirmExit ? renderExitConfirm(view) : "";
   const daily = inMatch ? "" : renderDailyLogin(view); // The login streak shows in the lobby, never mid hand
-  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${daily}${renderTutorialOffer(view)}${renderToast(view)}</div>`;
-}
-
-// Offers the walkthrough over the first hand
-// It doesn't block anything, it only decides if the tips run
-function renderTutorialOffer(view) {
-  if (!view.tutorialOffer) return "";
-  return `
-  <div class="overlay tut-offer">
-    <div class="result tut-card">
-      <div class="kicker">Welcome to 7Bust</div>
-      <h2>New here?</h2>
-      <p class="tut-sub">Want a quick walkthrough of how a hand works? It takes about twenty seconds.</p>
-      <div class="tut-actions">
-        <button class="btn btn--play" data-action="tut-yes">YES, SHOW ME<span class="sub">a guided first hand</span></button>
-        <button class="btn btn--online" data-action="tut-no">NO THANKS<span class="sub">I'll figure it out</span></button>
-      </div>
-    </div>
-  </div>`;
+  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${daily}${renderToast(view)}</div>`;
 }

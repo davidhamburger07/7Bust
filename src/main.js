@@ -4,7 +4,7 @@ import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
 import { morph } from "./ui/morph.js";
 import { mountLadderDeck } from "./ui/arenaSelect.js";
-import { startCoach, place as placeCoach, coachRunning } from "./ui/coach.js";
+import { ftueStart, ftueSync, hasCompletedTutorial } from "./ui/ftue.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
 import { JACKPOT, spinWheel } from "./engine/rewards.js";
@@ -49,7 +49,6 @@ const AI_DELAY = 850;
 const SAVE_KEY = "7bust:save:v3"; // The deck changed, older saves can't resume
 const NET_KEY = "7bust:net"; // Saved details to rejoin an online room
 const HISTORY_KEY = "7bust:history";
-const COACH_KEY = "7bust:coach:v1"; // Set once the first run tour has been seen
 
 // Solo runs the engine in the page, online sends actions over a WebSocket and draws what comes back
 const TOS_KEY = "7bust:tos:v1";
@@ -242,7 +241,7 @@ function render() {
   morph(root, renderApp(view));
   placeRadio();
   mountLadderDeck(); // The ladder's room list needs its scroll set up again after a patch
-  if (coachRunning()) placeCoach(); // What it points at moves as cards are dealt
+  ftueSync(view); // The tutorial moves its spotlight as the table changes
   const newLog = document.getElementById("log");
   if (newLog) newLog.scrollTop = atBottom ? newLog.scrollHeight : prevTop;
   const chatList = document.getElementById("chatlist");
@@ -528,6 +527,11 @@ async function start() {
   }
   hasPlayed = true; // After a first match the next break can show an ad
   sfx("ding");
+  // First time at the practice table, so run the tutorial on this hand
+  // Set up before apply so the spotlight lands in the redraw
+  if (!hasCompletedTutorial() && view.mode === "solo" && !view.ladderGame && !view.house) {
+    ftueStart({ rerender: render });
+  }
   apply(res);
 }
 // Online only the server knows the card, so it's dealt face down and flips when it arrives
@@ -1012,44 +1016,8 @@ async function acceptTos() {
   sfx("ding");
   if (!firstRun) return render();
   // CrazyGames allows one click before play, so accepting deals the hand straight away
-  // How to Play waits behind the "?", which pulses until they've opened it
-  view.hintRules = true;
+  // The tutorial teaches on this first hand
   await start();
-  offerTutorial();
-}
-
-// On a first run a small card over the first hand offers the tutorial, only ever once
-function markCoachSeen() {
-  try {
-    storage.setItem(COACH_KEY, String(Date.now()));
-  } catch {
-    // Storage isn't available, the game still works without it
-  }
-}
-function offerTutorial() {
-  try {
-    if (storage.getItem(COACH_KEY)) return;
-  } catch {
-    return;
-  }
-  view.tutorialOffer = true;
-  render();
-}
-function tutorialYes() {
-  view.tutorialOffer = false;
-  markCoachSeen();
-  render();
-  const done = () => {
-    view.hintRules = false; // They took the tour, stop pulsing the "?"
-    render();
-  };
-  setTimeout(() => startCoach(done), 350); // Let the offer card clear first
-}
-function tutorialNo() {
-  view.tutorialOffer = false;
-  markCoachSeen();
-  view.hintRules = true; // No tour taken, keep the "?" pulsing
-  render();
 }
 
 function sendChat() {
@@ -1837,8 +1805,6 @@ const ACTIONS = {
   "history-back": closeHistory,
   "chat-send": sendChat,
   "tos-accept": acceptTos,
-  "tut-yes": tutorialYes,
-  "tut-no": tutorialNo,
   tos: () => {
     view.showTos = true;
     view.showSettings = false;

@@ -3665,97 +3665,6 @@
   cursor: default;
 }
 
-/* First game tips, shown over the table while the game plays underneath */
-/* Clicks go through to the table, only the two buttons take them */
-.coach {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-}
-.coach-card {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: min(300px, calc(100vw - 16px));
-  padding: var(--s3) var(--s3) var(--s2);
-  border-radius: 16px;
-  background: linear-gradient(180deg, #14301f, #0d2116);
-  border: 2px solid var(--gold-lo);
-  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.4);
-  pointer-events: auto;
-  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.coach-step {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold-hi);
-  opacity: 0.75;
-}
-.coach-title {
-  margin: 2px 0 4px;
-  font-family: var(--font-display);
-  font-size: 19px;
-  letter-spacing: 0.01em;
-  color: #fff;
-}
-.coach-body {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.coach-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s2);
-  margin-top: var(--s2);
-}
-.coach-skip,
-.coach-next {
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  border-radius: 999px;
-  padding: 7px 16px;
-  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), opacity 140ms linear;
-}
-.coach-skip {
-  background: none;
-  color: var(--faint);
-  font-size: 12.5px;
-  padding-left: 4px;
-}
-.coach-skip:hover { color: var(--muted); }
-.coach-next {
-  background: linear-gradient(180deg, var(--gold-hi), var(--gold));
-  color: #21160a;
-  font-weight: 800;
-  font-size: 13px;
-}
-.coach-next:hover { transform: translateY(-1px); }
-.coach-next:active { transform: translateY(0); }
-.coach-skip:focus-visible,
-.coach-next:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
-
-/* Ring around whatever the tip is pointing at */
-.coach-ring {
-  position: absolute;
-  top: 0;
-  left: 0;
-  border-radius: 14px;
-  border: 2px solid var(--gold-hi);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
-  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), width 260ms, height 260ms;
-  pointer-events: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .coach-card,
-  .coach-ring { transition: none; }
-}
-
 /* With nobody hosting this button is the way out, so the list is never a dead end */
 .browse-host {
   margin-top: var(--s2);
@@ -3981,25 +3890,6 @@
 }
 .ladder-ledger .neg {
   color: var(--bust);
-}
-/* Tutorial offer shown over the player's first hand */
-.tut-card {
-  max-width: 440px;
-}
-.tut-sub {
-  color: var(--muted);
-  font-weight: 700;
-  line-height: 1.5;
-  margin: var(--s2) auto var(--s5);
-  max-width: 34ch;
-}
-.tut-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-}
-.tut-actions .btn {
-  width: 100%;
 }
 .hs-head {
   display: flex;
@@ -6039,3 +5929,147 @@
   margin: 4px 0 var(--s3);
 }
 .dl-reveal .btn { width: 100%; max-width: 300px; }
+
+/* Tutorial that spotlights each button through the first hand */
+/* Covers the screen but lets clicks through, only the dark panels and the tooltip catch them */
+/* That keeps the button under the spotlight clickable */
+#ftue {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+}
+#ftue:not(.masked) .ftue-mask,
+#ftue:not(.masked) .ftue-ring,
+#ftue:not(.masked) .ftue-tip {
+  display: none;
+}
+.ftue-mask {
+  position: fixed;
+  background: rgba(5, 7, 11, 0.74);
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
+  pointer-events: auto; /* Catches every click outside the hole */
+  animation: ftueFade 0.25s ease both;
+}
+@keyframes ftueFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.ftue-ring {
+  position: fixed;
+  border: 2.5px solid var(--gold);
+  border-radius: 14px;
+  box-shadow: 0 0 0 3px rgba(255, 214, 102, 0.22), 0 0 26px rgba(255, 214, 102, 0.5);
+  pointer-events: none;
+  animation: ftueRing 1.6s ease-in-out infinite;
+}
+@keyframes ftueRing {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 214, 102, 0.2), 0 0 22px rgba(255, 214, 102, 0.42); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 214, 102, 0.34), 0 0 34px rgba(255, 214, 102, 0.72); }
+}
+.ftue-ring.nudge { animation: ftueNudge 0.42s ease; }
+@keyframes ftueNudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  75% { transform: translateX(7px); }
+}
+#ftue.ftue--special .ftue-ring {
+  border-color: #d7b3ff;
+  box-shadow: 0 0 0 3px rgba(215, 179, 255, 0.28), 0 0 30px rgba(179, 128, 255, 0.6);
+  animation: ftueRingSpecial 0.9s ease-in-out infinite;
+}
+@keyframes ftueRingSpecial {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(215, 179, 255, 0.24), 0 0 24px rgba(179, 128, 255, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(215, 179, 255, 0.4), 0 0 40px rgba(179, 128, 255, 0.85); }
+}
+
+.ftue-tip {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 264px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #1a160c, #0d0b06);
+  border: 2px solid var(--gold);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  color: var(--cream);
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.35;
+  pointer-events: auto;
+  animation: ftuePop 0.28s var(--ease-pop, cubic-bezier(0.2, 1.4, 0.4, 1)) both;
+}
+#ftue.ftue--special .ftue-tip { border-color: #d7b3ff; }
+.ftue-tip-text { flex: 1; }
+/* Little arrow pointing at the target */
+.ftue-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: var(--gold);
+}
+.ftue-tip.below::after {
+  bottom: auto;
+  top: -8px;
+  border-top-color: transparent;
+  border-bottom-color: var(--gold);
+}
+#ftue.ftue--special .ftue-tip::after { border-top-color: #d7b3ff; }
+#ftue.ftue--special .ftue-tip.below::after { border-top-color: transparent; border-bottom-color: #d7b3ff; }
+@keyframes ftuePop {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ftue-skip {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #b8a98a);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.ftue-skip:hover { color: var(--cream); background: rgba(255, 255, 255, 0.12); }
+.ftue-skip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* Last note of the tutorial, whether the player banked or bust */
+.ftue-final {
+  position: fixed;
+  inset: 0;
+  z-index: 71;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 11, 0.62);
+  pointer-events: auto;
+  animation: ftueFade 0.25s ease both;
+}
+.ftue-final-card {
+  text-align: center;
+  max-width: 320px;
+  padding: 22px 26px;
+  border-radius: 18px;
+  background: radial-gradient(120% 90% at 50% 0%, #0b5c3300, #0b5c33 0%, #073b21 100%);
+  border: 3px solid var(--gold);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  animation: ftuePop 0.4s var(--ease-pop, cubic-bezier(0.2, 1.4, 0.4, 1)) both;
+}
+.ftue-final.bust .ftue-final-card {
+  background: radial-gradient(120% 90% at 50% 0%, #5a0f1800, #5a0f18 0%, #2a0810 100%);
+  border-color: #e0533a;
+}
+.ftue-final-icon { font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.ftue-final-card p { color: var(--cream); font-weight: 800; font-size: 16px; line-height: 1.45; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ftue-ring, #ftue.ftue--special .ftue-ring { animation: none; }
+}
