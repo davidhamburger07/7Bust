@@ -109,20 +109,49 @@ function spotlight(rect, tip, special) {
   const tipEl = q(".ftue-tip");
   q(".ftue-tip-text").textContent = tip;
   tipEl.style.display = "flex";
-  const tw = tipEl.offsetWidth || 240;
-  const th = tipEl.offsetHeight || 60;
-  const gap = 16;
-  let ty = top - th - gap;
-  let below = false;
-  if (ty < 8) {
-    ty = Math.min(bottom + gap, vh - th - 8);
-    below = true;
+  placeTip(tipEl, { left, top, right, bottom, w, h }, vw, vh);
+}
+
+// The tip must never cover the game, so it goes on the side that overlaps the cards least
+// while staying on screen
+const PROTECT = [".you-seat", ".opponents", ".dealer-zone", ".felt-spot"];
+function overlapArea(x, y, w, h, rects) {
+  let total = 0;
+  for (const r of rects) {
+    const ix = Math.max(0, Math.min(x + w, r.right) - Math.max(x, r.left));
+    const iy = Math.max(0, Math.min(y + h, r.bottom) - Math.max(y, r.top));
+    total += ix * iy;
   }
-  let tx = left + w / 2 - tw / 2;
-  tx = Math.max(8, Math.min(tx, vw - tw - 8));
-  tipEl.style.left = `${Math.round(tx)}px`;
-  tipEl.style.top = `${Math.round(ty)}px`;
-  tipEl.classList.toggle("below", below);
+  return total;
+}
+function placeTip(tipEl, hole, vw, vh) {
+  const tw = tipEl.offsetWidth || 240;
+  const th = tipEl.offsetHeight || 62;
+  const gap = 15;
+  const protect = PROTECT.map((s) => document.querySelector(s))
+    .filter(Boolean)
+    .map((el) => el.getBoundingClientRect())
+    .filter((r) => r.width && r.height);
+  const cx = hole.left + hole.w / 2 - tw / 2;
+  const cy = hole.top + hole.h / 2 - th / 2;
+  const cands = [
+    { side: "top", x: cx, y: hole.top - th - gap },
+    { side: "bottom", x: cx, y: hole.bottom + gap },
+    { side: "right", x: hole.right + gap, y: cy },
+    { side: "left", x: hole.left - tw - gap, y: cy },
+  ];
+  let best = null;
+  for (const c of cands) {
+    const offscreen = c.x < 8 || c.x + tw > vw - 8 || c.y < 8 || c.y + th > vh - 8;
+    const x = Math.max(8, Math.min(c.x, vw - tw - 8));
+    const y = Math.max(8, Math.min(c.y, vh - th - 8));
+    const score = overlapArea(x, y, tw, th, protect) + (offscreen ? 1e6 : 0);
+    if (!best || score < best.score) best = { side: c.side, x, y, score };
+    if (best.score === 0) break; // First side that's fully clear wins, in this order
+  }
+  tipEl.style.left = `${Math.round(best.x)}px`;
+  tipEl.style.top = `${Math.round(best.y)}px`;
+  tipEl.dataset.side = best.side;
 }
 
 function nudge() {
@@ -259,4 +288,20 @@ export function ftueSkip() {
   markDone();
   teardown();
   rerender();
+}
+
+// Clears the seen flag so the tutorial can run again, used by "Replay tutorial" in settings
+// The caller then deals a new solo hand
+export function resetTutorial() {
+  try {
+    storage.removeItem(DONE_KEY);
+  } catch {
+    // Storage isn't available, the game still works without it
+  }
+  teardown();
+}
+
+// Marks the tutorial seen without running it, for "I've played before" or "no thanks"
+export function markTutorialSeen() {
+  markDone();
 }

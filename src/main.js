@@ -4,7 +4,7 @@ import { createServer } from "./server/mockServer.js";
 import { renderApp, chatLines } from "./ui/render.js";
 import { morph } from "./ui/morph.js";
 import { mountLadderDeck } from "./ui/arenaSelect.js";
-import { ftueStart, ftueSync, hasCompletedTutorial } from "./ui/ftue.js";
+import { ftueStart, ftueSync, hasCompletedTutorial, resetTutorial, markTutorialSeen } from "./ui/ftue.js";
 import { announce, initAudio, sfx, playVoice, setAudioPrefs, setPlatformMute as setAnnounceMute } from "./ui/announce.js";
 import { initRadio, startRadio, setRadioVolume, getRadioVolume, pauseForAd, resumeAfterAd, setPlatformMute as setRadioMute } from "./ui/radio.js";
 import { spinWheel } from "./engine/rewards.js";
@@ -527,12 +527,11 @@ async function start() {
   }
   hasPlayed = true; // After a first match the next break can show an ad
   sfx("ding");
-  // First time at the practice table, so run the tutorial on this hand
-  // Set up before apply so the spotlight lands in the redraw
-  if (!hasCompletedTutorial() && view.mode === "solo" && !view.ladderGame && !view.house) {
-    ftueStart({ rerender: render });
-  }
   apply(res);
+  // First time at the practice table, so start onboarding on this hand
+  if (!hasCompletedTutorial() && view.mode === "solo" && !view.ladderGame && !view.house) {
+    beginOnboarding();
+  }
 }
 // Online only the server knows the card, so it's dealt face down and flips when it arrives
 // Bank and hold just show what was asked and stop taking presses until the server agrees
@@ -929,6 +928,75 @@ function closeSettings() {
   view.showSettings = false;
   render();
 }
+// Replays the first hand tutorial from settings on a fresh practice table
+// Deals directly so no ad break gets in first
+async function replayTutorial() {
+  resetTutorial();
+  view.showSettings = false;
+  if (net) {
+    net.leave();
+    net.close();
+    net = null;
+  }
+  clearNet();
+  reconnectTries = 0;
+  stopBrowsePoll();
+  if (aiTimer) {
+    clearTimeout(aiTimer);
+    aiTimer = null;
+  }
+  clearPending();
+  view.mode = "solo";
+  view.online = null;
+  view.ladderGame = null;
+  view.arena = null;
+  view.house = null;
+  view.ladder = false;
+  server = createServer({ cashless: true });
+  const res = await server.startMatch();
+  if (!res.ok) {
+    render();
+    toast("Couldn't start the tutorial, try again.");
+    return;
+  }
+  hasPlayed = true;
+  sfx("ding");
+  apply(res);
+  beginOnboarding();
+}
+
+function beginOnboarding() {
+  view.ftueAsk = true; // The "have you played before?" box over the dealt hand
+  render();
+}
+function onbPlayedYes() {
+  sfx("click");
+  view.ftueAsk = false;
+  markTutorialSeen();
+  render();
+}
+function onbPlayedNo() {
+  sfx("click");
+  view.ftueAsk = false;
+  view.showRules = true;
+  view.rulesOffer = true;
+  render();
+}
+function onbTutorialYes() {
+  sfx("ding");
+  view.showRules = false;
+  view.rulesOffer = false;
+  render();
+  ftueStart({ rerender: render });
+  render();
+}
+function onbTutorialNo() {
+  sfx("click");
+  view.showRules = false;
+  view.rulesOffer = false;
+  markTutorialSeen();
+  render();
+}
 function setPref(key, val) {
   sfx("click");
   view.settings = { ...view.settings, [key]: val };
@@ -1177,6 +1245,11 @@ const showRules = () => {
 };
 const hideRules = () => {
   view.showRules = false;
+  // Closing How to Play during onboarding counts as saying no to the tutorial
+  if (view.rulesOffer) {
+    view.rulesOffer = false;
+    markTutorialSeen();
+  }
   render();
 };
 
@@ -1755,6 +1828,11 @@ const ACTIONS = {
   },
   settings: openSettings,
   "settings-back": closeSettings,
+  "replay-tutorial": replayTutorial,
+  "onb-played-yes": onbPlayedYes,
+  "onb-played-no": onbPlayedNo,
+  "onb-tutorial-yes": onbTutorialYes,
+  "onb-tutorial-no": onbTutorialNo,
   pause: askPause,
   "pvote-yes": () => votePause(true),
   "pvote-no": () => votePause(false),

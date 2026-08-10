@@ -6028,24 +6028,20 @@
 }
 #ftue.ftue--special .ftue-tip { border-color: #d7b3ff; }
 .ftue-tip-text { flex: 1; }
-/* Little arrow pointing at the target */
+/* Little arrow that points at the target from whichever side the tip landed on */
 .ftue-tip::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: -8px;
-  transform: translateX(-50%);
   border: 7px solid transparent;
-  border-top-color: var(--gold);
 }
-.ftue-tip.below::after {
-  bottom: auto;
-  top: -8px;
-  border-top-color: transparent;
-  border-bottom-color: var(--gold);
-}
-#ftue.ftue--special .ftue-tip::after { border-top-color: #d7b3ff; }
-#ftue.ftue--special .ftue-tip.below::after { border-top-color: transparent; border-bottom-color: #d7b3ff; }
+.ftue-tip[data-side="top"]::after { left: 50%; bottom: -8px; transform: translateX(-50%); border-top-color: var(--gold); }
+.ftue-tip[data-side="bottom"]::after { left: 50%; top: -8px; transform: translateX(-50%); border-bottom-color: var(--gold); }
+.ftue-tip[data-side="right"]::after { top: 50%; left: -8px; transform: translateY(-50%); border-right-color: var(--gold); }
+.ftue-tip[data-side="left"]::after { top: 50%; right: -8px; transform: translateY(-50%); border-left-color: var(--gold); }
+#ftue.ftue--special .ftue-tip[data-side="top"]::after { border-top-color: #d7b3ff; }
+#ftue.ftue--special .ftue-tip[data-side="bottom"]::after { border-bottom-color: #d7b3ff; }
+#ftue.ftue--special .ftue-tip[data-side="right"]::after { border-right-color: #d7b3ff; }
+#ftue.ftue--special .ftue-tip[data-side="left"]::after { border-left-color: #d7b3ff; }
 @keyframes ftuePop {
   from { opacity: 0; transform: translateY(4px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -6096,4 +6092,39 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ftue-ring, #ftue.ftue--special .ftue-ring { animation: none; }
+}
+
+/* The "played before?" question and the "How to Play" tutorial offer */
+.ftue-ask { max-width: 460px; }
+.ftue-ask-sub {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 6px auto var(--s5);
+  max-width: 32ch;
+}
+.ftue-ask-btns { display: flex; flex-direction: column; gap: var(--s3); }
+.ftue-ask-btns .btn { width: 100%; }
+
+/* Tutorial offer that replaces "Got it" at the bottom of "How to Play" for new players */
+/* Narrow and centred so it stays clear of the radio in the bottom left */
+.rules-offer {
+  border-top: 2px solid rgba(255, 214, 102, 0.3);
+  padding-top: var(--s3);
+  margin: 2px auto 0;
+  width: 100%;
+  max-width: 620px;
+}
+.rules-offer-q {
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--cream);
+  margin: 0 0 var(--s3);
+}
+.rules-offer-btns { display: flex; gap: var(--s3); }
+.rules-offer-btns .btn { flex: 1; max-width: none; }
+@media (max-width: 560px) {
+  .rules-offer-btns { flex-direction: column; }
 }

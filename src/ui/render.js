@@ -617,14 +617,25 @@ const rc = (v, dup = false) => `<div class="card card--mini rules-card${dup ? " 
 const rmod = (t) => `<div class="modcard modcard--mini">${t}</div>`;
 const ract = (t, cls) => `<div class="rules-act ract--${cls}">${t}</div>`;
 
-export function renderRules() {
+export function renderRules(view) {
+  const offer = view && view.rulesOffer;
+  const footer = offer
+    ? `<div class="rules-offer">
+        <p class="rules-offer-q">Would you like a tutorial of how to play?</p>
+        <div class="rules-offer-btns">
+          <button class="btn btn--play" data-action="onb-tutorial-yes">YES, SHOW ME<span class="sub">a quick guided hand</span></button>
+          <button class="btn btn--online" data-action="onb-tutorial-no">NO THANKS<span class="sub">I'll jump in</span></button>
+        </div>
+      </div>`
+    : `<button class="btn btn--play" data-action="rules-back">GOT IT</button>`;
   return `
   <div class="screen screen--rules">
     <div class="rules-top"><button class="icon-btn" data-action="rules-back" aria-label="Back">←</button><span class="rules-title">How to play</span></div>
     <div class="rules-scroll">
-      <section class="rule-card"><h3>Goal</h3>
+      <section class="rule-card rule-card--accent"><h3>Objective</h3>
+        <p><b>Score as many points as you can over the 9 rounds.</b> Your banked hands add up round to round, whoever has the <b>highest total score after the 9 rounds wins</b>.</p>
         <div class="rules-demo">${rc(3)}${rc(7)}${rc(12)}${rmod("+4")}<span class="rules-eq num">= 26</span></div>
-        <p>Draw number cards to build a hand, its score is the sum plus any modifiers. Highest total after all rounds wins the pot. Turns go clockwise.</p></section>
+        <p>Draw number cards to build a hand, its score is the sum plus any modifiers. Bank it to lock those points into your total. Turns go clockwise.</p></section>
       <section class="rule-card"><h3>Your turn</h3><p><b>HIT</b> as many times as you want. When you're done, <b>STOP</b> to end the turn and keep your hand for later.</p></section>
       <section class="rule-card rule-card--accent"><h3>Banking</h3><p>Bank with <b>BANK</b> as your turn's <b>first action</b>, before you draw, and never on an empty hand. Once you draw you can't bank until a later turn, the hand stays exposed on the felt.</p></section>
       <section class="rule-card"><h3>Bust</h3>
@@ -642,7 +653,25 @@ export function renderRules() {
       <section class="rule-card"><h3>The deck</h3><p>One <b>97-card</b> deck for the whole match. It shrinks as cards are played and only reshuffles when it runs out, counting cards pays off. Online hosts pick the match length (1-9 rounds), the buy-in, multi-hand play and the disconnect rule.</p></section>
       <section class="rule-card"><h3>Credits</h3><p class="rules-credit">7BUST FM music by <b>Kevin MacLeod</b> (<a href="https://incompetech.com" target="_blank" rel="noopener">incompetech.com</a>), licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons BY 4.0</a>.</p></section>
     </div>
-    <button class="btn btn--play" data-action="rules-back">GOT IT</button>
+    ${footer}
+  </div>`;
+}
+
+// Asks "played before?" when the tutorial starts, it sits over the first hand
+// "No" opens "How to Play", "Yes" just lets them play
+export function renderFtueAsk(view) {
+  if (!view.ftueAsk) return "";
+  return `
+  <div class="overlay ftue-ask-overlay">
+    <div class="result ftue-ask" role="dialog" aria-label="Have you played before?">
+      <div class="kicker">Welcome to 7Bust</div>
+      <h2>Have you played 7Bust before?</h2>
+      <p class="ftue-ask-sub">First time? We'll walk you through it.</p>
+      <div class="ftue-ask-btns">
+        <button class="btn btn--play" data-action="onb-played-no">NO, I'M NEW<span class="sub">show me how to play</span></button>
+        <button class="btn btn--online" data-action="onb-played-yes">YES, I HAVE<span class="sub">just let me play</span></button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -675,6 +704,7 @@ export function renderSettings(view) {
       <section class="rule-card"><h3>More</h3>
         <div class="set-links">
           <a class="link" href="#" data-action="rules">How to play</a>
+          <a class="link" href="#" data-action="replay-tutorial">Replay tutorial</a>
           <a class="link" href="#" data-action="history">Match history</a>
           <a class="link" href="#" data-action="tos">Terms of Service</a>
           <a class="link" href="#" data-action="verify">Verify fairness</a>
@@ -982,7 +1012,7 @@ export function renderApp(view) {
   if (view.showTos) return `<div class="stage">${renderTos()}</div>`;
   if (view.showSettings) return `<div class="stage">${renderSettings(view)}${renderWheel(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
-  if (view.showRules) return `<div class="stage">${renderRules()}</div>`;
+  if (view.showRules) return `<div class="stage">${renderRules(view)}</div>`;
   if (view.shop) return `<div class="stage">${renderShop(view)}${renderToast(view)}</div>`;
   // The single player ladder has its own chips, tables and board
   // It's checked first because none of the party game's state applies there
@@ -1010,5 +1040,6 @@ export function renderApp(view) {
   const overlay = inMatch ? renderOverlay(view) : "";
   const confirm = inMatch && view.confirmExit ? renderExitConfirm(view) : "";
   const daily = inMatch ? "" : renderDailyLogin(view); // The login streak shows in the lobby, never mid hand
-  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${daily}${renderToast(view)}</div>`;
+  const ftueAsk = inMatch ? renderFtueAsk(view) : ""; // The "played before?" question sits over the first hand
+  return `<div class="stage">${screen}${overlay}${confirm}${wheel}${daily}${ftueAsk}${renderToast(view)}</div>`;
 }
