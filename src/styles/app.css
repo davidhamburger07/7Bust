@@ -6146,3 +6146,116 @@
 @media (max-width: 560px) {
   .rules-offer-btns { flex-direction: column; }
 }
+
+/* The portrait layout runs off the bottom on a landscape phone, height is short and width isn't */
+/* So the log goes, opponents get one row and the table shrinks so the buttons stay in reach */
+@media (max-width: 899px) and (orientation: landscape) {
+  .screen--match {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "bar" "felt" "actions";
+    gap: 4px;
+    padding: 4px var(--s2);
+  }
+  .rightcol {
+    display: none; /* A landscape phone has no height to spare for the log and chat */
+  }
+  .matchbar {
+    font-size: 11px;
+  }
+
+  .felt {
+    border-width: 6px;
+    border-radius: 24px;
+    padding: 5px var(--s3) 6px;
+    gap: 4px;
+    justify-content: space-between; /* Opponents at the top, your seat down by the buttons */
+  }
+  /* One row of opponents, there's enough width now so no wrap or swipe */
+  .opponents {
+    flex-wrap: nowrap;
+    overflow: visible;
+    gap: 5px;
+  }
+  .seat {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 168px;
+    padding: 3px 7px 5px;
+  }
+  .crowded .seat {
+    flex-basis: 0;
+  }
+  .seat-hand {
+    min-height: 22px;
+  }
+  .card.card--mini {
+    width: 20px;
+    height: 28px;
+  }
+
+  .dealer-zone {
+    margin: 0;
+  }
+  .shoe-pile {
+    width: 40px;
+    height: 56px;
+  }
+  .shoe-labels {
+    font-size: 9px;
+  }
+
+  /* A compact single row that doesn't grow, so the dock never slides off screen */
+  .you-seat {
+    flex: 0 0 auto;
+    max-height: none;
+    margin: 0;
+    padding: 4px var(--s3);
+    gap: 3px;
+    grid-template-rows: auto auto auto;
+  }
+  .you-name {
+    font-size: 15px;
+  }
+  .you-hand {
+    min-height: 46px;
+    max-height: 56px;
+    gap: 5px;
+    flex-wrap: nowrap; /* One row, a very long hand scrolls sideways in the panel */
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    align-content: center;
+  }
+  .card {
+    width: 36px;
+    height: 50px;
+  }
+  .card .face {
+    font-size: 18px;
+  }
+  .modcard {
+    height: 50px;
+    min-width: 26px;
+    font-size: 12px;
+  }
+  .pip {
+    height: 5px;
+  }
+
+  /* Both buttons on one short line at the bottom */
+  .action-area {
+    padding: 2px var(--s2) max(4px, env(safe-area-inset-bottom));
+    gap: 4px;
+  }
+  .btn {
+    font-size: 15px;
+    padding: 6px var(--s3);
+  }
+  .btn .sub {
+    font-size: 9px;
+  }
+  .peek-chip {
+    font-size: 10px;
+    padding: 3px 10px;
+  }
+}
