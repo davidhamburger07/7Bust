@@ -2282,6 +2282,27 @@
   .screen--match {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* If a screen is taller than the window the page scrolls instead of cutting off the buttons */
+  /* When everything fits nothing scrolls and the table still fills the screen */
+  #app {
+    align-items: flex-start; /* Starts at the top so the player scrolls down to the buttons */
+  }
+  .stage {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible; /* Clipping here is what put the buttons out of reach */
+  }
+  .screen {
+    position: relative; /* Normal flow so it can grow taller than the screen */
+    min-height: 100dvh;
+  }
+  .felt {
+    overflow: visible; /* A squeezed table grows and the page scrolls instead of hiding things */
+  }
+  .overlay {
+    position: fixed; /* Popups stay centred on screen while the page scrolls behind them */
+  }
   .matchbar {
     font-size: 11px;
     gap: 4px;
@@ -2482,8 +2503,9 @@
   }
 
   /* Log and chat only take the height they need, the table gets the rest */
+  /* The table never shrinks below its content, so a short window scrolls instead of cutting it off */
   .screen--match {
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto minmax(min-content, 1fr) auto auto;
   }
   .rightcol {
     flex: none;
@@ -6151,7 +6173,7 @@
 /* So the log goes, opponents get one row and the table shrinks so the buttons stay in reach */
 @media (max-width: 899px) and (orientation: landscape) {
   .screen--match {
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(min-content, 1fr) auto; /* Never smaller than its content, so a short window scrolls instead of hiding the buttons */
     grid-template-areas: "bar" "felt" "actions";
     gap: 4px;
     padding: 4px var(--s2);
