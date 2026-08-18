@@ -117,12 +117,40 @@ function savePrefs() {
 
 function tryPlay() {
   if (platformMuted) return;
+  // iOS pauses the audio when the tab is hidden, resuming here keeps the music working
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
   if (audio && available && audio.paused) audio.play().catch(() => {});
+}
+
+// iOS Safari ignores audio volume, so the music goes through a Web Audio gain node instead
+// Built on the first tap, uses the normal volume where Web Audio isn't there
+let audioCtx = null;
+let gainNode = null;
+function ensureGraph() {
+  if (gainNode || !audio) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return; // No Web Audio, volume falls back to the element
+    audioCtx = new Ctx();
+    // Once it's a Web Audio source it must go through the gain node or there's no sound
+    const src = audioCtx.createMediaElementSource(audio);
+    gainNode = audioCtx.createGain();
+    src.connect(gainNode).connect(audioCtx.destination);
+  } catch {
+    audioCtx = null;
+    gainNode = null; // Use the plain volume instead
+  }
 }
 
 // The volume the music should play at, with both mutes counted
 const applyVolume = () => {
-  if (audio) audio.volume = platformMuted || muted ? 0 : volume;
+  const v = platformMuted || muted ? 0 : volume;
+  if (gainNode) {
+    gainNode.gain.value = v;
+    if (audio) audio.volume = 1; // Element at full, the gain node sets the volume
+  } else if (audio) {
+    audio.volume = v; // No gain node, set the element's volume
+  }
 };
 
 // Every slider and the settings menu set the volume here, so they never drift apart
@@ -281,6 +309,11 @@ export function initRadio() {
 export function startRadio() {
   if (started) return;
   started = true;
+  // Build the volume graph inside the gesture so volume works on iOS
+  // iOS starts the audio paused, so resume it before playing
+  ensureGraph();
+  applyVolume();
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
   if (!platformMuted && !muted) tryPlay();
 }
 
