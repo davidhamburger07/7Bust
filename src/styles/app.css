@@ -1796,6 +1796,46 @@
   text-overflow: ellipsis;
 }
 
+/* Volume row in the playlist menu, only on phones */
+/* On desktop the pill has its own slider, on phones this is the only place to set the volume */
+.radio-vol-row {
+  display: none;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.radio-panel-mute {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe89a, #c9971a);
+  border: 2px solid #fff2c0;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: var(--shadow-card);
+}
+.radio-panel.muted .radio-panel-mute {
+  filter: grayscale(0.7) brightness(0.85);
+}
+.radio-panel-mute:active {
+  transform: translateY(1px);
+}
+.radio-panel-mute:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.radio-panel-vol {
+  flex: 1;
+  min-width: 0;
+  height: 28px; /* Tall so it's easy to grab on phones */
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
 .radio-list {
   margin: 0;
   padding: 0;
@@ -2272,6 +2312,10 @@
   .radio-vol,
   .radio-label {
     display: none;
+  }
+  /* Phones have no volume slider on the pill, so the music volume is in the playlist menu */
+  .radio-vol-row {
+    display: flex;
   }
   body.scr-match .radio:not(.inline) {
     top: 52px;

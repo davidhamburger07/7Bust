@@ -77,11 +77,19 @@ function refreshRadio() {
     el.classList.toggle("muted", muted);
     if (label) label.textContent = muted ? "MUTED" : now;
   }
+  // Keep every volume slider up to date but leave alone the one the player is dragging
+  const pct = Math.round(volume * 100);
+  document.querySelectorAll(".radio-vol, .radio-panel-vol").forEach((s) => {
+    if (s !== document.activeElement) s.value = pct;
+  });
   // The menu sits on the page body, not in the radio, so find it by ID
   const panel = document.getElementById("radio-panel");
   if (panel) {
     const nowTitle = panel.querySelector(".radio-now-title");
     if (nowTitle) nowTitle.textContent = now;
+    const pmute = panel.querySelector(".radio-panel-mute");
+    if (pmute) pmute.textContent = muted ? "🔇" : "🔊";
+    panel.classList.toggle("muted", muted);
     panel.querySelectorAll(".radio-item").forEach((b) => b.classList.toggle("active", Number(b.dataset.i) === idx));
   }
 }
@@ -116,6 +124,27 @@ function tryPlay() {
 const applyVolume = () => {
   if (audio) audio.volume = platformMuted || muted ? 0 : volume;
 };
+
+// Every slider and the settings menu set the volume here, so they never drift apart
+// Dragging it up also unmutes, the player clearly wants to hear it
+function setVolume(pct) {
+  volume = Math.max(0, Math.min(100, pct)) / 100;
+  if (volume > 0 && muted) muted = false;
+  applyVolume();
+  refreshRadio();
+  if (!muted) tryPlay();
+  savePrefs();
+}
+
+// Used by both mute buttons so they always match
+function toggleMute() {
+  muted = !muted;
+  if (!muted && !(volume > 0)) volume = 0.2; // Unmuting never lands on silence
+  applyVolume();
+  refreshRadio();
+  if (!muted) tryPlay();
+  savePrefs();
+}
 
 export function initRadio() {
   loadPrefs();
@@ -169,6 +198,10 @@ export function initRadio() {
       <span class="radio-now-title"></span>
       <button class="radio-next" type="button" aria-label="Next track">⏭</button>
     </div>
+    <div class="radio-vol-row">
+      <button class="radio-panel-mute" type="button" aria-label="Mute or unmute the music">🔊</button>
+      <input class="radio-panel-vol" type="range" min="0" max="100" value="${Math.round(volume * 100)}" aria-label="Music volume" />
+    </div>
     <ol class="radio-list">${rows}</ol>`;
   document.body.appendChild(panel);
 
@@ -214,26 +247,13 @@ export function initRadio() {
     }
   };
 
-  btn.addEventListener("click", () => {
-    muted = !muted;
-    if (!muted && !(volume > 0)) {
-      volume = 0.2; // Unmuting never lands on silence
-      vol.value = 20;
-    }
-    applyVolume();
-    refreshRadio();
-    if (!muted) tryPlay();
-    savePrefs();
-  });
+  btn.addEventListener("click", toggleMute);
+  vol.addEventListener("input", () => setVolume(Number(vol.value)));
 
-  vol.addEventListener("input", () => {
-    volume = vol.value / 100;
-    if (volume > 0 && muted) muted = false;
-    applyVolume();
-    refreshRadio();
-    if (!muted) tryPlay();
-    savePrefs();
-  });
+  // The menu has its own volume and mute, on phones it's the only place to change them
+  const pvol = panel.querySelector(".radio-panel-vol");
+  pvol.addEventListener("input", () => setVolume(Number(pvol.value)));
+  panel.querySelector(".radio-panel-mute").addEventListener("click", toggleMute);
 
   open.addEventListener("click", () => setPanel(panel.hidden));
   panel.querySelector(".radio-close").addEventListener("click", () => setPanel(false));
