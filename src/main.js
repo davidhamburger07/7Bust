@@ -968,6 +968,7 @@ async function replayTutorial() {
 function beginOnboarding() {
   view.ftueAsk = true; // The "have you played before?" box over the dealt hand
   render();
+  playVoice("tutWelcome");
 }
 function onbPlayedYes() {
   sfx("click");
@@ -981,6 +982,7 @@ function onbPlayedNo() {
   view.showRules = true;
   view.rulesOffer = true;
   render();
+  playVoice("tutGoal");
 }
 function onbTutorialYes() {
   sfx("ding");

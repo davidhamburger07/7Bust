@@ -636,6 +636,9 @@ export function renderRules(view) {
         <p><b>Score as many points as you can over the 9 rounds.</b> Your banked hands add up round to round, whoever has the <b>highest total score after the 9 rounds wins</b>.</p>
         <div class="rules-demo">${rc(3)}${rc(7)}${rc(12)}${rmod("+4")}<span class="rules-eq num">= 26</span></div>
         <p>Draw number cards to build a hand, its score is the sum plus any modifiers. Bank it to lock those points into your total. Turns go clockwise.</p></section>
+      <section class="rule-card"><h3>The cards</h3>
+        <div class="rules-demo">${rc(1)}${rc(2)}${rc(2)}${rc(3)}${rc(3)}${rc(3)}<span class="rules-eq num">1×1 · 2×2 · 3×3…</span></div>
+        <p>A number card is worth <b>its face value</b> in points, and that same number is also <b>how many of it are in the deck</b>: one <b>1</b>, two <b>2</b>s, three <b>3</b>s, all the way up to twelve <b>12</b>s. So a bigger card scores more, but there are far more of it out there, making it much likelier you'll draw a duplicate and <b>bust</b>. Small numbers are safe; big ones are greedy.</p></section>
       <section class="rule-card"><h3>Your turn</h3><p><b>HIT</b> as many times as you want. When you're done, <b>STOP</b> to end the turn and keep your hand for later.</p></section>
       <section class="rule-card rule-card--accent"><h3>Banking</h3><p>Bank with <b>BANK</b> as your turn's <b>first action</b>, before you draw, and never on an empty hand. Once you draw you can't bank until a later turn, the hand stays exposed on the felt.</p></section>
       <section class="rule-card"><h3>Bust</h3>

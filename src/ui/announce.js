@@ -157,6 +157,17 @@ const VOICE = {
     "High Tension/SIX-CARDS-DOWN-DARE-YOU-PULL-THE-SEVENTH(1).mp3",
     "High Tension/SIX-CARDS-DOWN-DARE-YOU-PULL-THE-SEVENTH(2).mp3",
   ],
+  // First hand tutorial lines, one per guided step, they follow the announcer voice setting
+  tutWelcome: ["tutorial/WELCOME.mp3"],
+  tutGoal: ["tutorial/GOAL.mp3"],
+  tutCardValues: ["tutorial/CARD-VALUES.mp3"],
+  tutDraw1: ["tutorial/DRAW-FIRST.mp3"],
+  tutDraw2: ["tutorial/DRAW-AGAIN.mp3"],
+  tutStop: ["tutorial/STOP-OR-BUST.mp3"],
+  tutBank: ["tutorial/BANK-IT.mp3"],
+  tutTarget: ["tutorial/TARGET.mp3"],
+  tutBanked: ["tutorial/BANKED.mp3"],
+  tutBusted: ["tutorial/BUSTED.mp3"],
 };
 
 let currentVoice = null;

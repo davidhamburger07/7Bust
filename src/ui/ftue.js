@@ -2,21 +2,32 @@
 // Lives on the page body so it survives redraws, clicks only reach the lit button
 
 import * as storage from "../net/storage.js";
+import { playVoice } from "./announce.js";
 
 const DONE_KEY = "7bust:ftue:done:v1";
 const DRAW_TARGET = 3; // Cards to draw before teaching stop, keeps the first hand fairly safe
+// Shown and spoken once on the first number card, the text matches the voice line
+const CARD_VALUES_TIP = "A card's number is its points, and how many of it are in the deck. Big numbers score more, but bust you sooner!";
 const CALLOUT_MS = 1800; // How long a card tip holds the spotlight
 const PAD = 10; // Space around the lit target in pixels
 
 let active = false;
 let finishing = false;
+let lastVoiceKey = ""; // So a step's voice line plays once, not on every redraw
+let currentStepKey = ""; // So skip knows which step to skip
+let skippedKey = ""; // Skipped step, its hint stays hidden until the step changes
+let currentSpot = null;
+let placedKey = ""; // So the loop only restyles when the spot actually moves
+let rafId = 0; // Keeps the highlight on its target as it moves
 let rerender = () => {};
 let root = null;
 let calloutUntil = 0;
 let calloutRect = null;
+let calloutSel = null; // The card with the tip, so the tip follows it
 let calloutTip = "";
 let calloutTimer = null;
 let lastEventSig = ""; // So each special card is only explained once
+let cardValuesShown = false; // The card number tip only shows on the first draw
 
 export function hasCompletedTutorial() {
   try {
@@ -40,10 +51,18 @@ export function ftueStart(opts = {}) {
   active = true;
   finishing = false;
   lastEventSig = "";
+  lastVoiceKey = "";
+  currentStepKey = "";
+  skippedKey = "";
+  cardValuesShown = false;
+  currentSpot = null;
+  placedKey = "";
   calloutUntil = 0;
   calloutRect = null;
+  calloutSel = null;
   rerender = typeof opts.rerender === "function" ? opts.rerender : () => {};
   build();
+  if (!rafId) rafId = requestAnimationFrame(tick);
 }
 
 function build() {
@@ -84,7 +103,43 @@ function showMask(on) {
   if (!on) {
     const tip = q(".ftue-tip");
     if (tip) tip.style.display = "none";
+    currentSpot = null; // Nothing to follow while the mask is down on AI turns and at the end
+    placedKey = "";
   }
+}
+
+// Looks the target up every frame so it follows a moving button or card
+// Falls back to the saved rect if the element is gone for a moment
+function targetRectFor(spot) {
+  if (spot.sel) {
+    const t = document.querySelector(spot.sel);
+    if (t) {
+      const r = t.getBoundingClientRect();
+      if (r.width || r.height) return r;
+    }
+  }
+  return spot.rect || null;
+}
+
+// Moves the highlight if its target moved, force redraws even if it didn't
+// Runs every frame so it follows cards dealing in, resizing and scrolling
+function reposition(force) {
+  if (!root || !currentSpot) return;
+  const r = targetRectFor(currentSpot);
+  if (!r) return;
+  const key = `${Math.round(r.left)}:${Math.round(r.top)}:${Math.round(r.width)}:${Math.round(r.height)}`;
+  if (!force && key === placedKey) return;
+  placedKey = key;
+  spotlight(r, currentSpot.tip, currentSpot.special);
+}
+
+function tick() {
+  if (!active) {
+    rafId = 0;
+    return;
+  }
+  reposition(false);
+  rafId = requestAnimationFrame(tick);
 }
 
 // Dims around the rect, rings it and puts the tip above it, or below if there's no room
@@ -171,39 +226,63 @@ export function ftueSync(view) {
   const me = s.players[s.you];
   if (!me) return showMask(false);
 
-  if (me.turnState === "busted") return finish("Busted! A repeat number scores zero, that's the risk. Play on!", true);
-  if (me.turnState === "banked" || me.turnState === "clean7") return finish("Banked! Those points are safe now. You've got this.", false);
+  if (me.turnState === "busted") return finish("Busted! A repeat wipes the round, that's the risk. Give it another go!", true, "tutBusted");
+  if (me.turnState === "banked" || me.turnState === "clean7") return finish("Banked! Those points are safe now. You've got this.", false, "tutBanked");
   if (s.phase === "match_end") return finish("", false);
 
   // A card tip keeps the spotlight on the card for a moment
-  if (Date.now() < calloutUntil && calloutRect) return spotlight(calloutRect, calloutTip, true);
+  if (Date.now() < calloutUntil && calloutRect) {
+    currentSpot = { sel: calloutSel, rect: calloutRect, tip: calloutTip, special: true };
+    return reposition(true);
+  }
 
   const special = detectSpecial(view, me);
   if (special) {
-    startCallout(special.rect, special.tip);
-    return spotlight(special.rect, special.tip, true);
+    startCallout(special.sel, special.rect, special.tip);
+    currentSpot = { sel: special.sel, rect: special.rect, tip: special.tip, special: true };
+    return reposition(true);
+  }
+
+  // First plain number card, explain that its number is its points and how many are in the deck
+  const cardVals = detectCardValues(view, me);
+  if (cardVals) {
+    playVoice("tutCardValues");
+    startCallout(cardVals.sel, cardVals.rect, cardVals.tip);
+    currentSpot = { sel: cardVals.sel, rect: cardVals.rect, tip: cardVals.tip, special: true };
+    return reposition(true);
   }
 
   // Action card needs a target, point at the choices so the screen doesn't just go dark
-  if (s.pendingChoice) return step(".targets", "Tap a player to target with your card!");
+  // The tip matches its voice line word for word
+  if (s.pendingChoice) return step(".targets", "An action card! Hit a player to target them with it.", "tutTarget");
   // No dimming during the AI turns
   if (!s.yourTurn) return showMask(false);
 
   // Draw a few, then stop, then bank on the next turn
   const cards = me.cardCount;
-  if (!s.youHitThisTurn && cards === 0) return step(".btn--hit", "Click to draw a card and build your stack!");
-  if (s.youHitThisTurn && cards < DRAW_TARGET) return step(".btn--hit", "Nice, draw again to grow your stack!");
-  if (s.youHitThisTurn && cards >= DRAW_TARGET) return step(".btn--stop", "Stop now, or risk a duplicate and BUST!");
-  if (!s.youHitThisTurn && cards > 0 && s.canBank) return step(".btn--bank", "Bank it now, lock in your points!");
+  if (!s.youHitThisTurn && cards === 0) return step(".btn--hit", "Let's build a hand. Hit to draw your first card!", "tutDraw1");
+  if (s.youHitThisTurn && cards < DRAW_TARGET) return step(".btn--hit", "Nice! Hit again to grow your stack.", "tutDraw2");
+  if (s.youHitThisTurn && cards >= DRAW_TARGET) return step(".btn--stop", "Careful now, draw a duplicate and you bust. Hit STOP to keep what you've got.", "tutStop");
+  if (!s.youHitThisTurn && cards > 0 && s.canBank) return step(".btn--bank", "Now bank it! That locks your points into your total.", "tutBank");
   showMask(false);
 }
 
-function step(sel, tip) {
+// Lights up the target and plays its voice line once when the step starts
+// Only if the announcer is on, the tracking loop then keeps the light on the target
+function step(sel, tip, voiceKey) {
+  // Player skipped this step so no highlight, the next one still guides them
+  if (voiceKey && voiceKey === skippedKey) return showMask(false);
   const t = document.querySelector(sel);
   if (!t) return showMask(false);
   const r = t.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return showMask(false);
-  spotlight(r, tip, false);
+  if (voiceKey && voiceKey !== lastVoiceKey) {
+    lastVoiceKey = voiceKey;
+    playVoice(voiceKey);
+  }
+  currentStepKey = voiceKey || "";
+  currentSpot = { sel, tip, special: false };
+  reposition(true);
 }
 
 // Finds a new card in the player's hand worth explaining, once per event
@@ -234,14 +313,33 @@ function detectSpecial(view, me) {
   }
   if (!tip) return null;
   lastEventSig = sig;
-  const t = document.querySelector(sel) || document.querySelector(".you-seat");
+  const found = document.querySelector(sel);
+  const t = found || document.querySelector(".you-seat");
   if (!t) return null;
   const r = t.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return null;
-  return { rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, tip };
+  // Only keep the selector if it matched, so the tip can follow that exact card
+  return { sel: found ? sel : null, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, tip };
 }
 
-function startCallout(rect, tip) {
+// First plain number card the player draws, explains what the number means
+// The lucky 1 is left out, it has its own tip
+function detectCardValues(view, me) {
+  if (cardValuesShown) return null;
+  const le = view.snapshot.lastEvent;
+  if (!le || le.seat !== view.snapshot.you || !le.card) return null;
+  if (le.kind !== "number" || le.card.value === 1) return null;
+  const found = document.querySelector(".you-seat .card--new");
+  const t = found || document.querySelector(".you-seat");
+  if (!t) return null;
+  const r = t.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return null;
+  cardValuesShown = true;
+  return { sel: found ? ".you-seat .card--new" : null, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, tip: CARD_VALUES_TIP };
+}
+
+function startCallout(sel, rect, tip) {
+  calloutSel = sel;
   calloutRect = rect;
   calloutTip = tip;
   calloutUntil = Date.now() + CALLOUT_MS;
@@ -251,15 +349,17 @@ function startCallout(rect, tip) {
     calloutTimer = null;
     calloutUntil = 0;
     calloutRect = null;
+    calloutSel = null;
     rerender();
   }, CALLOUT_MS + 30);
 }
 
-// Message shows one last note before the overlay clears
-function finish(message, isBust) {
+// Message shows one last note before the overlay clears, voiceKey reads it out
+function finish(message, isBust, voiceKey) {
   if (finishing) return;
   finishing = true;
   markDone();
+  if (voiceKey) playVoice(voiceKey);
   if (message && root) {
     showMask(false);
     const f = document.createElement("div");
@@ -275,18 +375,35 @@ function finish(message, isBust) {
 function teardown() {
   active = false;
   finishing = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = 0;
+  currentSpot = null;
+  placedKey = "";
+  currentStepKey = "";
+  skippedKey = "";
   if (calloutTimer) clearTimeout(calloutTimer);
   calloutTimer = null;
   calloutUntil = 0;
   calloutRect = null;
+  calloutSel = null;
+  cardValuesShown = false;
   if (root) root.remove();
   root = null;
 }
 
-// Skipping still counts as done, the tutorial never shows twice
+// Skips this step only, not the whole tutorial
+// A card tip just closes, a guided step stays hidden and the next step still guides
 export function ftueSkip() {
-  markDone();
-  teardown();
+  if (Date.now() < calloutUntil) {
+    if (calloutTimer) clearTimeout(calloutTimer);
+    calloutTimer = null;
+    calloutUntil = 0;
+    calloutRect = null;
+    calloutSel = null;
+  } else if (currentStepKey) {
+    skippedKey = currentStepKey; // This step's hint won't come back
+  }
+  showMask(false);
   rerender();
 }
 
