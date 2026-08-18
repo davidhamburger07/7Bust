@@ -1,7 +1,8 @@
 // Starts the game, paces the bot turns, saves the game and plays the big announcements
 
 import { createServer } from "./server/mockServer.js";
-import { renderApp, chatLines } from "./ui/render.js";
+import { buildTutorialDeck } from "./engine/tutorialDeck.js";
+import { renderApp, chatLines, LESSON_COUNT } from "./ui/render.js";
 import { morph } from "./ui/morph.js";
 import { mountLadderDeck } from "./ui/arenaSelect.js";
 import { ftueStart, ftueSync, hasCompletedTutorial, resetTutorial, markTutorialSeen } from "./ui/ftue.js";
@@ -985,10 +986,47 @@ function onbPlayedNo() {
   playVoice("tutGoal");
 }
 function onbTutorialYes() {
+  // Opens the lesson slideshow, the guided hand starts when they reach the end or skip it
   sfx("ding");
   view.showRules = false;
   view.rulesOffer = false;
+  view.lesson = { i: 0 };
   render();
+  playVoice(lessonVoiceKeys[0]);
+}
+// Voice line for each slide, keep them in the same order as the lesson slides
+const lessonVoiceKeys = ["tutGoal", "tutCardValues", "tutLessonLoop", "tutLessonSecond", "tutLessonFreeze", "tutLessonFlip3", "tutLessonFuture", "tutLessonExtras"];
+function lessonNext() {
+  sfx("click");
+  const i = (view.lesson ? view.lesson.i : 0) + 1;
+  if (i >= LESSON_COUNT) return startGuidedHand();
+  view.lesson = { i };
+  render();
+  playVoice(lessonVoiceKeys[i]);
+}
+function lessonBack() {
+  sfx("click");
+  const i = Math.max(0, (view.lesson ? view.lesson.i : 0) - 1);
+  view.lesson = { i };
+  render();
+  playVoice(lessonVoiceKeys[i]);
+}
+function lessonSkip() {
+  sfx("click");
+  startGuidedHand();
+}
+const lessonPlay = () => startGuidedHand();
+// The tutorial deals a stacked deck so "Second Chance", "Freeze" and "Flip Three" always come up
+async function startGuidedHand() {
+  view.lesson = null;
+  sfx("ding");
+  if (aiTimer) {
+    clearTimeout(aiTimer); // Stop any timer from the earlier match before swapping engines
+    aiTimer = null;
+  }
+  server = createServer({ cashless: true, scriptedDeck: buildTutorialDeck() });
+  const res = await server.startMatch();
+  if (res.ok) apply(res);
   ftueStart({ rerender: render });
   render();
 }
@@ -1835,6 +1873,10 @@ const ACTIONS = {
   "onb-played-no": onbPlayedNo,
   "onb-tutorial-yes": onbTutorialYes,
   "onb-tutorial-no": onbTutorialNo,
+  "lesson-next": lessonNext,
+  "lesson-back": lessonBack,
+  "lesson-skip": lessonSkip,
+  "lesson-play": lessonPlay,
   pause: askPause,
   "pvote-yes": () => votePause(true),
   "pvote-no": () => votePause(false),

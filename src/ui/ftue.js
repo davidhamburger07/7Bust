@@ -5,10 +5,54 @@ import * as storage from "../net/storage.js";
 import { playVoice } from "./announce.js";
 
 const DONE_KEY = "7bust:ftue:done:v1";
-const DRAW_TARGET = 3; // Cards to draw before teaching stop, keeps the first hand fairly safe
-// Shown and spoken once on the first number card, the text matches the voice line
-const CARD_VALUES_TIP = "A card's number is its points, and how many of it are in the deck. Big numbers score more, but bust you sooner!";
 const PAD = 10; // Space around the lit target in pixels
+
+// The tutorial deck deals this exact hand, each step explains one card as it lands
+// The player closes each card tip to move on, then the tutorial points at stop and bank
+const SCRIPT = [
+  {
+    hit: { tip: "Let's build a hand. Hit to draw your first card!", voice: "tutDraw1" },
+    is: (le, you) => le.seat === you && le.kind === "number",
+    sel: () => ".you-seat .card--new",
+    callout: { tip: "A card's number is its points, and how many of it are in the deck. Big numbers score more, but bust you sooner!", voice: "tutCardValues" },
+  },
+  {
+    hit: { tip: "Nice! Hit again to grow your hand.", voice: "tutDraw2" },
+    is: (le, you) => le.seat === you && le.kind === "number",
+    sel: () => ".you-seat .card--new",
+    callout: { tip: "Two different numbers, no repeats, that's 8 points so far. Every new number just adds to your hand.", voice: "tutBuild" },
+  },
+  {
+    hit: { tip: "Keep going, hit again." },
+    is: (le, you) => le.seat === you && le.kind === "action" && le.card && le.card.action === "second_chance",
+    sel: () => ".you-seat .sc-dot",
+    callout: { tip: "A Second Chance! It tucks into your hand and quietly eats your next duplicate, one free save from busting.", voice: "tutSecond" },
+  },
+  {
+    hit: { tip: "Press your luck, hit once more." },
+    is: (le, you) => le.seat === you && le.kind === "saved",
+    sel: () => ".you-seat",
+    callout: { tip: "You drew a matching 3, normally a bust! But your Second Chance ate it. That's exactly when it saves you.", voice: "tutSaved" },
+  },
+  {
+    hit: { tip: "This one's an action card, hit to draw it." },
+    target: { tip: "Freeze! Tap the highlighted rival to make them bank now and drop out of the round, best used on whoever's ahead.", voice: "tutFreeze" },
+    is: (le) => le.kind === "frozen",
+    sel: (le) => `.seat[data-seat="${le.seat}"]`,
+    callout: { tip: "Frozen! They're forced to bank early and sit out the rest of the round.", voice: "tutFrozen" },
+  },
+  {
+    hit: { tip: "Last one, draw your final action card." },
+    target: { tip: "Flip Three! Tap the highlighted rival to force them to flip three cards in a row, a great way to push a threat toward a bust.", voice: "tutFlip3" },
+    is: (le) => le.kind === "flip3",
+    sel: (le) => `.seat[data-seat="${le.seat}"]`,
+    callout: { tip: "They have to flip three cards back to back, three chances to hit a duplicate and bust.", voice: "tutFlip3done" },
+  },
+];
+const STOP_TIP = "That's a strong hand. Hit STOP to end your turn and keep it safe for banking.";
+const BANK_TIP = "Now BANK to lock those points into your score, you've got this!";
+const BUST_MSG = "Busted! A repeat wipes the round, that's the risk. Give it another go!";
+const BANK_MSG = "Banked! Those points are safe now. That's the game, enjoy 7Bust!";
 
 let active = false;
 let finishing = false;
@@ -25,8 +69,8 @@ let calloutRect = null;
 let calloutSel = null; // The card with the tip, so the tip follows it
 let calloutTip = "";
 let calloutTimer = null;
-let lastEventSig = ""; // So each special card is only explained once
-let cardValuesShown = false; // The card number tip only shows on the first draw
+let lastEventSig = ""; // So each step's tip fires once, on a new event
+let beat = 0; // Which step of the script we're on, moves on when the player closes a tip
 
 export function hasCompletedTutorial() {
   try {
@@ -53,7 +97,7 @@ export function ftueStart(opts = {}) {
   lastVoiceKey = "";
   currentStepKey = "";
   skippedKey = "";
-  cardValuesShown = false;
+  beat = 0;
   currentSpot = null;
   placedKey = "";
   calloutUntil = 0;
@@ -223,8 +267,8 @@ function nudge() {
   ring.classList.add("nudge");
 }
 
-// Runs after every render and picks what to spotlight
-// It stays out of the way on AI turns and ends the tutorial at the finish
+// Runs after every render and walks the player through the scripted hand
+// Draw, explain the card, aim "Freeze" or "Flip Three", then stop and bank
 export function ftueSync(view) {
   if (!active || !root) return;
   const s = view.snapshot;
@@ -232,45 +276,55 @@ export function ftueSync(view) {
   const me = s.players[s.you];
   if (!me) return showMask(false);
 
-  if (me.turnState === "busted") return finish("Busted! A repeat wipes the round, that's the risk. Give it another go!", true, "tutBusted");
-  if (me.turnState === "banked" || me.turnState === "clean7") return finish("Banked! Those points are safe now. You've got this.", false, "tutBanked");
+  // Freezing yourself also banks the hand, so it counts as banked
+  if (me.turnState === "busted") return finish(BUST_MSG, true, "tutBusted");
+  if (me.turnState === "banked" || me.turnState === "clean7" || me.turnState === "frozen") return finish(BANK_MSG, false, "tutBanked");
   if (s.phase === "match_end") return finish("", false);
 
-  // A card tip keeps the spotlight on the card until the player closes it
+  // A card tip keeps the spotlight until the player closes it, closing moves the tutorial on
   if (Date.now() < calloutUntil && calloutRect) {
     currentSpot = { sel: calloutSel, rect: calloutRect, tip: calloutTip, special: true };
     return reposition(true);
   }
 
-  const special = detectSpecial(view, me);
-  if (special) {
-    startCallout(special.sel, special.rect, special.tip);
-    currentSpot = { sel: special.sel, rect: special.rect, tip: special.tip, special: true };
-    return reposition(true);
+  // After the scripted draws, point at stop, then at bank on the next turn
+  if (beat >= SCRIPT.length) {
+    if (!s.yourTurn) return showMask(false); // Forced flips or AI turns, dim and wait
+    if (s.youHitThisTurn && me.cardCount > 0) return step(".btn--stop", STOP_TIP, "tutStop");
+    if (s.canBank) return step(".btn--bank", BANK_TIP, "tutBank");
+    return showMask(false);
   }
 
-  // First plain number card, explain that its number is its points and how many are in the deck
-  const cardVals = detectCardValues(view, me);
-  if (cardVals) {
-    playVoice("tutCardValues");
-    startCallout(cardVals.sel, cardVals.rect, cardVals.tip);
-    currentSpot = { sel: cardVals.sel, rect: cardVals.rect, tip: cardVals.tip, special: true };
-    return reposition(true);
+  const b = SCRIPT[beat];
+
+  // Fires this step's card tip once, only on a new event
+  const le = s.lastEvent;
+  if (le && b.is(le, s.you)) {
+    const sig = `${le.kind}:${le.seat}:${le.card ? (le.card.value ?? le.card.action ?? "") : ""}`;
+    if (sig !== lastEventSig) {
+      lastEventSig = sig;
+      const sel = b.sel(le);
+      const rect = rectFromSel(sel);
+      if (rect) {
+        if (b.callout.voice) playVoice(b.callout.voice);
+        const hit = document.querySelector(sel) ? sel : null; // Only follow the element if it's really there
+        startCallout(hit, rect, b.callout.tip);
+        currentSpot = { sel: hit, rect, tip: b.callout.tip, special: true };
+        return reposition(true);
+      }
+    }
   }
 
-  // Action card needs a target, point at the choices so the screen doesn't just go dark
-  // The tip matches its voice line word for word
-  if (s.pendingChoice) return step(".targets", "An action card! Hit a player to target them with it.", "tutTarget");
-  // No dimming during the AI turns
+  // For "Freeze" or "Flip Three" light up one rival, so the mask blocks every other choice
+  // including targeting yourself
+  if (s.pendingChoice && b.target) {
+    const rival = rivalTargetSel(s);
+    return step(rival || ".targets", b.target.tip, b.target.voice);
+  }
+
+  // Otherwise point at the draw button, on other turns just wait
   if (!s.yourTurn) return showMask(false);
-
-  // Draw a few, then stop, then bank on the next turn
-  const cards = me.cardCount;
-  if (!s.youHitThisTurn && cards === 0) return step(".btn--hit", "Let's build a hand. Hit to draw your first card!", "tutDraw1");
-  if (s.youHitThisTurn && cards < DRAW_TARGET) return step(".btn--hit", "Nice! Hit again to grow your stack.", "tutDraw2");
-  if (s.youHitThisTurn && cards >= DRAW_TARGET) return step(".btn--stop", "Careful now, draw a duplicate and you bust. Hit STOP to keep what you've got.", "tutStop");
-  if (!s.youHitThisTurn && cards > 0 && s.canBank) return step(".btn--bank", "Now bank it! That locks your points into your total.", "tutBank");
-  showMask(false);
+  return step(".btn--hit", b.hit.tip, b.hit.voice);
 }
 
 // Lights up the target and plays its voice line once when the step starts
@@ -291,57 +345,22 @@ function step(sel, tip, voiceKey) {
   reposition(true);
 }
 
-// Finds a new card in the player's hand worth explaining, once per event
-// The rect is copied because the card's element gets redrawn away
-function detectSpecial(view, me) {
-  const le = view.snapshot.lastEvent;
-  if (!le || le.seat !== view.snapshot.you) return null;
-  const c = le.card;
-  const sig = `${le.kind}:${le.seat}:${(c && (c.value ?? c.action ?? c.op)) ?? ""}:${me.cardCount}`;
-  if (sig === lastEventSig) return null;
-  let tip = null;
-  let sel = null;
-  if (c && c.kind === "number" && c.value === 1) {
-    tip = "The lucky 1, the rarest card in the deck!";
-    sel = ".you-seat .card--new";
-  } else if (c && c.kind === "modifier" && c.op === "mult") {
-    tip = "A ×2, it doubles your whole stack!";
-    sel = ".you-seat .modcard:last-of-type";
-  } else if (c && c.kind === "modifier") {
-    tip = `A +${c.amount} bonus, straight onto your stack!`;
-    sel = ".you-seat .modcard:last-of-type";
-  } else if (le.kind === "see_future") {
-    tip = "See the Future, you peeked the next card!";
-    sel = ".peek-chip";
-  } else if (le.kind === "saved" || (c && c.action === "second_chance")) {
-    tip = "Second Chance, your next bust is forgiven!";
-    sel = ".you-seat .sc-dot";
-  }
-  if (!tip) return null;
-  lastEventSig = sig;
-  const found = document.querySelector(sel);
-  const t = found || document.querySelector(".you-seat");
+// Copied because the element gets redrawn away, falls back to the player's seat
+// so a tip always has something to point at
+function rectFromSel(sel) {
+  const t = (sel && document.querySelector(sel)) || document.querySelector(".you-seat");
   if (!t) return null;
   const r = t.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return null;
-  // Only keep the selector if it matched, so the tip can follow that exact card
-  return { sel: found ? sel : null, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, tip };
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
 }
 
-// First plain number card the player draws, explains what the number means
-// The lucky 1 is left out, it has its own tip
-function detectCardValues(view, me) {
-  if (cardValuesShown) return null;
-  const le = view.snapshot.lastEvent;
-  if (!le || le.seat !== view.snapshot.you || !le.card) return null;
-  if (le.kind !== "number" || le.card.value === 1) return null;
-  const found = document.querySelector(".you-seat .card--new");
-  const t = found || document.querySelector(".you-seat");
-  if (!t) return null;
-  const r = t.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) return null;
-  cardValuesShown = true;
-  return { sel: found ? ".you-seat .card--new" : null, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, tip: CARD_VALUES_TIP };
+// First rival that can be picked, never the player, so "Freeze" and "Flip Three" hit someone else
+function rivalTargetSel(s) {
+  const pc = s.pendingChoice;
+  if (!pc || !pc.eligible) return null;
+  const rival = pc.eligible.find((e) => e.seat !== s.you);
+  return rival ? `.btn--target[data-seat="${rival.seat}"]` : null;
 }
 
 function startCallout(sel, rect, tip) {
@@ -387,13 +406,13 @@ function teardown() {
   calloutUntil = 0;
   calloutRect = null;
   calloutSel = null;
-  cardValuesShown = false;
+  beat = 0;
   if (root) root.remove();
   root = null;
 }
 
-// Skips this step only, not the whole tutorial
-// A card tip just closes, a guided step stays hidden and the next step still guides
+// Closing a card tip moves the tutorial on, the tips are how the player sets the pace
+// On a plain step there's no tip, so skip just hides that one hint
 export function ftueSkip() {
   if (Date.now() < calloutUntil) {
     if (calloutTimer) clearTimeout(calloutTimer);
@@ -401,6 +420,7 @@ export function ftueSkip() {
     calloutUntil = 0;
     calloutRect = null;
     calloutSel = null;
+    beat += 1;
   } else if (currentStepKey) {
     skippedKey = currentStepKey; // This step's hint won't come back
   }

@@ -1525,6 +1525,241 @@
   align-self: center;
 }
 
+/* Picture lesson the player taps through before the guided hand */
+.screen--lesson {
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  height: 100%;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.lesson-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lesson-count {
+  font-family: var(--font-num);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-lo);
+}
+.lesson-skip {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.lesson-skip:hover {
+  color: var(--cream);
+}
+.lesson-skip:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.lesson-card {
+  margin: auto 0; /* Sits in the middle instead of stretching to full height */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s3);
+  padding: var(--s6, 32px) var(--s4);
+  text-align: center;
+  border-radius: 20px;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(255, 210, 74, 0.08), rgba(4, 34, 17, 0.55) 60%);
+  border: 1.5px solid rgba(255, 210, 74, 0.32);
+  box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: lessonIn 0.32s cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+@keyframes lessonIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.lesson-kicker {
+  font-family: var(--font-num);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.lesson-title {
+  font-family: var(--font-display);
+  font-size: 25px;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  color: var(--gold-hi);
+}
+.lesson-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  margin: var(--s2) 0;
+}
+.lesson-demo {
+  justify-content: center;
+  margin: 0;
+}
+.lesson-body {
+  max-width: 46ch;
+  margin: 0 auto;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.lesson-body b {
+  color: var(--cream);
+}
+.lesson-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.lesson-dots {
+  display: flex;
+  gap: 7px;
+}
+.lesson-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.2s, transform 0.2s;
+}
+.lesson-dot.on {
+  background: var(--gold);
+  transform: scale(1.15);
+}
+.lesson-spacer,
+.lesson-back {
+  min-width: 88px;
+}
+.lesson-back {
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--cream);
+  font-family: var(--font-display);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lesson-back:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.lesson-back:active {
+  transform: translateY(1px);
+}
+.lesson-back:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.lesson-next {
+  min-width: 88px;
+}
+
+/* Card values chart, each card shown as many times as its value */
+.lesson-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lesson-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.lesson-stack {
+  display: flex;
+  flex-direction: column;
+}
+.lesson-stack .rules-card:not(:first-child) {
+  margin-top: -28px; /* Overlaps them into a small fanned pile */
+}
+.lesson-col-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  font-family: var(--font-num);
+  font-size: 15px;
+  color: var(--gold-hi);
+}
+.lesson-col-tag small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.lesson-more {
+  font-family: var(--font-num);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--gold);
+  text-align: center;
+}
+.lesson-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-items: center;
+}
+.lesson-arrow {
+  font-family: var(--font-num);
+  font-size: 20px;
+  color: var(--gold);
+  margin: 0 4px;
+}
+.lesson-myst {
+  color: var(--gold-hi);
+  opacity: 0.9;
+}
+.lesson-foe {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.lesson-foe-av {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--ink);
+  background: radial-gradient(circle at 35% 30%, #ffe89a, #c9971a);
+}
+.lesson-foe-txt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  font-family: var(--font-num);
+  font-size: 13px;
+  color: var(--cream);
+  text-align: left;
+}
+.lesson-foe-txt small {
+  font-size: 10px;
+  color: var(--muted);
+}
+
 /* Four numbered rules because a hand really is decided in that order */
 .rules-wrap {
   margin: auto;

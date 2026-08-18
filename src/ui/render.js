@@ -678,6 +678,104 @@ export function renderFtueAsk(view) {
   </div>`;
 }
 
+// Small pictures for the lesson slides shown before the guided hand
+const myst = () => `<div class="card card--mini rules-card lesson-myst"><span class="face">?</span></div>`;
+const foe = (name, note) => `<span class="lesson-foe"><span class="lesson-foe-av">${name[0]}</span><span class="lesson-foe-txt">${name}<small>${note}</small></span></span>`;
+const arrow = () => `<span class="lesson-arrow" aria-hidden="true">→</span>`;
+
+// One column of the card values chart, v copies of card v stacked up
+const valueCol = (v) => `<div class="lesson-col"><div class="lesson-stack">${rc(v).repeat(v)}</div><span class="lesson-col-tag num">${v}<small>×${v}</small></span></div>`;
+
+const LESSONS = [
+  {
+    kicker: "The goal",
+    title: "Score the most in 9 rounds",
+    visual: `<div class="rules-demo lesson-demo">${rc(3)}${rc(7)}${rc(12)}${rmod("+4")}<span class="rules-eq num">= 26</span></div>`,
+    body: "Build a hand of number cards, then <b>bank</b> it to lock the points into your score. Whoever has the highest total after all 9 rounds wins.",
+    voice: "tutGoal",
+  },
+  {
+    kicker: "The cards",
+    title: "A number is its points: and how many exist",
+    visual: `<div class="lesson-chart">${[1, 2, 3, 4, 5].map(valueCol).join("")}<div class="lesson-col lesson-col--more"><span class="lesson-more">…up to<br><b>12×12</b></span></div></div>`,
+    body: "Each number is worth its face value, and that's also how many are in the deck: one <b>1</b>, two <b>2</b>s, three <b>3</b>s, up to twelve <b>12</b>s. Big cards score more, but they're far likelier to <b>bust</b> you.",
+    voice: "tutCardValues",
+  },
+  {
+    kicker: "The core loop",
+    title: "Bank to keep it: a repeat busts you",
+    visual: `<div class="lesson-rows">
+      <div class="rules-demo lesson-demo">${rc(4)}${rc(9)}${rc(8)}<span class="rules-eq gold-eq">bank 21</span></div>
+      <div class="rules-demo lesson-demo">${rc(4)}${rc(9)}${rc(8)}${rc(8, true)}<span class="rules-eq bust-eq">BUST · 0</span></div></div>`,
+    body: "<b>Hit</b> to draw, <b>stop</b> when you're happy, then <b>bank</b> next turn. But draw a number you already hold and the whole hand scores <b>0</b> that round.",
+    voice: "tutLessonLoop",
+  },
+  {
+    kicker: "Action card",
+    title: "Second Chance: your safety net",
+    visual: `<div class="rules-demo lesson-demo">${ract("2ND", "second")}${arrow()}${rc(8)}${rc(8, true)}<span class="rules-eq gold-eq">saved!</span></div>`,
+    body: "Kept in your hand, it quietly eats your next duplicate instead of busting you, one free save. <b>When to use it:</b> hold onto it while you push a big hand.",
+    voice: "tutLessonSecond",
+  },
+  {
+    kicker: "Action card",
+    title: "Freeze: knock a rival out",
+    visual: `<div class="rules-demo lesson-demo">${ract("FRZ", "freeze")}${arrow()}${foe("Rook", "banks · out")}</div>`,
+    body: "Pick a player: they're forced to bank their hand right now and sit out the rest of the round. <b>When to use it:</b> aim it at whoever's in the lead.",
+    voice: "tutLessonFreeze",
+  },
+  {
+    kicker: "Action card",
+    title: "Flip Three: force a risky draw",
+    visual: `<div class="rules-demo lesson-demo">${ract("+3", "flip3")}${arrow()}${myst()}${myst()}${myst()}</div>`,
+    body: "Pick a player: they must flip three cards in a row, three chances to hit a duplicate and bust. <b>When to use it:</b> point it at a growing threat.",
+    voice: "tutLessonFlip3",
+  },
+  {
+    kicker: "Action card",
+    title: "See the Future: peek the deck",
+    visual: `<div class="rules-demo lesson-demo">${ract("👁", "future")}${arrow()}${rc(6)}<span class="rules-eq num">next up</span></div>`,
+    body: "Privately look at the very next card in the deck, so you know whether it's safe to hit. <b>When to use it:</b> right before a risky draw, it expires the moment anyone draws.",
+    voice: "tutLessonFuture",
+  },
+  {
+    kicker: "Bonuses",
+    title: "Modifiers & the Clean 7",
+    visual: `<div class="lesson-rows">
+      <div class="rules-demo lesson-demo">${rmod("+2")}${rmod("+6")}${rmod("+10")}${rmod("×2")}<span class="rules-eq num">boosts</span></div>
+      <div class="rules-demo lesson-demo">${rc(1)}${rc(3)}${rc(5)}${rc(7)}${rc(9)}${rc(11)}${rc(12)}<span class="rules-eq gold-eq">+15</span></div></div>`,
+    body: "<b>+X</b> and <b>×2</b> boost a banked hand and can never bust you. Land <b>7 different numbers</b> for a <b>Clean 7</b>: a +15 bonus that ends the round for everyone.",
+    voice: "tutLessonExtras",
+  },
+];
+export const LESSON_COUNT = LESSONS.length;
+
+export function renderLesson(view) {
+  const i = Math.max(0, Math.min(LESSONS.length - 1, view.lesson ? view.lesson.i : 0));
+  const L = LESSONS[i];
+  const last = i === LESSONS.length - 1;
+  const dots = LESSONS.map((_, k) => `<span class="lesson-dot${k === i ? " on" : ""}"></span>`).join("");
+  const back = i > 0 ? `<button class="btn btn--ghost lesson-back" data-action="lesson-back">Back</button>` : `<span class="lesson-spacer"></span>`;
+  const next = last
+    ? `<button class="btn btn--play lesson-next" data-action="lesson-play">PLAY A HAND<span class="sub">try it yourself</span></button>`
+    : `<button class="btn btn--play lesson-next" data-action="lesson-next">NEXT<span class="sub">${i + 2} of ${LESSONS.length}</span></button>`;
+  return `
+  <div class="screen screen--lesson">
+    <div class="lesson-top"><span class="lesson-count">Lesson ${i + 1} / ${LESSONS.length}</span><button class="lesson-skip" data-action="lesson-skip">Skip lesson ✕</button></div>
+    <div class="lesson-card">
+      <div class="lesson-kicker">${L.kicker}</div>
+      <h2 class="lesson-title">${L.title}</h2>
+      <div class="lesson-visual">${L.visual}</div>
+      <p class="lesson-body">${L.body}</p>
+    </div>
+    <div class="lesson-nav">
+      ${back}
+      <div class="lesson-dots" role="progressbar" aria-valuenow="${i + 1}" aria-valuemax="${LESSONS.length}">${dots}</div>
+      ${next}
+    </div>
+  </div>`;
+}
+
 const prefPills = (k, on) => `
   <span class="slot-pills">
     <button class="spill ${on ? "on" : ""}" data-action="set-pref" data-k="${k}" data-v="1">ON</button>
@@ -1016,6 +1114,7 @@ export function renderApp(view) {
   if (view.showSettings) return `<div class="stage">${renderSettings(view)}${renderWheel(view)}</div>`;
   if (view.showHistory) return `<div class="stage">${renderHistory(view)}</div>`;
   if (view.showRules) return `<div class="stage">${renderRules(view)}</div>`;
+  if (view.lesson) return `<div class="stage">${renderLesson(view)}</div>`;
   if (view.shop) return `<div class="stage">${renderShop(view)}${renderToast(view)}</div>`;
   // The single player ladder has its own chips, tables and board
   // It's checked first because none of the party game's state applies there

@@ -24,6 +24,8 @@ export function createServer(config = {}) {
   // so the buy-in can be anything and "The Ladder" passes its own buy-ins and rake
   const roomEntryFee = cashless && config.entryFee > 0 ? Math.round(config.entryFee) : 0;
   const roomRake = Number.isFinite(config.rake) ? Math.max(0, Math.min(0.5, config.rake)) : HOUSE_RAKE;
+  // A set deck order for the tutorial, so the teaching hand is the same every time
+  const scriptedDeck = Array.isArray(config.scriptedDeck) && config.scriptedDeck.length ? config.scriptedDeck : null;
   const session = createSession();
   const roster = config.players || [
     { name: "You", isAI: false },
@@ -391,7 +393,9 @@ export function createServer(config = {}) {
     serverSeed = randomSeedHex(32);
     serverSeedHash = await sha256Hex(serverSeed);
     clientSeed = randomSeedHex(8);
-    shoe = await createShoe({ serverSeed, clientSeed });
+    shoe = scriptedDeck
+      ? await createShoe({ serverSeed, clientSeed, restore: { nonce: 1, order: scriptedDeck.map((c) => ({ ...c })), cursor: 0, discard: [] } })
+      : await createShoe({ serverSeed, clientSeed });
     for (const p of players) {
       p.totalScore = 0;
       p.lastGain = 0;
