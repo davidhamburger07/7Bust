@@ -8,7 +8,6 @@ const DONE_KEY = "7bust:ftue:done:v1";
 const DRAW_TARGET = 3; // Cards to draw before teaching stop, keeps the first hand fairly safe
 // Shown and spoken once on the first number card, the text matches the voice line
 const CARD_VALUES_TIP = "A card's number is its points, and how many of it are in the deck. Big numbers score more, but bust you sooner!";
-const CALLOUT_MS = 1800; // How long a card tip holds the spotlight
 const PAD = 10; // Space around the lit target in pixels
 
 let active = false;
@@ -45,7 +44,7 @@ function markDone() {
 }
 export const ftueActive = () => active;
 
-// Rerender lets a timed card tip redraw the mask when it runs out
+// Rerender lets a closed card tip redraw the mask and bring the next step back
 export function ftueStart(opts = {}) {
   if (active || hasCompletedTutorial()) return;
   active = true;
@@ -163,6 +162,13 @@ function spotlight(rect, tip, special) {
   showMask(true);
   const tipEl = q(".ftue-tip");
   q(".ftue-tip-text").textContent = tip;
+  // A card tip is closed by the player, a guided step can be skipped
+  const skip = q(".ftue-skip");
+  if (skip) {
+    skip.textContent = special ? "✕" : "Skip";
+    skip.classList.toggle("ftue-skip--close", !!special);
+    skip.setAttribute("aria-label", special ? "Close this hint" : "Skip this step");
+  }
   tipEl.style.display = "flex";
   placeTip(tipEl, { left, top, right, bottom, w, h }, vw, vh);
 }
@@ -230,7 +236,7 @@ export function ftueSync(view) {
   if (me.turnState === "banked" || me.turnState === "clean7") return finish("Banked! Those points are safe now. You've got this.", false, "tutBanked");
   if (s.phase === "match_end") return finish("", false);
 
-  // A card tip keeps the spotlight on the card for a moment
+  // A card tip keeps the spotlight on the card until the player closes it
   if (Date.now() < calloutUntil && calloutRect) {
     currentSpot = { sel: calloutSel, rect: calloutRect, tip: calloutTip, special: true };
     return reposition(true);
@@ -342,16 +348,11 @@ function startCallout(sel, rect, tip) {
   calloutSel = sel;
   calloutRect = rect;
   calloutTip = tip;
-  calloutUntil = Date.now() + CALLOUT_MS;
+  // Stays until the player closes it, a timer used to pull tips away mid read
+  // The player's turn never moves on by itself, so there's no rush
+  calloutUntil = Infinity;
   if (calloutTimer) clearTimeout(calloutTimer);
-  // Redraw once the tip is over so the button spotlight comes back without a game event
-  calloutTimer = setTimeout(() => {
-    calloutTimer = null;
-    calloutUntil = 0;
-    calloutRect = null;
-    calloutSel = null;
-    rerender();
-  }, CALLOUT_MS + 30);
+  calloutTimer = null;
 }
 
 // Message shows one last note before the overlay clears, voiceKey reads it out

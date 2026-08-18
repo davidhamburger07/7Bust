@@ -6145,6 +6145,27 @@
 }
 .ftue-skip:hover { color: var(--cream); background: rgba(255, 255, 255, 0.12); }
 .ftue-skip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+/* On a card tip this button becomes a round close button */
+/* Tips don't go away on their own any more, so the player closes them */
+.ftue-skip--close {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  font-size: 15px;
+  text-transform: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#ftue.ftue--special .ftue-skip--close {
+  color: #e9d9ff;
+  border-color: rgba(215, 179, 255, 0.5);
+}
+#ftue.ftue--special .ftue-skip--close:hover {
+  color: #fff;
+  background: rgba(215, 179, 255, 0.18);
+}
 
 /* Last note of the tutorial, whether the player banked or bust */
 .ftue-final {
